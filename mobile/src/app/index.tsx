@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, ScrollView } from "react-native";
 import MetricCard from "../components/MetricCard";
+import SectionCard from "../components/SectionCard";
 
 export default function HomeScreen() {
   return (
@@ -23,21 +24,15 @@ export default function HomeScreen() {
         <MetricCard value="68%" label="Energy" />
       </View>
 
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>AI Insight</Text>
-        <Text style={styles.sectionText}>
-          You are most productive between 9 AM and 12 PM. HELIOS recommends
-          scheduling deep work during that window.
-        </Text>
-      </View>
+      <SectionCard title="AI Insight">
+        You are most productive between 9 AM and 12 PM. HELIOS recommends scheduling
+        deep work during that window.
+      </SectionCard>
 
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>Today&apos;s Mission</Text>
-        <Text style={styles.sectionText}>
-          Build the first mobile dashboard, commit your progress, and prepare
-          the backend foundation.
-        </Text>
-      </View>
+      <SectionCard title="Today&apos;s Mission">
+        Build the first mobile dashboard, commit your progress, and prepare the
+        backend foundation.
+      </SectionCard>
     </ScrollView>
   );
 }
@@ -93,24 +88,5 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 12,
     marginBottom: 20,
-  },
-  sectionCard: {
-    backgroundColor: "#10172a",
-    borderRadius: 24,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "#263452",
-    marginBottom: 14,
-  },
-  sectionTitle: {
-    color: "#ffffff",
-    fontSize: 19,
-    fontWeight: "800",
-    marginBottom: 8,
-  },
-  sectionText: {
-    color: "#aab4cf",
-    fontSize: 15,
-    lineHeight: 22,
   },
 });
