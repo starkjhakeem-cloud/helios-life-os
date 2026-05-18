@@ -1,5 +1,8 @@
 import { create } from "zustand";
 
+import { ApiError } from "../services/apiClient";
+import { authService } from "../services/authService";
+
 export type User = {
   id: string;
   name: string;
@@ -17,10 +20,6 @@ type AuthState = {
   clearError: () => void;
 };
 
-function mockDelay(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 800));
-}
-
 export const useAuthStore = create<AuthState>()((set) => ({
   user: null,
   isAuthenticated: false,
@@ -29,30 +28,26 @@ export const useAuthStore = create<AuthState>()((set) => ({
 
   login: async (email, password) => {
     set({ isLoading: true, error: null });
-    await mockDelay();
-    if (!email.trim() || !password.trim()) {
-      set({ error: "Email and password are required.", isLoading: false });
-      return;
+    try {
+      const { user } = await authService.login(email, password);
+      set({ user, isAuthenticated: true, isLoading: false });
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : "Login failed. Please try again.";
+      set({ error: message, isLoading: false });
     }
-    set({
-      user: { id: "mock-1", name: email.split("@")[0], email },
-      isAuthenticated: true,
-      isLoading: false,
-    });
   },
 
   signup: async (name, email, password) => {
     set({ isLoading: true, error: null });
-    await mockDelay();
-    if (!name.trim() || !email.trim() || !password.trim()) {
-      set({ error: "All fields are required.", isLoading: false });
-      return;
+    try {
+      const { user } = await authService.signup(name, email, password);
+      set({ user, isAuthenticated: true, isLoading: false });
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : "Signup failed. Please try again.";
+      set({ error: message, isLoading: false });
     }
-    set({
-      user: { id: "mock-1", name, email },
-      isAuthenticated: true,
-      isLoading: false,
-    });
   },
 
   logout: () => set({ user: null, isAuthenticated: false, error: null }),

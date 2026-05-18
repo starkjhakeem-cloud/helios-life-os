@@ -6,4 +6,8 @@ export const API_CONFIG = {
 export const API_ENDPOINTS = {
   health:  "/api/v1/health",
   version: "/api/v1/version",
+  auth: {
+    login:  "/api/v1/auth/login",
+    signup: "/api/v1/auth/signup",
+  },
 } as const;
