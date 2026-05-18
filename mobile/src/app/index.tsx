@@ -2,6 +2,10 @@ import { View, Text, StyleSheet, ScrollView } from "react-native";
 import MetricCard from "../components/MetricCard";
 import SectionCard from "../components/SectionCard";
 import { colors } from "../theme/theme";
+import {
+  dashboardMetrics,
+  dashboardSections,
+} from "../data/dashboardData";
 
 export default function HomeScreen() {
   return (
@@ -19,21 +23,20 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.grid}>
-        <MetricCard value="82" label="Productivity" />
-        <MetricCard value="5h 32m" label="Focus Time" />
-        <MetricCard value="12" label="Tasks Done" />
-        <MetricCard value="68%" label="Energy" />
+        {dashboardMetrics.map((metric) => (
+          <MetricCard
+            key={metric.label}
+            value={metric.value}
+            label={metric.label}
+          />
+        ))}
       </View>
 
-      <SectionCard title="AI Insight">
-        You are most productive between 9 AM and 12 PM. HELIOS recommends scheduling
-        deep work during that window.
-      </SectionCard>
-
-      <SectionCard title="Today&apos;s Mission">
-        Build the first mobile dashboard, commit your progress, and prepare the
-        backend foundation.
-      </SectionCard>
+      {dashboardSections.map((section) => (
+        <SectionCard key={section.title} title={section.title}>
+          {section.content}
+        </SectionCard>
+      ))}
     </ScrollView>
   );
 }
