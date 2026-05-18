@@ -1,17 +1,26 @@
 import { View, Text, StyleSheet } from "react-native";
-import { colors } from "../theme/theme";
+import { SymbolView } from "expo-symbols";
+import type { SFSymbol } from "sf-symbols-typescript";
+import { colors, spacing, radius } from "../theme/theme";
 
 type MetricCardProps = {
   value: string;
   label: string;
+  icon?: SFSymbol;
 };
 
-export default function MetricCard({
-  value,
-  label,
-}: MetricCardProps) {
+export default function MetricCard({ value, label, icon }: MetricCardProps) {
   return (
     <View style={styles.card}>
+      {icon && (
+        <SymbolView
+          name={icon}
+          size={18}
+          tintColor={colors.accent}
+          resizeMode="scaleAspectFit"
+          style={styles.icon}
+        />
+      )}
       <Text style={styles.value}>{value}</Text>
       <Text style={styles.label}>{label}</Text>
     </View>
@@ -22,16 +31,19 @@ const styles = StyleSheet.create({
   card: {
     width: "48%",
     backgroundColor: colors.surfaceDark,
-    borderRadius: 22,
-    padding: 18,
+    borderRadius: radius.md,
+    padding: spacing.md,
     borderWidth: 1,
     borderColor: colors.borderDark,
   },
+  icon: {
+    marginBottom: spacing.sm,
+  },
   value: {
     color: colors.textPrimary,
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: "800",
-    marginBottom: 6,
+    marginBottom: spacing.xs,
   },
   label: {
     color: colors.textMuted,

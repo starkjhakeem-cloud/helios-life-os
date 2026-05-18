@@ -1,15 +1,29 @@
 import { View, Text, StyleSheet } from "react-native";
-import { colors } from "../theme/theme";
+import { SymbolView } from "expo-symbols";
+import type { SFSymbol } from "sf-symbols-typescript";
+import { colors, spacing, radius } from "../theme/theme";
 
 type SectionCardProps = {
   title: string;
+  icon?: SFSymbol;
   children: string;
 };
 
-export default function SectionCard({ title, children }: SectionCardProps) {
+export default function SectionCard({ title, icon, children }: SectionCardProps) {
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>{title}</Text>
+      <View style={styles.accentBar} />
+      <View style={styles.titleRow}>
+        {icon && (
+          <SymbolView
+            name={icon}
+            size={15}
+            tintColor={colors.accent}
+            resizeMode="scaleAspectFit"
+          />
+        )}
+        <Text style={styles.title}>{title}</Text>
+      </View>
       <Text style={styles.text}>{children}</Text>
     </View>
   );
@@ -18,21 +32,35 @@ export default function SectionCard({ title, children }: SectionCardProps) {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
-    borderRadius: 24,
-    padding: 20,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: 14,
+    marginBottom: spacing.sm,
+    overflow: "hidden",
+  },
+  accentBar: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    backgroundColor: colors.accent,
+  },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   title: {
     color: colors.textPrimary,
-    fontSize: 19,
-    fontWeight: "800",
-    marginBottom: 8,
+    fontSize: 17,
+    fontWeight: "700",
   },
   text: {
     color: colors.textSecondary,
     fontSize: 15,
-    lineHeight: 22,
+    lineHeight: 23,
   },
 });
