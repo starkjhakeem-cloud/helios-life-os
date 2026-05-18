@@ -1,4 +1,4 @@
-import { Pressable, Text, StyleSheet } from "react-native";
+import { Pressable, Text, ActivityIndicator, StyleSheet } from "react-native";
 import { colors, spacing, radius, typography } from "../../theme/theme";
 
 type ButtonVariant = "primary" | "secondary" | "ghost";
@@ -9,6 +9,7 @@ type Props = {
   variant?: ButtonVariant;
   disabled?: boolean;
   fullWidth?: boolean;
+  loading?: boolean;
 };
 
 const variantStyle = {
@@ -29,22 +30,27 @@ export default function Button({
   variant = "primary",
   disabled = false,
   fullWidth = false,
+  loading = false,
 }: Props) {
   return (
     <Pressable
       onPress={onPress}
-      disabled={disabled}
+      disabled={disabled || loading}
       style={({ pressed }) => [
         styles.base,
         variantStyle[variant],
         fullWidth && styles.fullWidth,
         pressed && styles.pressed,
-        disabled && styles.disabled,
+        (disabled || loading) && styles.disabled,
       ]}
     >
-      <Text style={[styles.label, { color: labelColor[variant] }]}>
-        {label}
-      </Text>
+      {loading ? (
+        <ActivityIndicator color={labelColor[variant]} size="small" />
+      ) : (
+        <Text style={[styles.label, { color: labelColor[variant] }]}>
+          {label}
+        </Text>
+      )}
     </Pressable>
   );
 }
