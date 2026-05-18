@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, ScrollView } from "react-native";
 import MetricCard from "../components/MetricCard";
 import SectionCard from "../components/SectionCard";
+import { colors } from "../theme/theme";
 
 export default function HomeScreen() {
   return (
@@ -40,46 +41,46 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#050816",
+    backgroundColor: colors.background,
   },
   container: {
     padding: 24,
     paddingTop: 72,
   },
   greeting: {
-    color: "#ffffff",
+    color: colors.textPrimary,
     fontSize: 30,
     fontWeight: "800",
   },
   subtitle: {
-    color: "#8f9bb3",
+    color: colors.textMuted,
     fontSize: 15,
     marginTop: 6,
     marginBottom: 24,
   },
   heroCard: {
-    backgroundColor: "#10172a",
+    backgroundColor: colors.surface,
     borderRadius: 28,
     padding: 24,
     borderWidth: 1,
-    borderColor: "#263452",
+    borderColor: colors.border,
     marginBottom: 20,
   },
   heroLabel: {
-    color: "#7c3aed",
+    color: colors.accent,
     fontSize: 12,
     fontWeight: "800",
     letterSpacing: 2,
     marginBottom: 10,
   },
   heroTitle: {
-    color: "#ffffff",
+    color: colors.textPrimary,
     fontSize: 26,
     fontWeight: "800",
     marginBottom: 10,
   },
   heroText: {
-    color: "#aab4cf",
+    color: colors.textSecondary,
     fontSize: 15,
     lineHeight: 23,
   },
