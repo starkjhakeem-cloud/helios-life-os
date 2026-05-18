@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, ScrollView } from "react-native";
+import MetricCard from "../components/MetricCard";
 
 export default function HomeScreen() {
   return (
@@ -16,25 +17,10 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.grid}>
-        <View style={styles.metricCard}>
-          <Text style={styles.metricValue}>82</Text>
-          <Text style={styles.metricLabel}>Productivity</Text>
-        </View>
-
-        <View style={styles.metricCard}>
-          <Text style={styles.metricValue}>5h 32m</Text>
-          <Text style={styles.metricLabel}>Focus Time</Text>
-        </View>
-
-        <View style={styles.metricCard}>
-          <Text style={styles.metricValue}>12</Text>
-          <Text style={styles.metricLabel}>Tasks Done</Text>
-        </View>
-
-        <View style={styles.metricCard}>
-          <Text style={styles.metricValue}>68%</Text>
-          <Text style={styles.metricLabel}>Energy</Text>
-        </View>
+        <MetricCard value="82" label="Productivity" />
+        <MetricCard value="5h 32m" label="Focus Time" />
+        <MetricCard value="12" label="Tasks Done" />
+        <MetricCard value="68%" label="Energy" />
       </View>
 
       <View style={styles.sectionCard}>
@@ -107,24 +93,6 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 12,
     marginBottom: 20,
-  },
-  metricCard: {
-    width: "48%",
-    backgroundColor: "#0b1020",
-    borderRadius: 22,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: "#1e2a44",
-  },
-  metricValue: {
-    color: "#ffffff",
-    fontSize: 24,
-    fontWeight: "800",
-    marginBottom: 6,
-  },
-  metricLabel: {
-    color: "#8f9bb3",
-    fontSize: 13,
   },
   sectionCard: {
     backgroundColor: "#10172a",
