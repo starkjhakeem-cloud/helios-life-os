@@ -7,3 +7,4 @@ export { useAIStore } from "./useAIStore";
 export { useAgentsStore } from "./useAgentsStore";
 export { useGoalsStore } from "./useGoalsStore";
 export { useTasksStore } from "./useTasksStore";
+export { useAnalyticsStore } from "./useAnalyticsStore";

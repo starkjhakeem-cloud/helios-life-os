@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import agents, ai, auth, dashboard, goals, health, tasks
+from app.routers import agents, ai, analytics, auth, dashboard, goals, health, tasks
 
 app = FastAPI(
     title=settings.app_name,
@@ -60,6 +60,12 @@ app.include_router(
     tasks.router,
     prefix=f"/api/{settings.api_version}/tasks",
     tags=["tasks"],
+)
+
+app.include_router(
+    analytics.router,
+    prefix=f"/api/{settings.api_version}/analytics",
+    tags=["analytics"],
 )
 
 

@@ -26,4 +26,7 @@ export const API_ENDPOINTS = {
   tasks: {
     list: "/api/v1/tasks",
   },
+  analytics: {
+    summary: "/api/v1/analytics/summary",
+  },
 } as const;
