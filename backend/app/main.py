@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import ai, auth, dashboard, health
+from app.routers import agents, ai, auth, dashboard, health
 
 app = FastAPI(
     title=settings.app_name,
@@ -42,6 +42,12 @@ app.include_router(
     ai.router,
     prefix=f"/api/{settings.api_version}/ai",
     tags=["ai"],
+)
+
+app.include_router(
+    agents.router,
+    prefix=f"/api/{settings.api_version}/agents",
+    tags=["agents"],
 )
 
 
