@@ -8,6 +8,7 @@ type AnalyticsState = {
   isLoading: boolean;
   error: string | null;
   fetchSummary: (token: string) => Promise<void>;
+  reset: () => void;
 };
 
 export const useAnalyticsStore = create<AnalyticsState>()((set) => ({
@@ -25,4 +26,6 @@ export const useAnalyticsStore = create<AnalyticsState>()((set) => ({
       set({ error: message, isLoading: false });
     }
   },
+
+  reset: () => set({ summary: null, isLoading: false, error: null }),
 }));

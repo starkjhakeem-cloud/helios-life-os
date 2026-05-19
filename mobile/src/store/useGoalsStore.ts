@@ -17,6 +17,7 @@ type GoalsState = {
   createGoal: (token: string, data: CreateGoalInput) => Promise<void>;
   updateGoal: (token: string, id: string, data: UpdateGoalInput) => Promise<void>;
   deleteGoal: (token: string, id: string) => Promise<void>;
+  reset: () => void;
 };
 
 function extractMessage(err: unknown): string {
@@ -72,4 +73,6 @@ export const useGoalsStore = create<GoalsState>()((set, get) => ({
       set({ error: extractMessage(err), isMutating: false });
     }
   },
+
+  reset: () => set({ goals: [], isLoading: false, isMutating: false, error: null }),
 }));

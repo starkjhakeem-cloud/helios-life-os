@@ -4,6 +4,12 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 import { ApiError } from "../services/apiClient";
 import { authService } from "../services/authService";
+import { useAIStore } from "./useAIStore";
+import { useAgentsStore } from "./useAgentsStore";
+import { useAnalyticsStore } from "./useAnalyticsStore";
+import { useDashboardStore } from "./useDashboardStore";
+import { useGoalsStore } from "./useGoalsStore";
+import { useTasksStore } from "./useTasksStore";
 
 export type User = {
   id: string;
@@ -56,7 +62,17 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      logout: () => set({ user: null, accessToken: null, error: null }),
+      logout: () => {
+        // Wipe all user-specific cached data before clearing credentials so
+        // a second user logging in on the same device never sees stale data.
+        useGoalsStore.getState().reset();
+        useTasksStore.getState().reset();
+        useAnalyticsStore.getState().reset();
+        useAIStore.getState().reset();
+        useDashboardStore.getState().reset();
+        useAgentsStore.getState().reset();
+        set({ user: null, accessToken: null, error: null });
+      },
       clearError: () => set({ error: null }),
 
       revalidate: async () => {

@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+.DS_Store?
+._*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment files — never commit real secrets
+.env
+.env.local
+.env.*.local

@@ -1,6 +1,9 @@
-import { Tabs } from "expo-router";
+import { useEffect } from "react";
+import { Tabs, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import type { SFSymbol } from "sf-symbols-typescript";
+
+import { useAuthStore } from "../../store";
 import { colors } from "../../theme/theme";
 
 type TabIconProps = {
@@ -20,6 +23,17 @@ function TabIcon({ name, color }: TabIconProps) {
 }
 
 export default function TabsLayout() {
+  const isAuthenticated = useAuthStore((s) => s.accessToken !== null);
+  const router = useRouter();
+
+  // Secondary guard: root _layout.tsx is the primary gatekeeper, but this
+  // catches any edge-case (e.g., deep-link into a tab while unauthenticated).
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.replace("/(auth)/login");
+    }
+  }, [isAuthenticated, router]);
+
   return (
     <Tabs
       screenOptions={{

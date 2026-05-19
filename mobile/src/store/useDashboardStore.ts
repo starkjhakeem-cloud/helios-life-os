@@ -20,6 +20,7 @@ type DashboardState = {
   setMetrics: (metrics: DashboardMetric[]) => void;
   setSections: (sections: DashboardSection[]) => void;
   setLoading: (isLoading: boolean) => void;
+  reset: () => void;
 };
 
 export const useDashboardStore = create<DashboardState>()((set) => ({
@@ -50,4 +51,7 @@ export const useDashboardStore = create<DashboardState>()((set) => ({
   setMetrics: (metrics) => set({ metrics, lastUpdated: new Date() }),
   setSections: (sections) => set({ sections, lastUpdated: new Date() }),
   setLoading: (isLoading) => set({ isLoading }),
+
+  reset: () =>
+    set({ metrics: dashboardMetrics, sections: dashboardSections, isLoading: false, error: null, lastUpdated: null }),
 }));

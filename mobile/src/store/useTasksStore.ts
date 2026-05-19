@@ -17,6 +17,7 @@ type TasksState = {
   createTask: (token: string, data: CreateTaskInput) => Promise<void>;
   updateTask: (token: string, id: string, data: UpdateTaskInput) => Promise<void>;
   deleteTask: (token: string, id: string) => Promise<void>;
+  reset: () => void;
 };
 
 function extractMessage(err: unknown): string {
@@ -72,4 +73,6 @@ export const useTasksStore = create<TasksState>()((set, get) => ({
       set({ error: extractMessage(err), isMutating: false });
     }
   },
+
+  reset: () => set({ tasks: [], isLoading: false, isMutating: false, error: null }),
 }));

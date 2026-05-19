@@ -21,6 +21,8 @@ type AIState = {
   planError: string | null;
   generatePlan: (token: string, data: PlanRequest) => Promise<void>;
   clearPlan: () => void;
+
+  reset: () => void;
 };
 
 export const useAIStore = create<AIState>()((set) => ({
@@ -57,4 +59,7 @@ export const useAIStore = create<AIState>()((set) => ({
   },
 
   clearPlan: () => set({ plan: null, planError: null }),
+
+  reset: () =>
+    set({ briefing: null, isLoading: false, error: null, plan: null, isPlanLoading: false, planError: null }),
 }));

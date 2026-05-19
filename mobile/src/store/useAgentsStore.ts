@@ -8,6 +8,7 @@ type AgentsState = {
   isLoading: boolean;
   error: string | null;
   fetchAgents: (token: string) => Promise<void>;
+  reset: () => void;
 };
 
 export const useAgentsStore = create<AgentsState>()((set) => ({
@@ -26,4 +27,6 @@ export const useAgentsStore = create<AgentsState>()((set) => ({
       set({ error: message, isLoading: false });
     }
   },
+
+  reset: () => set({ agents: [], isLoading: false, error: null }),
 }));
