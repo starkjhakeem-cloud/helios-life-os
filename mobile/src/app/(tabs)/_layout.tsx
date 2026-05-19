@@ -70,6 +70,16 @@ export default function TabsLayout() {
           ),
         }}
       />
+
+      <Tabs.Screen
+        name="goals"
+        options={{
+          title: "Goals",
+          tabBarIcon: ({ color }) => (
+            <TabIcon name="target" color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }

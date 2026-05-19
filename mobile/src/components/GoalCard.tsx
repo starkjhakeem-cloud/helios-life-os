@@ -1,0 +1,157 @@
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { SymbolView } from "expo-symbols";
+
+import { colors, spacing, radius, typography } from "../theme/theme";
+import type { Goal } from "../services/goalsService";
+
+const STATUS_COLOR: Record<string, string> = {
+  active: colors.accentCyan,
+  completed: "#22c55e",
+  paused: "#f59e0b",
+};
+
+const STATUS_NEXT: Record<string, string> = {
+  active: "completed",
+  completed: "paused",
+  paused: "active",
+};
+
+const STATUS_ICON: Record<string, Parameters<typeof SymbolView>[0]["name"]> = {
+  active: "circle",
+  completed: "checkmark.circle.fill",
+  paused: "pause.circle.fill",
+};
+
+type Props = {
+  goal: Goal;
+  onStatusChange: (nextStatus: string) => void;
+  onDelete: () => void;
+};
+
+export default function GoalCard({ goal, onStatusChange, onDelete }: Props) {
+  const dotColor = STATUS_COLOR[goal.status] ?? colors.textMuted;
+  const nextStatus = STATUS_NEXT[goal.status] ?? "active";
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => onStatusChange(nextStatus)}
+          style={styles.statusButton}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <SymbolView
+            name={STATUS_ICON[goal.status] ?? "circle"}
+            size={22}
+            tintColor={dotColor}
+            resizeMode="scaleAspectFit"
+          />
+        </TouchableOpacity>
+
+        <View style={styles.titleBlock}>
+          <Text
+            style={[
+              styles.title,
+              goal.status === "completed" && styles.titleDone,
+            ]}
+            numberOfLines={2}
+          >
+            {goal.title}
+          </Text>
+          <Text style={[styles.statusLabel, { color: dotColor }]}>
+            {goal.status.toUpperCase()}
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          onPress={onDelete}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <SymbolView
+            name="trash"
+            size={16}
+            tintColor={colors.textMuted}
+            resizeMode="scaleAspectFit"
+          />
+        </TouchableOpacity>
+      </View>
+
+      {goal.description ? (
+        <Text style={styles.description} numberOfLines={3}>
+          {goal.description}
+        </Text>
+      ) : null}
+
+      {goal.target_date ? (
+        <View style={styles.dateRow}>
+          <SymbolView
+            name="calendar"
+            size={12}
+            tintColor={colors.textMuted}
+            resizeMode="scaleAspectFit"
+          />
+          <Text style={styles.dateText}>{goal.target_date}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+  },
+
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    marginBottom: spacing.sm,
+  },
+
+  statusButton: {
+    flexShrink: 0,
+  },
+
+  titleBlock: {
+    flex: 1,
+  },
+
+  title: {
+    ...typography.title,
+    color: colors.textPrimary,
+    marginBottom: 2,
+  },
+
+  titleDone: {
+    color: colors.textMuted,
+    textDecorationLine: "line-through",
+  },
+
+  statusLabel: {
+    ...typography.label,
+  },
+
+  description: {
+    ...typography.body,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+  },
+
+  dateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+
+  dateText: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
+});

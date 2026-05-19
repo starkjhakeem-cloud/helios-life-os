@@ -77,4 +77,45 @@ async function post<T>(endpoint: string, body: unknown, token?: string): Promise
   }
 }
 
-export const apiClient = { get, post };
+async function patch<T>(endpoint: string, body: unknown, token?: string): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${API_CONFIG.BASE_URL}${endpoint}`, {
+      method: "PATCH",
+      headers: buildHeaders(token),
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw await parseApiError(response);
+    }
+
+    return response.json() as Promise<T>;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function del(endpoint: string, token?: string): Promise<void> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${API_CONFIG.BASE_URL}${endpoint}`, {
+      method: "DELETE",
+      headers: buildHeaders(token),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw await parseApiError(response);
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export const apiClient = { get, post, patch, del };
