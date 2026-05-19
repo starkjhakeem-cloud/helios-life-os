@@ -16,6 +16,7 @@ export const API_ENDPOINTS = {
   },
   ai: {
     briefing: "/api/v1/ai/briefing",
+    plan:     "/api/v1/ai/plan",
   },
   agents: {
     list: "/api/v1/agents",
