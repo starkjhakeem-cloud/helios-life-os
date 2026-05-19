@@ -1,10 +1,11 @@
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { useEffect } from "react";
+import { View, Text, ActivityIndicator, StyleSheet, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import MetricCard from "../../components/MetricCard";
 import SectionCard from "../../components/SectionCard";
 import { colors, spacing, radius, typography } from "../../theme/theme";
-import { useAppStore, useDashboardStore, statusLabel, statusColor } from "../../store";
+import { useAppStore, useAuthStore, useDashboardStore, statusLabel, statusColor } from "../../store";
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -22,7 +23,14 @@ const today = new Date().toLocaleDateString("en-US", {
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { userName, systemStatus } = useAppStore();
-  const { metrics, sections } = useDashboardStore();
+  const { metrics, sections, isLoading, error, fetchSummary } = useDashboardStore();
+  const accessToken = useAuthStore((s) => s.accessToken);
+
+  useEffect(() => {
+    if (accessToken) {
+      fetchSummary(accessToken);
+    }
+  }, [accessToken, fetchSummary]);
 
   return (
     <ScrollView
@@ -45,7 +53,16 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <Text style={styles.sectionLabel}>TODAY'S METRICS</Text>
+      {error ? (
+        <Text style={styles.errorText}>{error}</Text>
+      ) : null}
+
+      <View style={styles.sectionHeaderRow}>
+        <Text style={styles.sectionLabel}>TODAY'S METRICS</Text>
+        {isLoading ? (
+          <ActivityIndicator size="small" color={colors.accentCyan} />
+        ) : null}
+      </View>
 
       <View style={styles.metricsGrid}>
         {metrics.map((metric) => (
@@ -130,5 +147,18 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: spacing.sm,
     marginBottom: spacing.md,
+  },
+
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.sm,
+  },
+
+  errorText: {
+    ...typography.caption,
+    color: "#ef4444",
+    marginBottom: spacing.sm,
   },
 });

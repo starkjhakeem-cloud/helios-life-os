@@ -11,4 +11,7 @@ export const API_ENDPOINTS = {
     signup: "/api/v1/auth/signup",
     me:     "/api/v1/auth/me",
   },
+  dashboard: {
+    summary: "/api/v1/dashboard/summary",
+  },
 } as const;
