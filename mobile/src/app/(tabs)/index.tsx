@@ -23,10 +23,11 @@ const today = new Date().toLocaleDateString("en-US", {
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const { userName, systemStatus } = useAppStore();
+  const { systemStatus } = useAppStore();
   const { metrics, sections, isLoading: dashLoading, error: dashError, fetchSummary } = useDashboardStore();
   const { briefing, isLoading: aiLoading, error: aiError, fetchBriefing } = useAIStore();
   const accessToken = useAuthStore((s) => s.accessToken);
+  const userName = useAuthStore((s) => s.user?.name ?? "Operator");
 
   useEffect(() => {
     if (accessToken) {

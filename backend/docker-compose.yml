@@ -7,6 +7,8 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql://helios:helios@db:5432/helios
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
     volumes:
       - .:/app
     command: >

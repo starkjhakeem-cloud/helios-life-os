@@ -8,12 +8,25 @@ import { colors, spacing } from "../../theme/theme";
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [localError, setLocalError] = useState<string | null>(null);
   const { login, isLoading, error, clearError } = useAuthStore();
 
-  async function handleLogin() {
-    clearError();
-    await login(email, password);
+  function validate(): boolean {
+    const e = email.trim();
+    if (!e) { setLocalError("Email is required."); return false; }
+    if (!e.includes("@") || !e.includes(".")) { setLocalError("Enter a valid email address."); return false; }
+    if (!password) { setLocalError("Password is required."); return false; }
+    return true;
   }
+
+  async function handleLogin() {
+    setLocalError(null);
+    clearError();
+    if (!validate()) return;
+    await login(email.trim().toLowerCase(), password);
+  }
+
+  const displayError = localError ?? error;
 
   return (
     <Screen style={styles.screen}>
@@ -29,19 +42,24 @@ export default function LoginScreen() {
         <Input
           label="EMAIL"
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(t) => { setEmail(t); setLocalError(null); }}
           placeholder="operator@helios.app"
           keyboardType="email-address"
+          autoComplete="email"
+          returnKeyType="next"
         />
         <Input
           label="PASSWORD"
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(t) => { setPassword(t); setLocalError(null); }}
           placeholder="••••••••"
           secureTextEntry
+          autoComplete="current-password"
+          returnKeyType="done"
+          onSubmitEditing={handleLogin}
         />
-        {error ? (
-          <Text variant="caption" color="#ef4444">{error}</Text>
+        {displayError ? (
+          <Text variant="caption" color="#ef4444">{displayError}</Text>
         ) : null}
         <Button
           label="ACCESS SYSTEM"
@@ -62,24 +80,9 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    justifyContent: "center",
-    paddingBottom: spacing.xl,
-  },
-  header: {
-    alignItems: "center",
-    marginBottom: spacing.xl,
-    gap: spacing.sm,
-  },
-  centered: {
-    textAlign: "center",
-  },
-  form: {
-    gap: spacing.md,
-  },
-  footer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginTop: spacing.xl,
-  },
+  screen: { justifyContent: "center", paddingBottom: spacing.xl },
+  header: { alignItems: "center", marginBottom: spacing.xl, gap: spacing.sm },
+  centered: { textAlign: "center" },
+  form: { gap: spacing.md },
+  footer: { flexDirection: "row", justifyContent: "center", marginTop: spacing.xl },
 });

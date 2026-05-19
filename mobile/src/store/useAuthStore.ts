@@ -1,4 +1,6 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
 
 import { ApiError } from "../services/apiClient";
 import { authService } from "../services/authService";
@@ -12,46 +14,72 @@ export type User = {
 type AuthState = {
   user: User | null;
   accessToken: string | null;
-  isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   clearError: () => void;
+  // Validates a persisted token on app start — clears session if expired.
+  revalidate: () => Promise<void>;
 };
 
-export const useAuthStore = create<AuthState>()((set) => ({
-  user: null,
-  accessToken: null,
-  isAuthenticated: false,
-  isLoading: false,
-  error: null,
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set, get) => ({
+      user: null,
+      accessToken: null,
+      isLoading: false,
+      error: null,
 
-  login: async (email, password) => {
-    set({ isLoading: true, error: null });
-    try {
-      const { user, access_token } = await authService.login(email, password);
-      set({ user, accessToken: access_token, isAuthenticated: true, isLoading: false });
-    } catch (err) {
-      const message =
-        err instanceof ApiError ? err.message : "Login failed. Please try again.";
-      set({ error: message, isLoading: false });
+      login: async (email, password) => {
+        set({ isLoading: true, error: null });
+        try {
+          const { user, access_token } = await authService.login(email, password);
+          set({ user, accessToken: access_token, isLoading: false });
+        } catch (err) {
+          const message =
+            err instanceof ApiError ? err.message : "Login failed. Please try again.";
+          set({ error: message, isLoading: false });
+        }
+      },
+
+      signup: async (name, email, password) => {
+        set({ isLoading: true, error: null });
+        try {
+          const { user, access_token } = await authService.signup(name, email, password);
+          set({ user, accessToken: access_token, isLoading: false });
+        } catch (err) {
+          const message =
+            err instanceof ApiError ? err.message : "Signup failed. Please try again.";
+          set({ error: message, isLoading: false });
+        }
+      },
+
+      logout: () => set({ user: null, accessToken: null, error: null }),
+      clearError: () => set({ error: null }),
+
+      revalidate: async () => {
+        const { accessToken } = get();
+        if (!accessToken) return;
+        try {
+          const user = await authService.me(accessToken);
+          set({ user });
+        } catch {
+          // Token expired or server unreachable — clear to force re-login.
+          set({ user: null, accessToken: null });
+        }
+      },
+    }),
+    {
+      name: "helios-auth",
+      storage: createJSONStorage(() => AsyncStorage),
+      // Only persist credentials. Transient UI state (isLoading, error) is
+      // intentionally excluded — it resets to defaults on every app start.
+      partialize: (state) => ({
+        user: state.user,
+        accessToken: state.accessToken,
+      }),
     }
-  },
-
-  signup: async (name, email, password) => {
-    set({ isLoading: true, error: null });
-    try {
-      const { user, access_token } = await authService.signup(name, email, password);
-      set({ user, accessToken: access_token, isAuthenticated: true, isLoading: false });
-    } catch (err) {
-      const message =
-        err instanceof ApiError ? err.message : "Signup failed. Please try again.";
-      set({ error: message, isLoading: false });
-    }
-  },
-
-  logout: () => set({ user: null, accessToken: null, isAuthenticated: false, error: null }),
-  clearError: () => set({ error: null }),
-}));
+  )
+);

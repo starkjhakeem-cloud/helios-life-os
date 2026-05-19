@@ -28,6 +28,15 @@ async function parseApiError(response: Response): Promise<ApiError> {
   }
 }
 
+function networkError(err: unknown): ApiError {
+  if (err instanceof ApiError) return err;
+  const name = (err as { name?: string }).name;
+  if (name === "AbortError") {
+    return new ApiError("Request timed out. Check your connection.", 0);
+  }
+  return new ApiError("Network error. Check your connection.", 0);
+}
+
 function buildHeaders(token?: string): Record<string, string> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -44,12 +53,10 @@ async function get<T>(endpoint: string, token?: string): Promise<T> {
       headers: buildHeaders(token),
       signal: controller.signal,
     });
-
-    if (!response.ok) {
-      throw await parseApiError(response);
-    }
-
+    if (!response.ok) throw await parseApiError(response);
     return response.json() as Promise<T>;
+  } catch (err) {
+    throw networkError(err);
   } finally {
     clearTimeout(timer);
   }
@@ -66,12 +73,10 @@ async function post<T>(endpoint: string, body: unknown, token?: string): Promise
       body: JSON.stringify(body),
       signal: controller.signal,
     });
-
-    if (!response.ok) {
-      throw await parseApiError(response);
-    }
-
+    if (!response.ok) throw await parseApiError(response);
     return response.json() as Promise<T>;
+  } catch (err) {
+    throw networkError(err);
   } finally {
     clearTimeout(timer);
   }
@@ -88,12 +93,10 @@ async function patch<T>(endpoint: string, body: unknown, token?: string): Promis
       body: JSON.stringify(body),
       signal: controller.signal,
     });
-
-    if (!response.ok) {
-      throw await parseApiError(response);
-    }
-
+    if (!response.ok) throw await parseApiError(response);
     return response.json() as Promise<T>;
+  } catch (err) {
+    throw networkError(err);
   } finally {
     clearTimeout(timer);
   }
@@ -109,10 +112,9 @@ async function del(endpoint: string, token?: string): Promise<void> {
       headers: buildHeaders(token),
       signal: controller.signal,
     });
-
-    if (!response.ok) {
-      throw await parseApiError(response);
-    }
+    if (!response.ok) throw await parseApiError(response);
+  } catch (err) {
+    throw networkError(err);
   } finally {
     clearTimeout(timer);
   }
