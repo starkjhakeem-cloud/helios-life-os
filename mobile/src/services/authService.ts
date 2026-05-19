@@ -3,7 +3,15 @@ import { API_ENDPOINTS } from "../config/api";
 
 type AuthApiResponse = {
   user: { id: string; name: string; email: string };
+  access_token: string;
+  token_type: string;
   message: string;
+};
+
+type MeResponse = {
+  id: string;
+  name: string;
+  email: string;
 };
 
 export const authService = {
@@ -12,4 +20,7 @@ export const authService = {
 
   signup: (name: string, email: string, password: string) =>
     apiClient.post<AuthApiResponse>(API_ENDPOINTS.auth.signup, { name, email, password }),
+
+  me: (token: string) =>
+    apiClient.get<MeResponse>(API_ENDPOINTS.auth.me, token),
 };

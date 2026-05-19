@@ -28,14 +28,20 @@ async function parseApiError(response: Response): Promise<ApiError> {
   }
 }
 
-async function get<T>(endpoint: string): Promise<T> {
+function buildHeaders(token?: string): Record<string, string> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return headers;
+}
+
+async function get<T>(endpoint: string, token?: string): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT_MS);
 
   try {
     const response = await fetch(`${API_CONFIG.BASE_URL}${endpoint}`, {
       method: "GET",
-      headers: { "Content-Type": "application/json" },
+      headers: buildHeaders(token),
       signal: controller.signal,
     });
 
@@ -49,14 +55,14 @@ async function get<T>(endpoint: string): Promise<T> {
   }
 }
 
-async function post<T>(endpoint: string, body: unknown): Promise<T> {
+async function post<T>(endpoint: string, body: unknown, token?: string): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT_MS);
 
   try {
     const response = await fetch(`${API_CONFIG.BASE_URL}${endpoint}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: buildHeaders(token),
       body: JSON.stringify(body),
       signal: controller.signal,
     });

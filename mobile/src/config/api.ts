@@ -9,5 +9,6 @@ export const API_ENDPOINTS = {
   auth: {
     login:  "/api/v1/auth/login",
     signup: "/api/v1/auth/signup",
+    me:     "/api/v1/auth/me",
   },
 } as const;

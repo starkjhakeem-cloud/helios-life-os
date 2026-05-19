@@ -11,6 +11,7 @@ export type User = {
 
 type AuthState = {
   user: User | null;
+  accessToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
@@ -22,6 +23,7 @@ type AuthState = {
 
 export const useAuthStore = create<AuthState>()((set) => ({
   user: null,
+  accessToken: null,
   isAuthenticated: false,
   isLoading: false,
   error: null,
@@ -29,8 +31,8 @@ export const useAuthStore = create<AuthState>()((set) => ({
   login: async (email, password) => {
     set({ isLoading: true, error: null });
     try {
-      const { user } = await authService.login(email, password);
-      set({ user, isAuthenticated: true, isLoading: false });
+      const { user, access_token } = await authService.login(email, password);
+      set({ user, accessToken: access_token, isAuthenticated: true, isLoading: false });
     } catch (err) {
       const message =
         err instanceof ApiError ? err.message : "Login failed. Please try again.";
@@ -41,8 +43,8 @@ export const useAuthStore = create<AuthState>()((set) => ({
   signup: async (name, email, password) => {
     set({ isLoading: true, error: null });
     try {
-      const { user } = await authService.signup(name, email, password);
-      set({ user, isAuthenticated: true, isLoading: false });
+      const { user, access_token } = await authService.signup(name, email, password);
+      set({ user, accessToken: access_token, isAuthenticated: true, isLoading: false });
     } catch (err) {
       const message =
         err instanceof ApiError ? err.message : "Signup failed. Please try again.";
@@ -50,6 +52,6 @@ export const useAuthStore = create<AuthState>()((set) => ({
     }
   },
 
-  logout: () => set({ user: null, isAuthenticated: false, error: null }),
+  logout: () => set({ user: null, accessToken: null, isAuthenticated: false, error: null }),
   clearError: () => set({ error: null }),
 }));
