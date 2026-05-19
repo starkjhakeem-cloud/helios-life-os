@@ -15,5 +15,10 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 60
 
+    # AI provider: "mock" (default) or "openai"
+    ai_provider: str = "mock"
+    # Required only when ai_provider=openai — never hardcode this value
+    openai_api_key: str | None = None
+
 
 settings = Settings()

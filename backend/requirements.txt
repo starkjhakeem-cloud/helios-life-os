@@ -8,3 +8,4 @@ sqlalchemy==2.0.36
 psycopg2-binary==2.9.10
 alembic==1.14.0
 PyJWT==2.9.0
+# openai>=1.0.0  # optional: install and set AI_PROVIDER=openai + OPENAI_API_KEY to enable
