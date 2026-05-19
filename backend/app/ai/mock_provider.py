@@ -8,33 +8,33 @@ class MockAIProvider(AIProvider):
     def generate_briefing(self, user_name: str) -> DailyBriefing:
         return DailyBriefing(
             summary=(
-                f"Good session, {user_name}. Operational profile shows strong technical "
-                "momentum across all systems. Authentication architecture reached a significant "
-                "milestone with JWT integration. System stability is nominal. "
-                "Engineering velocity is high — maintain current cadence for optimal output."
+                f"Operator {user_name}, all systems nominal. Goal and task tracking is active, "
+                "analytics pipeline is live, and the AI planning engine is ready for deployment. "
+                "Current productivity index is strong — focus on closing open tasks and advancing "
+                "your highest-priority goals today."
             ),
             priorities=[
                 BriefingPriority(
-                    label="Complete Phase 12 AI integration",
-                    detail="Finalize the briefing pipeline and validate all protected endpoints end-to-end.",
+                    label="Close high-priority tasks",
+                    detail="Review your task list and resolve any critical or high-priority items before new work is added.",
                 ),
                 BriefingPriority(
-                    label="Review JWT token lifecycle",
-                    detail="Audit expiry windows and prepare the refresh token architecture for Phase 13.",
+                    label="Advance active goals",
+                    detail="Each active goal should have at least one in-progress task attached. Gaps signal planning debt.",
                 ),
                 BriefingPriority(
-                    label="Commit all backend milestones",
-                    detail="Ensure Phases 9–12 are committed and documented before the next sprint.",
+                    label="Run an AI execution plan",
+                    detail="Use the AI Planner to generate a structured sprint for your next major objective.",
                 ),
             ],
             risks=[
-                "Access tokens expire after 60 minutes — implement refresh tokens to prevent session loss.",
-                "Dashboard metrics are currently static — live data requires user activity tracking.",
+                "Overdue tasks accumulate silently — check the Analytics tab to surface any that have slipped.",
+                "Goals without linked tasks have no execution path — ensure each goal has at least one active task.",
             ],
             recommendation=(
-                "Sustain current sprint velocity. The authentication and database layers are "
-                "production-ready. Phase 13 refresh tokens will complete the security foundation "
-                "and unlock persistent sessions for all operators."
+                "Start with a 10-minute review of your Analytics summary to understand where momentum is strongest. "
+                "Then open the AI Planner, enter your top goal as a prompt, and generate a focused execution plan "
+                "for the next 14–30 days. Consistent daily input compounds rapidly."
             ),
             generated_at=datetime.now(timezone.utc).isoformat(),
         )

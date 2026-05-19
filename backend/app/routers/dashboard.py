@@ -24,16 +24,16 @@ def get_dashboard_summary(current_user: User = Depends(get_current_user)) -> Das
                 title="AI Insight",
                 icon="brain",
                 content=(
-                    "You are most productive between 9 AM and 12 PM. "
-                    "HELIOS recommends scheduling deep work during that window."
+                    "Deep work sessions before noon correlate with higher task completion. "
+                    "HELIOS recommends protecting your morning hours for high-priority goals."
                 ),
             ),
             SectionItem(
-                title="Today's Mission",
+                title="Today's Focus",
                 icon="flag.fill",
                 content=(
-                    "Build the first mobile dashboard, commit your progress, "
-                    "and prepare the backend foundation."
+                    "Review your active goals, close out any overdue tasks, "
+                    "and use the AI Planner to map your next execution sprint."
                 ),
             ),
         ],
