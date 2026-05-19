@@ -1,56 +1,160 @@
-# Welcome to your Expo app 👋
+# HELIOS Mobile
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+React Native / Expo iOS application for the HELIOS AI Life Operating System.
 
-## Get started
+Built with Expo SDK 55, Expo Router v4 file-based navigation, TypeScript strict mode, and Zustand v5 for state management.
 
-1. Install dependencies
+---
 
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Quick Start
 
 ```bash
-npm run reset-project
+npm install
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Press `i` to open in iOS Simulator. The app expects the HELIOS backend running on `localhost:8000` — see the [backend README](../backend/README.md) for setup instructions.
 
-### Other setup steps
+> Running on a physical device? Update `BASE_URL` in `src/config/api.ts` to your machine's local IP address.
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+---
 
-## Learn more
+## Project Layout
 
-To learn more about developing your project with Expo, look at the following resources:
+```
+src/
+├── app/                          # Expo Router file-based routes
+│   ├── _layout.tsx               # Root layout — hydration guard, auth routing
+│   ├── (auth)/
+│   │   ├── _layout.tsx           # Auth stack shell
+│   │   ├── login.tsx             # Login screen
+│   │   └── signup.tsx            # Signup screen
+│   └── (tabs)/
+│       ├── _layout.tsx           # Tab bar — secondary auth guard
+│       ├── index.tsx             # Home / Dashboard
+│       ├── analytics.tsx         # Analytics screen
+│       ├── agents.tsx            # Agents + AI Planner screen
+│       ├── goals.tsx             # Goals screen
+│       └── tasks.tsx             # Tasks screen
+│
+├── components/
+│   ├── ui/                       # Primitives: Button, Input, Screen, Text
+│   ├── AgentCard.tsx
+│   ├── BriefingCard.tsx
+│   ├── GoalCard.tsx
+│   ├── MetricCard.tsx
+│   ├── PlanCard.tsx
+│   ├── SectionCard.tsx
+│   └── TaskCard.tsx
+│
+├── config/
+│   └── api.ts                    # API_CONFIG (BASE_URL, TIMEOUT_MS) + API_ENDPOINTS
+│
+├── hooks/
+│   └── useBackendHealth.ts       # Polls /health on app start
+│
+├── services/                     # API client + one service module per resource
+│   ├── apiClient.ts              # fetch wrapper with timeout, error parsing, JWT header
+│   ├── authService.ts
+│   ├── goalsService.ts
+│   ├── tasksService.ts
+│   ├── analyticsService.ts
+│   ├── agentsService.ts
+│   ├── aiService.ts
+│   └── dashboardService.ts
+│
+├── store/                        # Zustand state
+│   ├── useAuthStore.ts           # Persisted (AsyncStorage) — auth credentials + revalidate
+│   ├── useGoalsStore.ts
+│   ├── useTasksStore.ts
+│   ├── useAnalyticsStore.ts
+│   ├── useAgentsStore.ts
+│   ├── useAIStore.ts
+│   ├── useDashboardStore.ts
+│   └── index.ts                  # Barrel exports
+│
+└── theme/
+    └── theme.ts                  # colors, spacing, radius, typography tokens
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+---
 
-## Join the community
+## State Management
 
-Join our community of developers creating universal apps.
+All state lives in Zustand stores. The auth store is persisted to AsyncStorage via `zustand/middleware/persist`; all other stores are in-memory only.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```
+useAuthStore    — user, accessToken, login, signup, logout, revalidate
+useGoalsStore   — goals[], fetchGoals, createGoal, updateGoal, deleteGoal, reset
+useTasksStore   — tasks[], fetchTasks, createTask, updateTask, deleteTask, reset
+useAnalyticsStore — summary, fetchSummary, reset
+useAgentsStore  — agents[], fetchAgents, reset
+useAIStore      — briefing, plan, fetchBriefing, generatePlan, clearPlan, reset
+useDashboardStore — metrics, sections, fetchSummary, reset
+```
+
+`logout()` in `useAuthStore` calls `reset()` on all six data stores before clearing credentials, ensuring no stale user data persists in memory between sessions.
+
+---
+
+## Auth Flow
+
+On every app start:
+
+1. Root `_layout.tsx` mounts and waits for Zustand persist to finish reading AsyncStorage
+2. Once hydrated, `revalidate()` calls `GET /auth/me` with the persisted token
+3. If the token is valid: user data is refreshed, routing proceeds to `(tabs)`
+4. If the token is expired or absent: session is cleared, routing redirects to `(auth)/login`
+5. The hydration guard (`[hydrated, setHydrated]`) prevents any route render until step 2–4 complete, eliminating the flash-to-login on cold start
+
+---
+
+## API Client
+
+`services/apiClient.ts` provides `get`, `post`, `patch`, and `del` methods. Each:
+- Attaches `Authorization: Bearer <token>` when a token is provided
+- Uses `AbortController` with a 5-second timeout (`API_CONFIG.TIMEOUT_MS`)
+- Parses FastAPI error responses (both string `detail` and array `detail` formats)
+- Converts `AbortError` → "Request timed out" and `TypeError` → "Network error"
+
+---
+
+## Design System
+
+All visual tokens are defined in `theme/theme.ts`:
+
+| Token group | Examples |
+|---|---|
+| Colors | `background: #050816`, `surface: #10172a`, `accentCyan: #22d3ee`, `accent: #7c3aed` |
+| Spacing | `xs: 4`, `sm: 8`, `md: 16`, `lg: 24`, `xl: 32` |
+| Border radius | `sm: 12`, `md: 18`, `lg: 24` |
+| Typography | `displayLarge` (40/900), `displaySmall` (28/800), `title` (20/700), `body` (15/400) |
+
+The UI uses a dark space-themed palette throughout. SF Symbols (`expo-symbols`) are used for all icons.
+
+---
+
+## TypeScript
+
+The project uses `strict: true`. Run the type-checker:
+
+```bash
+npx tsc --noEmit
+```
+
+All Zustand stores are fully typed. The `apiClient` is generic (`get<T>`, `post<T>`, etc.) and returns typed responses. No `any` casts in production code paths.
+
+---
+
+## Key Dependencies
+
+| Package | Purpose |
+|---|---|
+| `expo` ~55 | Managed workflow runtime |
+| `expo-router` ~55 | File-based navigation |
+| `expo-symbols` ~55 | SF Symbols icon rendering |
+| `expo-splash-screen` | Controlled splash screen dismissal |
+| `zustand` ^5 | State management |
+| `@react-native-async-storage/async-storage` | Token persistence |
+| `react-native-safe-area-context` | Safe area insets |
+| `react-native-reanimated` | Animation primitives |
