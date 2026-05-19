@@ -14,4 +14,7 @@ export const API_ENDPOINTS = {
   dashboard: {
     summary: "/api/v1/dashboard/summary",
   },
+  ai: {
+    briefing: "/api/v1/ai/briefing",
+  },
 } as const;

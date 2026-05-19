@@ -2,10 +2,11 @@ import { useEffect } from "react";
 import { View, Text, ActivityIndicator, StyleSheet, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import BriefingCard from "../../components/BriefingCard";
 import MetricCard from "../../components/MetricCard";
 import SectionCard from "../../components/SectionCard";
 import { colors, spacing, radius, typography } from "../../theme/theme";
-import { useAppStore, useAuthStore, useDashboardStore, statusLabel, statusColor } from "../../store";
+import { useAIStore, useAppStore, useAuthStore, useDashboardStore, statusLabel, statusColor } from "../../store";
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -23,14 +24,16 @@ const today = new Date().toLocaleDateString("en-US", {
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { userName, systemStatus } = useAppStore();
-  const { metrics, sections, isLoading, error, fetchSummary } = useDashboardStore();
+  const { metrics, sections, isLoading: dashLoading, error: dashError, fetchSummary } = useDashboardStore();
+  const { briefing, isLoading: aiLoading, error: aiError, fetchBriefing } = useAIStore();
   const accessToken = useAuthStore((s) => s.accessToken);
 
   useEffect(() => {
     if (accessToken) {
       fetchSummary(accessToken);
+      fetchBriefing(accessToken);
     }
-  }, [accessToken, fetchSummary]);
+  }, [accessToken, fetchSummary, fetchBriefing]);
 
   return (
     <ScrollView
@@ -53,13 +56,13 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {error ? (
-        <Text style={styles.errorText}>{error}</Text>
+      {dashError ? (
+        <Text style={styles.errorText}>{dashError}</Text>
       ) : null}
 
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionLabel}>TODAY'S METRICS</Text>
-        {isLoading ? (
+        {dashLoading ? (
           <ActivityIndicator size="small" color={colors.accentCyan} />
         ) : null}
       </View>
@@ -74,6 +77,17 @@ export default function HomeScreen() {
           />
         ))}
       </View>
+
+      {aiLoading && !briefing ? (
+        <View style={styles.briefingLoader}>
+          <ActivityIndicator size="small" color={colors.accentCyan} />
+          <Text style={styles.briefingLoadingText}>LOADING INTELLIGENCE...</Text>
+        </View>
+      ) : briefing ? (
+        <BriefingCard {...briefing} />
+      ) : aiError ? (
+        <Text style={styles.errorText}>{aiError}</Text>
+      ) : null}
 
       <Text style={styles.sectionLabel}>INTELLIGENCE</Text>
 
@@ -160,5 +174,17 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: "#ef4444",
     marginBottom: spacing.sm,
+  },
+
+  briefingLoader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+
+  briefingLoadingText: {
+    ...typography.label,
+    color: colors.textMuted,
   },
 });

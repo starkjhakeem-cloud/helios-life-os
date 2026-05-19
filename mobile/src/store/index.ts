@@ -3,3 +3,4 @@ export type { SystemStatus } from "./useAppStore";
 export { useDashboardStore } from "./useDashboardStore";
 export { useAuthStore } from "./useAuthStore";
 export type { User } from "./useAuthStore";
+export { useAIStore } from "./useAIStore";
