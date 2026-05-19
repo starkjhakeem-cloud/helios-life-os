@@ -80,6 +80,16 @@ export default function TabsLayout() {
           ),
         }}
       />
+
+      <Tabs.Screen
+        name="tasks"
+        options={{
+          title: "Tasks",
+          tabBarIcon: ({ color }) => (
+            <TabIcon name="checklist" color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }
