@@ -104,6 +104,16 @@ export default function TabsLayout() {
           ),
         }}
       />
+
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: "Profile",
+          tabBarIcon: ({ color }) => (
+            <TabIcon name="person.crop.circle" color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }

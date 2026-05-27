@@ -2,7 +2,7 @@ import { apiClient } from "./apiClient";
 import { API_ENDPOINTS } from "../config/api";
 
 type AuthApiResponse = {
-  user: { id: string; name: string; email: string };
+  user: { id: string; name: string; email: string; created_at: string };
   access_token: string;
   token_type: string;
   message: string;
@@ -12,6 +12,7 @@ type MeResponse = {
   id: string;
   name: string;
   email: string;
+  created_at: string;
 };
 
 export const authService = {

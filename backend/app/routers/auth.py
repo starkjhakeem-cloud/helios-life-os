@@ -31,7 +31,7 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> AuthRespons
     db.refresh(user)
 
     return AuthResponse(
-        user=UserOut(id=user.id, name=user.name, email=user.email),
+        user=UserOut(id=user.id, name=user.name, email=user.email, created_at=user.created_at),
         access_token=create_access_token(user.id),
         message="Account created successfully.",
     )
@@ -47,7 +47,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> AuthResponse:
         )
 
     return AuthResponse(
-        user=UserOut(id=user.id, name=user.name, email=user.email),
+        user=UserOut(id=user.id, name=user.name, email=user.email, created_at=user.created_at),
         access_token=create_access_token(user.id),
         message="Login successful.",
     )
@@ -55,4 +55,9 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> AuthResponse:
 
 @router.get("/me", response_model=UserOut)
 def me(current_user: User = Depends(get_current_user)) -> UserOut:
-    return UserOut(id=current_user.id, name=current_user.name, email=current_user.email)
+    return UserOut(
+        id=current_user.id,
+        name=current_user.name,
+        email=current_user.email,
+        created_at=current_user.created_at,
+    )
