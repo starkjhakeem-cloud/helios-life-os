@@ -3,10 +3,41 @@ import { create } from "zustand";
 import { ApiError } from "../services/apiClient";
 import {
   type BriefingResponse,
+  type ChatRequest,
   type PlanRequest,
   type PlanResponse,
   aiService,
 } from "../services/aiService";
+
+// ── Chat types ────────────────────────────────────────────────────────────────
+
+export type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  suggested_actions: string[];
+  follow_up_questions: string[];
+  timestamp: string;
+  provider?: string;
+};
+
+const WELCOME: ChatMessage = {
+  id: "helios-welcome",
+  role: "assistant",
+  content:
+    "Operator online. I am HELIOS — your AI life-operating system. " +
+    "I can assist with goal strategy, task prioritization, execution planning, and performance analytics. " +
+    "What would you like to work on?",
+  suggested_actions: [],
+  follow_up_questions: [
+    "What should I focus on today?",
+    "Help me plan my next goal.",
+    "How is my progress this week?",
+  ],
+  timestamp: new Date().toISOString(),
+};
+
+// ── Store type ────────────────────────────────────────────────────────────────
 
 type AIState = {
   // Briefing
@@ -22,10 +53,20 @@ type AIState = {
   generatePlan: (token: string, data: PlanRequest) => Promise<void>;
   clearPlan: () => void;
 
+  // Chat
+  chatMessages: ChatMessage[];
+  isChatLoading: boolean;
+  chatError: string | null;
+  sendMessage: (token: string, req: ChatRequest) => Promise<void>;
+  clearChat: () => void;
+
   reset: () => void;
 };
 
-export const useAIStore = create<AIState>()((set) => ({
+// ── Store ─────────────────────────────────────────────────────────────────────
+
+export const useAIStore = create<AIState>()((set, get) => ({
+  // Briefing
   briefing: null,
   isLoading: false,
   error: null,
@@ -42,6 +83,7 @@ export const useAIStore = create<AIState>()((set) => ({
     }
   },
 
+  // Planning
   plan: null,
   isPlanLoading: false,
   planError: null,
@@ -60,6 +102,61 @@ export const useAIStore = create<AIState>()((set) => ({
 
   clearPlan: () => set({ plan: null, planError: null }),
 
+  // Chat
+  chatMessages: [WELCOME],
+  isChatLoading: false,
+  chatError: null,
+
+  sendMessage: async (token, req) => {
+    const userMsg: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: "user",
+      content: req.message,
+      suggested_actions: [],
+      follow_up_questions: [],
+      timestamp: new Date().toISOString(),
+    };
+
+    set((s) => ({
+      chatMessages: [...s.chatMessages, userMsg],
+      isChatLoading: true,
+      chatError: null,
+    }));
+
+    try {
+      const res = await aiService.chat(token, req);
+      const assistantMsg: ChatMessage = {
+        id: `assistant-${Date.now()}`,
+        role: "assistant",
+        content: res.reply,
+        suggested_actions: res.suggested_actions,
+        follow_up_questions: res.follow_up_questions,
+        timestamp: res.generated_at,
+        provider: res.provider,
+      };
+      set((s) => ({
+        chatMessages: [...s.chatMessages, assistantMsg],
+        isChatLoading: false,
+      }));
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : "Failed to get a response. Try again.";
+      set({ chatError: message, isChatLoading: false });
+    }
+  },
+
+  clearChat: () => set({ chatMessages: [WELCOME], chatError: null }),
+
   reset: () =>
-    set({ briefing: null, isLoading: false, error: null, plan: null, isPlanLoading: false, planError: null }),
+    set({
+      briefing: null,
+      isLoading: false,
+      error: null,
+      plan: null,
+      isPlanLoading: false,
+      planError: null,
+      chatMessages: [WELCOME],
+      isChatLoading: false,
+      chatError: null,
+    }),
 }));

@@ -37,3 +37,20 @@ class PlanResponse(BaseModel):
     risks: list[str]
     recommendation: str
     generated_at: str
+
+
+# ── Chat ──────────────────────────────────────────────────────────────────────
+
+class ChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=2000)
+    context_type: str | None = None       # "goals", "tasks", "analytics", "general"
+    related_goal_id: str | None = None    # reserved for future contextual grounding
+    related_task_id: str | None = None
+
+
+class ChatResponse(BaseModel):
+    reply: str
+    suggested_actions: list[str]
+    follow_up_questions: list[str]
+    provider: str
+    generated_at: str

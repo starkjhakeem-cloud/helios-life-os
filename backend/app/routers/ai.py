@@ -7,7 +7,7 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.goal import Goal
 from app.models.user import User
-from app.schemas.ai import DailyBriefing, PlanRequest, PlanResponse
+from app.schemas.ai import ChatRequest, ChatResponse, DailyBriefing, PlanRequest, PlanResponse
 
 router = APIRouter()
 
@@ -41,6 +41,21 @@ def generate_plan(
             horizon=payload.planning_horizon_days,
             goal_title=goal_title,
             user_name=current_user.name,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+
+
+@router.post("/chat", response_model=ChatResponse)
+def chat(
+    payload: ChatRequest,
+    current_user: User = Depends(get_current_user),
+) -> ChatResponse:
+    try:
+        return get_ai_provider().generate_chat_reply(
+            message=payload.message,
+            user_name=current_user.name,
+            context_type=payload.context_type,
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))

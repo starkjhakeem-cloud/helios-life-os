@@ -4,6 +4,7 @@ export { useDashboardStore } from "./useDashboardStore";
 export { useAuthStore } from "./useAuthStore";
 export type { User } from "./useAuthStore";
 export { useAIStore } from "./useAIStore";
+export type { ChatMessage } from "./useAIStore";
 export { useAgentsStore } from "./useAgentsStore";
 export { useGoalsStore } from "./useGoalsStore";
 export { useTasksStore } from "./useTasksStore";

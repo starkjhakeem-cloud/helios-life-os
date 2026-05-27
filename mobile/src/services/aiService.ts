@@ -37,10 +37,28 @@ export type PlanResponse = {
   generated_at: string;
 };
 
+export type ChatRequest = {
+  message: string;
+  context_type?: string;
+  related_goal_id?: string;
+  related_task_id?: string;
+};
+
+export type ChatApiResponse = {
+  reply: string;
+  suggested_actions: string[];
+  follow_up_questions: string[];
+  provider: string;
+  generated_at: string;
+};
+
 export const aiService = {
   getBriefing: (token: string) =>
     apiClient.get<BriefingResponse>(API_ENDPOINTS.ai.briefing, token),
 
   generatePlan: (token: string, body: PlanRequest) =>
     apiClient.post<PlanResponse>(API_ENDPOINTS.ai.plan, body, token),
+
+  chat: (token: string, body: ChatRequest) =>
+    apiClient.post<ChatApiResponse>(API_ENDPOINTS.ai.chat, body, token),
 };

@@ -1,6 +1,7 @@
 export const API_CONFIG = {
   BASE_URL: __DEV__ ? "http://localhost:8000" : "https://api.helios.app",
-  TIMEOUT_MS: 5000,
+  // Raised to 15s — AI endpoints (briefing, plan, chat) can take several seconds
+  TIMEOUT_MS: 15000,
 } as const;
 
 export const API_ENDPOINTS = {
@@ -17,6 +18,7 @@ export const API_ENDPOINTS = {
   ai: {
     briefing: "/api/v1/ai/briefing",
     plan:     "/api/v1/ai/plan",
+    chat:     "/api/v1/ai/chat",
   },
   agents: {
     list: "/api/v1/agents",

@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timezone
 
 from app.ai.base import AIProvider
-from app.schemas.ai import BriefingPriority, DailyBriefing, PlanResponse, PlanStep
+from app.schemas.ai import BriefingPriority, ChatResponse, DailyBriefing, PlanResponse, PlanStep
 
 _BRIEFING_SYSTEM = """\
 You are HELIOS, an elite AI life-operating system.
@@ -52,6 +52,30 @@ Constraints:
 - day_target values must be strictly ascending integers
 - The final step's day_target must equal the total horizon days
 - Tone: professional, operational, action-oriented"""
+
+_CHAT_SYSTEM = """\
+You are HELIOS, an elite AI life-operating system assistant.
+Answer the operator's question with precision and actionable insight.
+
+Return ONLY valid JSON — no markdown fences, no extra keys — matching this exact structure:
+{
+  "reply": "<your response — be direct, specific, and operational>",
+  "suggested_actions": [
+    "<concrete action the operator should take>",
+    "<concrete action the operator should take>"
+  ],
+  "follow_up_questions": [
+    "<natural follow-up question>",
+    "<natural follow-up question>",
+    "<natural follow-up question>"
+  ]
+}
+
+Constraints:
+- reply: 2-5 sentences, professional and direct
+- suggested_actions: 2-3 items, specific and immediately actionable
+- follow_up_questions: exactly 3 items, phrased as the operator asking you
+- Tone: professional, concise, operational. No filler language."""
 
 
 class OpenAIProvider(AIProvider):
@@ -154,4 +178,31 @@ class OpenAIProvider(AIProvider):
         except (KeyError, TypeError, ValueError) as exc:
             raise RuntimeError(
                 f"OpenAI plan response did not match expected schema: {exc}"
+            ) from exc
+
+    def generate_chat_reply(
+        self,
+        message: str,
+        user_name: str,
+        context_type: str | None,
+    ) -> ChatResponse:
+        context_line = f"Context domain: {context_type}" if context_type else ""
+        user_msg = (
+            f"Operator: {user_name}\n"
+            f"{context_line}\n"
+            f"Message: {message}"
+        ).strip()
+
+        try:
+            data = self._call(system=_CHAT_SYSTEM, user=user_msg)
+            return ChatResponse(
+                reply=data["reply"],
+                suggested_actions=data["suggested_actions"],
+                follow_up_questions=data["follow_up_questions"],
+                provider="openai",
+                generated_at=datetime.now(timezone.utc).isoformat(),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RuntimeError(
+                f"OpenAI chat response did not match expected schema: {exc}"
             ) from exc

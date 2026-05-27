@@ -86,6 +86,16 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
+        name="assistant"
+        options={{
+          title: "Assistant",
+          tabBarIcon: ({ color }) => (
+            <TabIcon name="bubble.left.and.bubble.right" color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
         name="goals"
         options={{
           title: "Goals",
