@@ -1,7 +1,8 @@
+import uuid
 from datetime import datetime, timezone
 
 from app.ai.base import AIProvider
-from app.schemas.ai import BriefingPriority, ChatResponse, DailyBriefing, PlanResponse, PlanStep
+from app.schemas.ai import BriefingPriority, ChatResponse, DailyBriefing, PlanResponse, PlanStep, RecommendedAction
 
 # ── Intent detection ──────────────────────────────────────────────────────────
 
@@ -42,6 +43,15 @@ _RESPONSES: dict[str, dict] = {
             "How is my progress this week?",
             "Help me plan my next goal.",
         ],
+        "recommended_actions": [
+            {
+                "type": "generate_plan",
+                "title": "Generate Today's Execution Plan",
+                "description": "Create a focused 7-day sprint plan for your highest-priority active goal.",
+                "confidence": 0.75,
+                "payload_preview": {"horizon_days": 7, "prompt": "Advance highest-priority goal"},
+            },
+        ],
     },
     "goals": {
         "reply": (
@@ -58,6 +68,22 @@ _RESPONSES: dict[str, dict] = {
             "How do I structure a 30-day goal plan?",
             "What makes a goal achievable vs aspirational?",
             "Help me break down a goal into actionable tasks.",
+        ],
+        "recommended_actions": [
+            {
+                "type": "create_goal",
+                "title": "Define a New Strategic Goal",
+                "description": "Add a new goal with a clear title and 30-day target date to expand your execution portfolio.",
+                "confidence": 0.70,
+                "payload_preview": {"suggested_title": "New Strategic Objective", "target_date": "+30 days", "status": "active"},
+            },
+            {
+                "type": "generate_plan",
+                "title": "Generate Goal Execution Plan",
+                "description": "Create a phased 30-day execution plan linked to your highest-priority active goal.",
+                "confidence": 0.88,
+                "payload_preview": {"horizon_days": 30, "prompt": "Execute highest-priority active goal"},
+            },
         ],
     },
     "tasks": {
@@ -77,6 +103,22 @@ _RESPONSES: dict[str, dict] = {
             "What's the best way to avoid task overload?",
             "How do I know which tasks to defer vs delete?",
         ],
+        "recommended_actions": [
+            {
+                "type": "prioritize_tasks",
+                "title": "Reprioritize Open Task Stack",
+                "description": "Reorder your open tasks by impact and urgency to maximise daily output.",
+                "confidence": 0.82,
+                "payload_preview": {"filter": "open", "sort_by": "priority_desc"},
+            },
+            {
+                "type": "create_task",
+                "title": "Add a High-Priority Task",
+                "description": "Create a new high-priority task linked to your most active goal.",
+                "confidence": 0.65,
+                "payload_preview": {"priority": "high", "status": "todo", "suggested_title": "Next critical action"},
+            },
+        ],
     },
     "planning": {
         "reply": (
@@ -94,6 +136,15 @@ _RESPONSES: dict[str, dict] = {
             "What planning horizon should I use for a new project?",
             "How do I turn a plan into daily actions?",
             "What's the difference between a goal and a plan?",
+        ],
+        "recommended_actions": [
+            {
+                "type": "generate_plan",
+                "title": "Launch 30-Day Execution Plan",
+                "description": "Generate a structured phased plan for your next major objective with clear milestones.",
+                "confidence": 0.90,
+                "payload_preview": {"horizon_days": 30, "prompt": "Next major objective"},
+            },
         ],
     },
     "analytics": {
@@ -113,6 +164,15 @@ _RESPONSES: dict[str, dict] = {
             "How do I improve my task completion rate?",
             "What does a healthy HELIOS performance profile look like?",
         ],
+        "recommended_actions": [
+            {
+                "type": "prioritize_tasks",
+                "title": "Reprioritize by Completion Rate",
+                "description": "Reorder your task stack to focus on items trending toward completion.",
+                "confidence": 0.72,
+                "payload_preview": {"sort_by": "completion_velocity", "filter": "open"},
+            },
+        ],
     },
     "agents": {
         "reply": (
@@ -130,6 +190,15 @@ _RESPONSES: dict[str, dict] = {
             "What does each HELIOS agent do?",
             "How do I use the AI Planner?",
             "Can agents take actions autonomously?",
+        ],
+        "recommended_actions": [
+            {
+                "type": "generate_plan",
+                "title": "Generate AI Execution Plan",
+                "description": "Use the AI Planner to create a structured 14-day sprint for your top active goal.",
+                "confidence": 0.85,
+                "payload_preview": {"horizon_days": 14, "prompt": "Top active goal execution sprint"},
+            },
         ],
     },
     "help": {
@@ -152,6 +221,15 @@ _RESPONSES: dict[str, dict] = {
             "What should I work on today?",
             "How is my productivity trending?",
         ],
+        "recommended_actions": [
+            {
+                "type": "create_task",
+                "title": "Create Your First Action Item",
+                "description": "Add a high-priority task linked to an active goal to start building execution momentum.",
+                "confidence": 0.80,
+                "payload_preview": {"priority": "high", "status": "todo", "suggested_title": "First action item"},
+            },
+        ],
     },
     "general": {
         "reply": (
@@ -168,6 +246,15 @@ _RESPONSES: dict[str, dict] = {
             "What should I focus on today?",
             "How do I plan my next 30 days?",
             "Show me my analytics summary.",
+        ],
+        "recommended_actions": [
+            {
+                "type": "prioritize_tasks",
+                "title": "Review and Reprioritize Tasks",
+                "description": "Surface your most impactful open tasks and set clear daily priorities.",
+                "confidence": 0.68,
+                "payload_preview": {"filter": "open", "sort_by": "priority_desc"},
+            },
         ],
     },
 }
@@ -308,10 +395,17 @@ class MockAIProvider(AIProvider):
                 "Enable the OpenAI provider for data-driven, personalised responses.]"
             )
 
+        # Assign fresh UUIDs so dismissal on the frontend is per-message, not global.
+        recommended_actions = [
+            RecommendedAction(id=str(uuid.uuid4()), **raw)
+            for raw in data.get("recommended_actions", [])
+        ]
+
         return ChatResponse(
             reply=reply,
             suggested_actions=data["suggested_actions"],
             follow_up_questions=data["follow_up_questions"],
+            recommended_actions=recommended_actions,
             provider="mock",
             generated_at=datetime.now(timezone.utc).isoformat(),
         )

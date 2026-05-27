@@ -45,10 +45,20 @@ export type ChatRequest = {
   include_context?: boolean;
 };
 
+export type RecommendedAction = {
+  id: string;
+  type: "create_task" | "update_task_status" | "create_goal" | "prioritize_tasks" | "generate_plan";
+  title: string;
+  description: string;
+  confidence: number;
+  payload_preview: Record<string, unknown>;
+};
+
 export type ChatApiResponse = {
   reply: string;
   suggested_actions: string[];
   follow_up_questions: string[];
+  recommended_actions: RecommendedAction[];
   provider: string;
   generated_at: string;
 };

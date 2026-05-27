@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timezone
 
 from app.ai.base import AIProvider
-from app.schemas.ai import BriefingPriority, ChatResponse, DailyBriefing, PlanResponse, PlanStep
+from app.schemas.ai import BriefingPriority, ChatResponse, DailyBriefing, PlanResponse, PlanStep, RecommendedAction
 
 _BRIEFING_SYSTEM = """\
 You are HELIOS, an elite AI life-operating system.
@@ -68,6 +68,16 @@ Return ONLY valid JSON — no markdown fences, no extra keys — matching this e
     "<natural follow-up question>",
     "<natural follow-up question>",
     "<natural follow-up question>"
+  ],
+  "recommended_actions": [
+    {
+      "id": "<unique id, e.g. rec-1>",
+      "type": "<create_task|update_task_status|create_goal|prioritize_tasks|generate_plan>",
+      "title": "<short action title>",
+      "description": "<one sentence describing what this action will do>",
+      "confidence": <float 0.0-1.0>,
+      "payload_preview": {"<key>": "<value>"}
+    }
   ]
 }
 
@@ -75,6 +85,7 @@ Constraints:
 - reply: 2-5 sentences, professional and direct
 - suggested_actions: 2-3 items, specific and immediately actionable
 - follow_up_questions: exactly 3 items, phrased as the operator asking you
+- recommended_actions: 0-3 items. Only include actions that are genuinely relevant to the operator's message. Use type values exactly as listed. confidence is 0.0-1.0 (how certain you are this action is beneficial). payload_preview is a concise human-readable dict of what would happen. Omit if no actions are clearly warranted.
 - Tone: professional, concise, operational. No filler language."""
 
 
@@ -206,10 +217,21 @@ class OpenAIProvider(AIProvider):
 
         try:
             data = self._call(system=system, user=user_msg)
+            # Parse recommended_actions gracefully — malformed entries are dropped rather
+            # than failing the whole response, since the reply is still valid.
+            recommended_actions: list[RecommendedAction] = []
+            raw_actions = data.get("recommended_actions")
+            if isinstance(raw_actions, list):
+                for item in raw_actions:
+                    try:
+                        recommended_actions.append(RecommendedAction(**item))
+                    except Exception:
+                        pass
             return ChatResponse(
                 reply=data["reply"],
                 suggested_actions=data["suggested_actions"],
                 follow_up_questions=data["follow_up_questions"],
+                recommended_actions=recommended_actions,
                 provider="openai",
                 generated_at=datetime.now(timezone.utc).isoformat(),
             )

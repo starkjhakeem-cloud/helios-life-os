@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -41,6 +43,24 @@ class PlanResponse(BaseModel):
 
 # ── Chat ──────────────────────────────────────────────────────────────────────
 
+ActionType = Literal[
+    "create_task",
+    "update_task_status",
+    "create_goal",
+    "prioritize_tasks",
+    "generate_plan",
+]
+
+
+class RecommendedAction(BaseModel):
+    id: str
+    type: ActionType
+    title: str
+    description: str
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    payload_preview: dict
+
+
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
     context_type: str | None = None       # "goals", "tasks", "analytics", "general"
@@ -53,5 +73,6 @@ class ChatResponse(BaseModel):
     reply: str
     suggested_actions: list[str]
     follow_up_questions: list[str]
+    recommended_actions: list[RecommendedAction]
     provider: str
     generated_at: str

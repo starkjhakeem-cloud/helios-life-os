@@ -6,8 +6,11 @@ import {
   type ChatRequest,
   type PlanRequest,
   type PlanResponse,
+  type RecommendedAction,
   aiService,
 } from "../services/aiService";
+
+export type { RecommendedAction };
 
 // ── Chat types ────────────────────────────────────────────────────────────────
 
@@ -17,6 +20,7 @@ export type ChatMessage = {
   content: string;
   suggested_actions: string[];
   follow_up_questions: string[];
+  recommended_actions: RecommendedAction[];
   timestamp: string;
   provider?: string;
 };
@@ -34,6 +38,7 @@ const WELCOME: ChatMessage = {
     "Help me plan my next goal.",
     "How is my progress this week?",
   ],
+  recommended_actions: [],
   timestamp: new Date().toISOString(),
 };
 
@@ -114,6 +119,7 @@ export const useAIStore = create<AIState>()((set, get) => ({
       content: req.message,
       suggested_actions: [],
       follow_up_questions: [],
+      recommended_actions: [],
       timestamp: new Date().toISOString(),
     };
 
@@ -131,6 +137,7 @@ export const useAIStore = create<AIState>()((set, get) => ({
         content: res.reply,
         suggested_actions: res.suggested_actions,
         follow_up_questions: res.follow_up_questions,
+        recommended_actions: res.recommended_actions,
         timestamp: res.generated_at,
         provider: res.provider,
       };

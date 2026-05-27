@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -12,7 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { type ChatMessage, useAIStore, useAuthStore } from "../../store";
+import { type ChatMessage, type RecommendedAction, useAIStore, useAuthStore } from "../../store";
 import { colors, radius, spacing, typography } from "../../theme/theme";
 
 // ── Message bubble ────────────────────────────────────────────────────────────
@@ -21,6 +22,24 @@ type BubbleProps = { message: ChatMessage; onFollowUp: (q: string) => void };
 
 function MessageBubble({ message, onFollowUp }: BubbleProps) {
   const isUser = message.role === "user";
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+
+  const visibleActions = message.recommended_actions.filter((a) => !dismissedIds.has(a.id));
+
+  const handleDismiss = (id: string) => {
+    setDismissedIds((prev) => new Set(prev).add(id));
+  };
+
+  const handleReview = (action: RecommendedAction) => {
+    const previewLines = Object.entries(action.payload_preview)
+      .map(([k, v]) => `${k}: ${String(v)}`)
+      .join("\n");
+    Alert.alert(
+      action.title,
+      `${action.description}\n\nConfidence: ${Math.round(action.confidence * 100)}%\n\n${previewLines}`,
+      [{ text: "Close" }],
+    );
+  };
 
   return (
     <View style={[styles.bubbleRow, isUser ? styles.bubbleRowUser : styles.bubbleRowAssistant]}>
@@ -65,6 +84,40 @@ function MessageBubble({ message, onFollowUp }: BubbleProps) {
                 </View>
               ))}
             </View>
+          </View>
+        )}
+
+        {/* Recommended actions */}
+        {visibleActions.length > 0 && (
+          <View style={styles.recActionsSection}>
+            <Text style={styles.chipsLabel}>RECOMMENDED ACTIONS</Text>
+            {visibleActions.map((action) => (
+              <View key={action.id} style={styles.recAction}>
+                <View style={styles.recActionHeader}>
+                  <Text style={styles.recActionTitle} numberOfLines={1}>{action.title}</Text>
+                  <View style={styles.confidenceBadge}>
+                    <Text style={styles.confidenceText}>{Math.round(action.confidence * 100)}%</Text>
+                  </View>
+                </View>
+                <Text style={styles.recActionDesc}>{action.description}</Text>
+                <View style={styles.recActionButtons}>
+                  <TouchableOpacity
+                    style={styles.reviewButton}
+                    onPress={() => handleReview(action)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.reviewButtonText}>REVIEW</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.notNowButton}
+                    onPress={() => handleDismiss(action.id)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.notNowButtonText}>NOT NOW</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
           </View>
         )}
 
@@ -515,5 +568,89 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700" as const,
     color: colors.background,
+  },
+
+  // Recommended actions
+  recActionsSection: {
+    marginTop: spacing.sm,
+    gap: spacing.xs,
+  },
+
+  recAction: {
+    backgroundColor: colors.surfaceDark,
+    borderWidth: 1,
+    borderColor: colors.borderDark,
+    borderRadius: radius.sm,
+    padding: spacing.sm,
+    gap: spacing.xs,
+  },
+
+  recActionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
+
+  recActionTitle: {
+    ...typography.body,
+    fontWeight: "600" as const,
+    color: colors.textPrimary,
+    flex: 1,
+    fontSize: 13,
+  },
+
+  confidenceBadge: {
+    backgroundColor: "rgba(34,211,238,0.15)",
+    borderRadius: radius.sm,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    flexShrink: 0,
+  },
+
+  confidenceText: {
+    ...typography.label,
+    color: colors.accentCyan,
+    fontSize: 10,
+  },
+
+  recActionDesc: {
+    ...typography.caption,
+    color: colors.textMuted,
+    lineHeight: 17,
+  },
+
+  recActionButtons: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    marginTop: 2,
+  },
+
+  reviewButton: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.sm,
+    backgroundColor: colors.accentCyan,
+  },
+
+  reviewButtonText: {
+    ...typography.label,
+    color: colors.background,
+    fontSize: 10,
+    fontWeight: "700" as const,
+  },
+
+  notNowButton: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+
+  notNowButtonText: {
+    ...typography.label,
+    color: colors.textMuted,
+    fontSize: 10,
   },
 });
