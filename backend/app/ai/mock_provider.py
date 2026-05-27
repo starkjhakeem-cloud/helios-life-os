@@ -293,11 +293,23 @@ class MockAIProvider(AIProvider):
         message: str,
         user_name: str,
         context_type: str | None,
+        user_context: str | None = None,
     ) -> ChatResponse:
         intent = _detect_intent(message)
         data = _RESPONSES[intent]
+        reply = data["reply"]
+
+        if user_context and "No active goals" not in user_context:
+            # Mock cannot reason over the context data, but it acknowledges
+            # that context mode is active. The OpenAI provider fully utilises it.
+            reply = (
+                reply
+                + "\n\n[Context mode active — your live goals and tasks were included. "
+                "Enable the OpenAI provider for data-driven, personalised responses.]"
+            )
+
         return ChatResponse(
-            reply=data["reply"],
+            reply=reply,
             suggested_actions=data["suggested_actions"],
             follow_up_questions=data["follow_up_questions"],
             provider="mock",

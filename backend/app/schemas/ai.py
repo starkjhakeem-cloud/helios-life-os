@@ -46,6 +46,7 @@ class ChatRequest(BaseModel):
     context_type: str | None = None       # "goals", "tasks", "analytics", "general"
     related_goal_id: str | None = None    # reserved for future contextual grounding
     related_task_id: str | None = None
+    include_context: bool = False         # when True, inject live goals/tasks into AI prompt
 
 
 class ChatResponse(BaseModel):

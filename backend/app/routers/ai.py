@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.ai.context_builder import build_user_context
 from app.ai.factory import get_ai_provider
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
@@ -50,12 +51,20 @@ def generate_plan(
 def chat(
     payload: ChatRequest,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> ChatResponse:
+    # Build live user context only when the client opts in.
+    # All queries inside build_user_context are scoped to current_user.id.
+    user_context: str | None = None
+    if payload.include_context:
+        user_context = build_user_context(user_id=current_user.id, db=db)
+
     try:
         return get_ai_provider().generate_chat_reply(
             message=payload.message,
             user_name=current_user.name,
             context_type=payload.context_type,
+            user_context=user_context,
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))

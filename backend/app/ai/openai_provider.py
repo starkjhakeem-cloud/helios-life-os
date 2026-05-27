@@ -185,7 +185,18 @@ class OpenAIProvider(AIProvider):
         message: str,
         user_name: str,
         context_type: str | None,
+        user_context: str | None = None,
     ) -> ChatResponse:
+        # Build the system prompt — append user context block when provided so
+        # the model can give specific, grounded advice based on real user data.
+        system = _CHAT_SYSTEM
+        if user_context:
+            system = (
+                system
+                + f"\n\nOPERATOR'S CURRENT STATE (live data — use this to give specific, "
+                f"personalised advice):\n{user_context}"
+            )
+
         context_line = f"Context domain: {context_type}" if context_type else ""
         user_msg = (
             f"Operator: {user_name}\n"
@@ -194,7 +205,7 @@ class OpenAIProvider(AIProvider):
         ).strip()
 
         try:
-            data = self._call(system=_CHAT_SYSTEM, user=user_msg)
+            data = self._call(system=system, user=user_msg)
             return ChatResponse(
                 reply=data["reply"],
                 suggested_actions=data["suggested_actions"],

@@ -101,9 +101,10 @@ export default function AssistantScreen() {
   const { chatMessages, isChatLoading, chatError, sendMessage, clearChat } = useAIStore();
 
   const [input, setInput] = useState("");
+  const [contextMode, setContextMode] = useState(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
 
-  // Scroll to bottom when messages change
+  // Scroll to bottom when messages change or typing indicator appears
   useEffect(() => {
     if (chatMessages.length > 0) {
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
@@ -114,8 +115,11 @@ export default function AssistantScreen() {
     const text = input.trim();
     if (!text || !accessToken || isChatLoading) return;
     setInput("");
-    await sendMessage(accessToken, { message: text });
-  }, [input, accessToken, isChatLoading, sendMessage]);
+    await sendMessage(accessToken, {
+      message: text,
+      include_context: contextMode,
+    });
+  }, [input, accessToken, isChatLoading, contextMode, sendMessage]);
 
   const handleFollowUp = useCallback((question: string) => {
     setInput(question);
@@ -142,10 +146,35 @@ export default function AssistantScreen() {
           <Text style={styles.headerLabel}>HELIOS ASSISTANT</Text>
           <Text style={styles.headerSub}>AI-powered intelligence layer</Text>
         </View>
-        <TouchableOpacity onPress={clearChat} style={styles.clearButton} activeOpacity={0.7}>
-          <Text style={styles.clearButtonText}>CLEAR</Text>
-        </TouchableOpacity>
+
+        <View style={styles.headerActions}>
+          {/* Context toggle */}
+          <TouchableOpacity
+            style={[styles.toggleButton, contextMode && styles.toggleButtonActive]}
+            onPress={() => setContextMode((v) => !v)}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.toggleButtonText, contextMode && styles.toggleButtonTextActive]}>
+              {contextMode ? "CONTEXT ON" : "CONTEXT"}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Clear conversation */}
+          <TouchableOpacity onPress={clearChat} style={styles.clearButton} activeOpacity={0.7}>
+            <Text style={styles.clearButtonText}>CLEAR</Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* Context active banner */}
+      {contextMode && (
+        <View style={styles.contextBanner}>
+          <View style={styles.contextBannerDot} />
+          <Text style={styles.contextBannerText}>
+            HELIOS context active — your goals and tasks are included in each message
+          </Text>
+        </View>
+      )}
 
       {/* Message list */}
       <FlatList
@@ -224,8 +253,37 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+
+  toggleButton: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+
+  toggleButtonActive: {
+    borderColor: colors.accentCyan,
+    backgroundColor: "rgba(34,211,238,0.1)",
+  },
+
+  toggleButtonText: {
+    ...typography.label,
+    color: colors.textMuted,
+    fontSize: 10,
+  },
+
+  toggleButtonTextActive: {
+    color: colors.accentCyan,
+  },
+
   clearButton: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     borderRadius: radius.sm,
     borderWidth: 1,
@@ -236,6 +294,33 @@ const styles = StyleSheet.create({
     ...typography.label,
     color: colors.textMuted,
     fontSize: 10,
+  },
+
+  // Context banner
+  contextBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    backgroundColor: "rgba(34,211,238,0.06)",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(34,211,238,0.2)",
+  },
+
+  contextBannerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.accentCyan,
+    flexShrink: 0,
+  },
+
+  contextBannerText: {
+    ...typography.caption,
+    color: colors.accentCyan,
+    opacity: 0.85,
+    flex: 1,
   },
 
   listContent: {

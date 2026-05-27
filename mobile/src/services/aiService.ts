@@ -42,6 +42,7 @@ export type ChatRequest = {
   context_type?: string;
   related_goal_id?: string;
   related_task_id?: string;
+  include_context?: boolean;
 };
 
 export type ChatApiResponse = {

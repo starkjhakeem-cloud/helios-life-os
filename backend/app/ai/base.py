@@ -22,4 +22,5 @@ class AIProvider(ABC):
         message: str,
         user_name: str,
         context_type: str | None,
+        user_context: str | None = None,
     ) -> ChatResponse: ...
