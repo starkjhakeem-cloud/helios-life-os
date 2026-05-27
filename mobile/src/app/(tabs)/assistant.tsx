@@ -14,7 +14,9 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { type ChatMessage, type RecommendedAction, useAIStore, useAuthStore } from "../../store";
+import { ApiError } from "../../services/apiClient";
+import { aiService } from "../../services/aiService";
+import { type ChatMessage, type RecommendedAction, useAIStore, useAuthStore, useGoalsStore, useTasksStore } from "../../store";
 import { colors, radius, spacing, typography } from "../../theme/theme";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -26,6 +28,18 @@ const ACTION_TYPE_LABELS: Record<RecommendedAction["type"], string> = {
   prioritize_tasks: "Prioritize Tasks",
   generate_plan: "Generate Plan",
 };
+
+const EXECUTABLE_TYPES = new Set<RecommendedAction["type"]>([
+  "create_task",
+  "create_goal",
+  "update_task_status",
+]);
+
+function canExecuteAction(action: RecommendedAction): boolean {
+  return EXECUTABLE_TYPES.has(action.type) && !!action.execution_payload;
+}
+
+type ExecState = "idle" | "executing" | "success" | "error";
 
 // ── Message bubble ────────────────────────────────────────────────────────────
 
@@ -173,27 +187,60 @@ type ModalProps = {
 };
 
 function ActionReviewModal({ action, onConfirm, onCancel }: ModalProps) {
-  const [isConfirmed, setIsConfirmed] = useState(false);
+  const accessToken = useAuthStore((s) => s.accessToken);
+  const fetchGoals = useGoalsStore((s) => s.fetchGoals);
+  const fetchTasks = useTasksStore((s) => s.fetchTasks);
+
+  const [execState, setExecState] = useState<ExecState>("idle");
+  const [execMessage, setExecMessage] = useState("");
+  const [execError, setExecError] = useState("");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Reset confirmed state each time a new action is opened
+  // Reset state each time a new action is opened
   const actionId = action?.id;
   useEffect(() => {
-    setIsConfirmed(false);
+    setExecState("idle");
+    setExecMessage("");
+    setExecError("");
   }, [actionId]);
 
-  // Cleanup pending timer on unmount
   useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, []);
 
-  const handleConfirm = () => {
-    if (!action) return;
-    const id = action.id;
-    setIsConfirmed(true);
-    timerRef.current = setTimeout(() => onConfirm(id), 1400);
+  const canExecute = action ? canExecuteAction(action) : false;
+
+  const handleConfirm = async () => {
+    if (!action || !accessToken) return;
+
+    if (!canExecute) {
+      // Non-executable action: just acknowledge without API call
+      onConfirm(action.id);
+      return;
+    }
+
+    setExecState("executing");
+    try {
+      const result = await aiService.executeAction(accessToken, {
+        action_type: action.type as "create_task" | "create_goal" | "update_task_status",
+        payload: action.execution_payload as Record<string, unknown>,
+      });
+      setExecMessage(result.message);
+      setExecState("success");
+      // Refresh the relevant store so Goals/Tasks tabs reflect the change
+      if (action.type === "create_goal") {
+        fetchGoals(accessToken).catch(() => {});
+      } else {
+        fetchTasks(accessToken).catch(() => {});
+      }
+      timerRef.current = setTimeout(() => onConfirm(action.id), 1500);
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Execution failed. Please try again.";
+      setExecError(msg);
+      setExecState("error");
+    }
   };
 
   const previewEntries = action ? Object.entries(action.payload_preview) : [];
@@ -206,21 +253,56 @@ function ActionReviewModal({ action, onConfirm, onCancel }: ModalProps) {
       onRequestClose={onCancel}
       statusBarTranslucent
     >
-      <TouchableWithoutFeedback onPress={() => { if (!isConfirmed) onCancel(); }}>
+      <TouchableWithoutFeedback onPress={() => { if (execState === "idle") onCancel(); }}>
         <View style={styles.modalOverlay}>
           <TouchableWithoutFeedback onPress={() => {}}>
             <View style={styles.modalCard}>
-              {isConfirmed ? (
+
+              {/* ── Executing ── */}
+              {execState === "executing" && (
+                <View style={styles.modalExecuting}>
+                  <ActivityIndicator size="large" color={colors.accentCyan} />
+                  <Text style={styles.modalExecutingText}>EXECUTING...</Text>
+                </View>
+              )}
+
+              {/* ── Success ── */}
+              {execState === "success" && (
                 <View style={styles.modalSuccess}>
                   <View style={styles.modalSuccessIcon}>
                     <Text style={styles.modalSuccessIconText}>✓</Text>
                   </View>
-                  <Text style={styles.modalSuccessTitle}>Action Acknowledged</Text>
-                  <Text style={styles.modalSuccessSub}>
-                    No changes have been made. This action is logged for future execution.
-                  </Text>
+                  <Text style={styles.modalSuccessTitle}>Action Executed</Text>
+                  <Text style={styles.modalSuccessSub}>{execMessage}</Text>
                 </View>
-              ) : action ? (
+              )}
+
+              {/* ── Error ── */}
+              {execState === "error" && (
+                <View style={styles.modalErrorState}>
+                  <Text style={styles.modalErrorTitle}>Execution Failed</Text>
+                  <Text style={styles.modalErrorMessage}>{execError}</Text>
+                  <View style={styles.modalButtons}>
+                    <TouchableOpacity
+                      style={styles.modalConfirmButton}
+                      onPress={() => setExecState("idle")}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.modalConfirmButtonText}>RETRY</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.modalCancelButton}
+                      onPress={onCancel}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.modalCancelButtonText}>CANCEL</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              {/* ── Idle / review ── */}
+              {execState === "idle" && action && (
                 <>
                   <View style={styles.modalTypeBadge}>
                     <Text style={styles.modalTypeBadgeText}>
@@ -258,9 +340,11 @@ function ActionReviewModal({ action, onConfirm, onCancel }: ModalProps) {
                     </View>
                   )}
 
-                  <View style={styles.modalNoExecBanner}>
-                    <Text style={styles.modalNoExecText}>
-                      Review only — no changes will be made.
+                  <View style={[styles.modalNoExecBanner, canExecute && styles.modalExecBanner]}>
+                    <Text style={[styles.modalNoExecText, canExecute && styles.modalExecText]}>
+                      {canExecute
+                        ? "Confirming will create or update data in your account."
+                        : "Manual action required — navigate to the relevant tab."}
                     </Text>
                   </View>
 
@@ -270,7 +354,9 @@ function ActionReviewModal({ action, onConfirm, onCancel }: ModalProps) {
                       onPress={handleConfirm}
                       activeOpacity={0.8}
                     >
-                      <Text style={styles.modalConfirmButtonText}>CONFIRM</Text>
+                      <Text style={styles.modalConfirmButtonText}>
+                        {canExecute ? "CONFIRM" : "ACKNOWLEDGE"}
+                      </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.modalCancelButton}
@@ -281,7 +367,8 @@ function ActionReviewModal({ action, onConfirm, onCancel }: ModalProps) {
                     </TouchableOpacity>
                   </View>
                 </>
-              ) : null}
+              )}
+
             </View>
           </TouchableWithoutFeedback>
         </View>
@@ -1046,5 +1133,54 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     textAlign: "center",
     lineHeight: 22,
+  },
+
+  // ── Modal executing state ─────────────────────────────────────────────────
+
+  modalExecuting: {
+    alignItems: "center",
+    paddingVertical: spacing.xl,
+    gap: spacing.md,
+  },
+
+  modalExecutingText: {
+    ...typography.label,
+    color: colors.accentCyan,
+    fontSize: 11,
+  },
+
+  // ── Modal error state ─────────────────────────────────────────────────────
+
+  modalErrorState: {
+    alignItems: "center",
+    paddingVertical: spacing.md,
+    gap: spacing.xs,
+  },
+
+  modalErrorTitle: {
+    ...typography.title,
+    color: "#ef4444",
+    textAlign: "center",
+    marginBottom: spacing.xs,
+  },
+
+  modalErrorMessage: {
+    ...typography.body,
+    color: colors.textMuted,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: spacing.sm,
+  },
+
+  // ── Exec banner (overrides noExec for executable actions) ────────────────
+
+  modalExecBanner: {
+    backgroundColor: "rgba(245,158,11,0.08)",
+    borderColor: "rgba(245,158,11,0.3)",
+  },
+
+  modalExecText: {
+    color: "#f59e0b",
+    opacity: 1,
   },
 });

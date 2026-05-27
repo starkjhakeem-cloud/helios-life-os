@@ -59,6 +59,8 @@ class RecommendedAction(BaseModel):
     description: str
     confidence: float = Field(..., ge=0.0, le=1.0)
     payload_preview: dict
+    # Structured payload for actual execution; None for non-executable types
+    execution_payload: dict | None = None
 
 
 class ChatRequest(BaseModel):
@@ -76,3 +78,44 @@ class ChatResponse(BaseModel):
     recommended_actions: list[RecommendedAction]
     provider: str
     generated_at: str
+
+
+# ── Action execution ───────────────────────────────────────────────────────────
+
+# Subset of ActionType that the execution endpoint actually handles.
+# Pydantic enforces this at the schema level — any other value produces 422.
+ExecutableActionType = Literal["create_task", "update_task_status", "create_goal"]
+
+
+class CreateTaskPayload(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    status: Literal["todo", "in_progress", "done"] = "todo"
+    priority: Literal["low", "medium", "high", "critical"] = "medium"
+    due_date: str | None = None
+    linked_goal_id: str | None = None
+
+
+class CreateGoalPayload(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    status: Literal["active", "completed", "paused"] = "active"
+    target_date: str | None = None
+
+
+class UpdateTaskStatusPayload(BaseModel):
+    task_id: str = Field(..., min_length=1)
+    status: Literal["todo", "in_progress", "done"]
+
+
+class ActionExecuteRequest(BaseModel):
+    action_type: ExecutableActionType
+    payload: dict  # validated downstream against the type-specific schema
+
+
+class ActionExecuteResult(BaseModel):
+    success: bool
+    action_type: str
+    message: str
+    created_or_updated_id: str | None = None
+    executed_at: str

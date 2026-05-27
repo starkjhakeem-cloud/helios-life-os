@@ -76,16 +76,24 @@ Return ONLY valid JSON — no markdown fences, no extra keys — matching this e
       "title": "<short action title>",
       "description": "<one sentence describing what this action will do>",
       "confidence": <float 0.0-1.0>,
-      "payload_preview": {"<key>": "<value>"}
+      "payload_preview": {"<human-readable key>": "<human-readable value>"},
+      "execution_payload": <structured dict for backend execution, or null>
     }
   ]
 }
 
-Constraints:
+execution_payload rules (CRITICAL — backend executes this directly):
+- create_task: {"title": "<task title>", "priority": "low|medium|high|critical", "status": "todo"} — add "description"/"due_date"/"linked_goal_id" only if known
+- create_goal: {"title": "<goal title>", "status": "active"} — add "description"/"target_date" (YYYY-MM-DD) only if known
+- update_task_status: {"task_id": "<real id from operator context>", "status": "todo|in_progress|done"} — set null if you do not have the real task id
+- prioritize_tasks: null
+- generate_plan: null
+
+Other constraints:
 - reply: 2-5 sentences, professional and direct
 - suggested_actions: 2-3 items, specific and immediately actionable
 - follow_up_questions: exactly 3 items, phrased as the operator asking you
-- recommended_actions: 0-3 items. Only include actions that are genuinely relevant to the operator's message. Use type values exactly as listed. confidence is 0.0-1.0 (how certain you are this action is beneficial). payload_preview is a concise human-readable dict of what would happen. Omit if no actions are clearly warranted.
+- recommended_actions: 0-3 items. Only include if genuinely relevant. confidence is 0.0-1.0.
 - Tone: professional, concise, operational. No filler language."""
 
 

@@ -52,6 +52,8 @@ export type RecommendedAction = {
   description: string;
   confidence: number;
   payload_preview: Record<string, unknown>;
+  // Structured payload for actual backend execution; null for non-executable types.
+  execution_payload?: Record<string, unknown> | null;
 };
 
 export type ChatApiResponse = {
@@ -63,6 +65,19 @@ export type ChatApiResponse = {
   generated_at: string;
 };
 
+export type ActionExecuteRequest = {
+  action_type: "create_task" | "update_task_status" | "create_goal";
+  payload: Record<string, unknown>;
+};
+
+export type ActionExecuteResult = {
+  success: boolean;
+  action_type: string;
+  message: string;
+  created_or_updated_id?: string;
+  executed_at: string;
+};
+
 export const aiService = {
   getBriefing: (token: string) =>
     apiClient.get<BriefingResponse>(API_ENDPOINTS.ai.briefing, token),
@@ -72,4 +87,7 @@ export const aiService = {
 
   chat: (token: string, body: ChatRequest) =>
     apiClient.post<ChatApiResponse>(API_ENDPOINTS.ai.chat, body, token),
+
+  executeAction: (token: string, body: ActionExecuteRequest) =>
+    apiClient.post<ActionExecuteResult>(API_ENDPOINTS.ai.execute, body, token),
 };

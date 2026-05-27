@@ -76,6 +76,7 @@ _RESPONSES: dict[str, dict] = {
                 "description": "Add a new goal with a clear title and 30-day target date to expand your execution portfolio.",
                 "confidence": 0.70,
                 "payload_preview": {"suggested_title": "New Strategic Objective", "target_date": "+30 days", "status": "active"},
+                "execution_payload": {"title": "New Strategic Objective", "status": "active"},
             },
             {
                 "type": "generate_plan",
@@ -117,6 +118,7 @@ _RESPONSES: dict[str, dict] = {
                 "description": "Create a new high-priority task linked to your most active goal.",
                 "confidence": 0.65,
                 "payload_preview": {"priority": "high", "status": "todo", "suggested_title": "Next critical action"},
+                "execution_payload": {"title": "Next critical action", "priority": "high", "status": "todo"},
             },
         ],
     },
@@ -228,6 +230,7 @@ _RESPONSES: dict[str, dict] = {
                 "description": "Add a high-priority task linked to an active goal to start building execution momentum.",
                 "confidence": 0.80,
                 "payload_preview": {"priority": "high", "status": "todo", "suggested_title": "First action item"},
+                "execution_payload": {"title": "First action item", "priority": "high", "status": "todo"},
             },
         ],
     },
