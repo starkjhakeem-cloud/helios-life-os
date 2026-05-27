@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     ai_provider: str = "mock"
     # Required only when ai_provider=openai — never hardcode this value
     openai_api_key: str | None = None
+    # Model used when ai_provider=openai. gpt-4o-mini is cheap and fast.
+    openai_model: str = "gpt-4o-mini"
 
 
 settings = Settings()

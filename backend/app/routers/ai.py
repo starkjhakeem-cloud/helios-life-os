@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -10,6 +10,14 @@ from app.models.user import User
 from app.schemas.ai import DailyBriefing, PlanRequest, PlanResponse
 
 router = APIRouter()
+
+
+@router.get("/briefing", response_model=DailyBriefing)
+def get_daily_briefing(current_user: User = Depends(get_current_user)) -> DailyBriefing:
+    try:
+        return get_ai_provider().generate_briefing(user_name=current_user.name)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
 
 
 @router.post("/plan", response_model=PlanResponse)
@@ -27,14 +35,12 @@ def generate_plan(
             raise HTTPException(status_code=404, detail="Goal not found.")
         goal_title = goal.title
 
-    return get_ai_provider().generate_plan(
-        prompt=payload.prompt,
-        horizon=payload.planning_horizon_days,
-        goal_title=goal_title,
-        user_name=current_user.name,
-    )
-
-
-@router.get("/briefing", response_model=DailyBriefing)
-def get_daily_briefing(current_user: User = Depends(get_current_user)) -> DailyBriefing:
-    return get_ai_provider().generate_briefing(user_name=current_user.name)
+    try:
+        return get_ai_provider().generate_plan(
+            prompt=payload.prompt,
+            horizon=payload.planning_horizon_days,
+            goal_title=goal_title,
+            user_name=current_user.name,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))

@@ -16,7 +16,7 @@ def get_ai_provider() -> AIProvider:
                 "AI_PROVIDER=openai requires OPENAI_API_KEY to be set in the environment."
             )
         from app.ai.openai_provider import OpenAIProvider
-        return OpenAIProvider(api_key=settings.openai_api_key)
+        return OpenAIProvider(api_key=settings.openai_api_key, model=settings.openai_model)
 
     raise RuntimeError(
         f"Unknown AI_PROVIDER '{settings.ai_provider}'. Supported values: mock, openai"
