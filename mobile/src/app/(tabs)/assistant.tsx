@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -16,11 +17,26 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { type ChatMessage, type RecommendedAction, useAIStore, useAuthStore } from "../../store";
 import { colors, radius, spacing, typography } from "../../theme/theme";
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const ACTION_TYPE_LABELS: Record<RecommendedAction["type"], string> = {
+  create_task: "Create Task",
+  update_task_status: "Update Task",
+  create_goal: "Create Goal",
+  prioritize_tasks: "Prioritize Tasks",
+  generate_plan: "Generate Plan",
+};
+
 // ── Message bubble ────────────────────────────────────────────────────────────
 
-type BubbleProps = { message: ChatMessage; onFollowUp: (q: string) => void };
+type BubbleProps = {
+  message: ChatMessage;
+  onFollowUp: (q: string) => void;
+  onReview: (action: RecommendedAction) => void;
+  acknowledgedIds: Set<string>;
+};
 
-function MessageBubble({ message, onFollowUp }: BubbleProps) {
+function MessageBubble({ message, onFollowUp, onReview, acknowledgedIds }: BubbleProps) {
   const isUser = message.role === "user";
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 
@@ -28,17 +44,6 @@ function MessageBubble({ message, onFollowUp }: BubbleProps) {
 
   const handleDismiss = (id: string) => {
     setDismissedIds((prev) => new Set(prev).add(id));
-  };
-
-  const handleReview = (action: RecommendedAction) => {
-    const previewLines = Object.entries(action.payload_preview)
-      .map(([k, v]) => `${k}: ${String(v)}`)
-      .join("\n");
-    Alert.alert(
-      action.title,
-      `${action.description}\n\nConfidence: ${Math.round(action.confidence * 100)}%\n\n${previewLines}`,
-      [{ text: "Close" }],
-    );
   };
 
   return (
@@ -91,33 +96,46 @@ function MessageBubble({ message, onFollowUp }: BubbleProps) {
         {visibleActions.length > 0 && (
           <View style={styles.recActionsSection}>
             <Text style={styles.chipsLabel}>RECOMMENDED ACTIONS</Text>
-            {visibleActions.map((action) => (
-              <View key={action.id} style={styles.recAction}>
-                <View style={styles.recActionHeader}>
-                  <Text style={styles.recActionTitle} numberOfLines={1}>{action.title}</Text>
-                  <View style={styles.confidenceBadge}>
-                    <Text style={styles.confidenceText}>{Math.round(action.confidence * 100)}%</Text>
+            {visibleActions.map((action) => {
+              const isAcknowledged = acknowledgedIds.has(action.id);
+              return (
+                <View
+                  key={action.id}
+                  style={[styles.recAction, isAcknowledged && styles.recActionAcknowledged]}
+                >
+                  <View style={styles.recActionHeader}>
+                    <Text style={styles.recActionTitle} numberOfLines={1}>{action.title}</Text>
+                    <View style={styles.confidenceBadge}>
+                      <Text style={styles.confidenceText}>{Math.round(action.confidence * 100)}%</Text>
+                    </View>
                   </View>
+                  <Text style={styles.recActionDesc}>{action.description}</Text>
+
+                  {isAcknowledged ? (
+                    <View style={styles.acknowledgedRow}>
+                      <Text style={styles.acknowledgedText}>✓ ACKNOWLEDGED</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.recActionButtons}>
+                      <TouchableOpacity
+                        style={styles.reviewButton}
+                        onPress={() => onReview(action)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.reviewButtonText}>REVIEW</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.notNowButton}
+                        onPress={() => handleDismiss(action.id)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.notNowButtonText}>NOT NOW</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
-                <Text style={styles.recActionDesc}>{action.description}</Text>
-                <View style={styles.recActionButtons}>
-                  <TouchableOpacity
-                    style={styles.reviewButton}
-                    onPress={() => handleReview(action)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.reviewButtonText}>REVIEW</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.notNowButton}
-                    onPress={() => handleDismiss(action.id)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.notNowButtonText}>NOT NOW</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
 
@@ -146,6 +164,132 @@ function TypingIndicator() {
   );
 }
 
+// ── Action review modal ───────────────────────────────────────────────────────
+
+type ModalProps = {
+  action: RecommendedAction | null;
+  onConfirm: (id: string) => void;
+  onCancel: () => void;
+};
+
+function ActionReviewModal({ action, onConfirm, onCancel }: ModalProps) {
+  const [isConfirmed, setIsConfirmed] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Reset confirmed state each time a new action is opened
+  const actionId = action?.id;
+  useEffect(() => {
+    setIsConfirmed(false);
+  }, [actionId]);
+
+  // Cleanup pending timer on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const handleConfirm = () => {
+    if (!action) return;
+    const id = action.id;
+    setIsConfirmed(true);
+    timerRef.current = setTimeout(() => onConfirm(id), 1400);
+  };
+
+  const previewEntries = action ? Object.entries(action.payload_preview) : [];
+
+  return (
+    <Modal
+      visible={action !== null}
+      transparent
+      animationType="fade"
+      onRequestClose={onCancel}
+      statusBarTranslucent
+    >
+      <TouchableWithoutFeedback onPress={() => { if (!isConfirmed) onCancel(); }}>
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={() => {}}>
+            <View style={styles.modalCard}>
+              {isConfirmed ? (
+                <View style={styles.modalSuccess}>
+                  <View style={styles.modalSuccessIcon}>
+                    <Text style={styles.modalSuccessIconText}>✓</Text>
+                  </View>
+                  <Text style={styles.modalSuccessTitle}>Action Acknowledged</Text>
+                  <Text style={styles.modalSuccessSub}>
+                    No changes have been made. This action is logged for future execution.
+                  </Text>
+                </View>
+              ) : action ? (
+                <>
+                  <View style={styles.modalTypeBadge}>
+                    <Text style={styles.modalTypeBadgeText}>
+                      {ACTION_TYPE_LABELS[action.type]}
+                    </Text>
+                  </View>
+
+                  <Text style={styles.modalTitle}>{action.title}</Text>
+                  <Text style={styles.modalDescription}>{action.description}</Text>
+
+                  <View style={styles.modalConfidenceRow}>
+                    <Text style={styles.modalMetaLabel}>CONFIDENCE</Text>
+                    <View style={styles.modalConfidenceTrack}>
+                      <View
+                        style={[
+                          styles.modalConfidenceFill,
+                          { width: `${Math.round(action.confidence * 100)}%` as `${number}%` },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.modalConfidenceValue}>
+                      {Math.round(action.confidence * 100)}%
+                    </Text>
+                  </View>
+
+                  {previewEntries.length > 0 && (
+                    <View style={styles.modalPreviewSection}>
+                      <Text style={styles.modalMetaLabel}>PAYLOAD PREVIEW</Text>
+                      {previewEntries.map(([k, v]) => (
+                        <View key={k} style={styles.modalPreviewRow}>
+                          <Text style={styles.modalPreviewKey}>{k}</Text>
+                          <Text style={styles.modalPreviewValue}>{String(v)}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  <View style={styles.modalNoExecBanner}>
+                    <Text style={styles.modalNoExecText}>
+                      Review only — no changes will be made.
+                    </Text>
+                  </View>
+
+                  <View style={styles.modalButtons}>
+                    <TouchableOpacity
+                      style={styles.modalConfirmButton}
+                      onPress={handleConfirm}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.modalConfirmButtonText}>CONFIRM</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.modalCancelButton}
+                      onPress={onCancel}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.modalCancelButtonText}>CANCEL</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : null}
+            </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+  );
+}
+
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function AssistantScreen() {
@@ -155,6 +299,8 @@ export default function AssistantScreen() {
 
   const [input, setInput] = useState("");
   const [contextMode, setContextMode] = useState(false);
+  const [reviewingAction, setReviewingAction] = useState<RecommendedAction | null>(null);
+  const [acknowledgedIds, setAcknowledgedIds] = useState<Set<string>>(new Set());
   const listRef = useRef<FlatList<ChatMessage>>(null);
 
   // Scroll to bottom when messages change or typing indicator appears
@@ -178,11 +324,29 @@ export default function AssistantScreen() {
     setInput(question);
   }, []);
 
+  const handleReview = useCallback((action: RecommendedAction) => {
+    setReviewingAction(action);
+  }, []);
+
+  const handleAcknowledge = useCallback((id: string) => {
+    setAcknowledgedIds((prev) => new Set(prev).add(id));
+    setReviewingAction(null);
+  }, []);
+
+  const handleCancelReview = useCallback(() => {
+    setReviewingAction(null);
+  }, []);
+
   const renderItem = useCallback(
     ({ item }: { item: ChatMessage }) => (
-      <MessageBubble message={item} onFollowUp={handleFollowUp} />
+      <MessageBubble
+        message={item}
+        onFollowUp={handleFollowUp}
+        onReview={handleReview}
+        acknowledgedIds={acknowledgedIds}
+      />
     ),
-    [handleFollowUp],
+    [handleFollowUp, handleReview, acknowledgedIds],
   );
 
   const keyExtractor = useCallback((item: ChatMessage) => item.id, []);
@@ -272,6 +436,13 @@ export default function AssistantScreen() {
           <Text style={styles.sendIcon}>↑</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Action review modal — rendered at screen level so it overlays everything */}
+      <ActionReviewModal
+        action={reviewingAction}
+        onConfirm={handleAcknowledge}
+        onCancel={handleCancelReview}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -652,5 +823,228 @@ const styles = StyleSheet.create({
     ...typography.label,
     color: colors.textMuted,
     fontSize: 10,
+  },
+
+  recActionAcknowledged: {
+    opacity: 0.55,
+  },
+
+  acknowledgedRow: {
+    marginTop: 2,
+  },
+
+  acknowledgedText: {
+    ...typography.label,
+    color: colors.accentCyan,
+    fontSize: 10,
+  },
+
+  // ── Modal overlay & card ──────────────────────────────────────────────────
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(5,8,22,0.85)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: spacing.lg,
+  },
+
+  modalCard: {
+    width: "100%",
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+  },
+
+  // ── Type badge ────────────────────────────────────────────────────────────
+
+  modalTypeBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(124,58,237,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(124,58,237,0.5)",
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    marginBottom: spacing.sm,
+  },
+
+  modalTypeBadgeText: {
+    ...typography.label,
+    color: "#a78bfa",
+    fontSize: 10,
+  },
+
+  // ── Modal text ────────────────────────────────────────────────────────────
+
+  modalTitle: {
+    ...typography.title,
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
+  },
+
+  modalDescription: {
+    ...typography.body,
+    color: colors.textSecondary,
+    lineHeight: 22,
+    marginBottom: spacing.md,
+  },
+
+  // ── Confidence ────────────────────────────────────────────────────────────
+
+  modalMetaLabel: {
+    ...typography.label,
+    color: colors.textMuted,
+    fontSize: 9,
+    marginBottom: spacing.xs,
+  },
+
+  modalConfidenceRow: {
+    marginBottom: spacing.md,
+  },
+
+  modalConfidenceTrack: {
+    height: 4,
+    backgroundColor: colors.surfaceDark,
+    borderRadius: 2,
+    overflow: "hidden",
+    marginBottom: 4,
+  },
+
+  modalConfidenceFill: {
+    height: 4,
+    backgroundColor: colors.accentCyan,
+    borderRadius: 2,
+  },
+
+  modalConfidenceValue: {
+    ...typography.caption,
+    color: colors.accentCyan,
+    fontSize: 12,
+  },
+
+  // ── Payload preview ───────────────────────────────────────────────────────
+
+  modalPreviewSection: {
+    backgroundColor: colors.surfaceDark,
+    borderRadius: radius.sm,
+    padding: spacing.sm,
+    marginBottom: spacing.md,
+    gap: spacing.xs,
+  },
+
+  modalPreviewRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+  },
+
+  modalPreviewKey: {
+    ...typography.caption,
+    color: colors.textMuted,
+    flex: 1,
+  },
+
+  modalPreviewValue: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    flex: 2,
+    textAlign: "right",
+  },
+
+  // ── No-exec banner ────────────────────────────────────────────────────────
+
+  modalNoExecBanner: {
+    backgroundColor: "rgba(34,211,238,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(34,211,238,0.2)",
+    borderRadius: radius.sm,
+    padding: spacing.sm,
+    marginBottom: spacing.md,
+  },
+
+  modalNoExecText: {
+    ...typography.caption,
+    color: colors.accentCyan,
+    opacity: 0.8,
+    textAlign: "center",
+  },
+
+  // ── Modal buttons ─────────────────────────────────────────────────────────
+
+  modalButtons: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+
+  modalConfirmButton: {
+    flex: 1,
+    backgroundColor: colors.accentCyan,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm,
+    alignItems: "center",
+  },
+
+  modalConfirmButtonText: {
+    ...typography.label,
+    color: colors.background,
+    fontSize: 12,
+    fontWeight: "700" as const,
+  },
+
+  modalCancelButton: {
+    flex: 1,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.sm,
+    alignItems: "center",
+  },
+
+  modalCancelButtonText: {
+    ...typography.label,
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+
+  // ── Modal success state ───────────────────────────────────────────────────
+
+  modalSuccess: {
+    alignItems: "center",
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
+  },
+
+  modalSuccessIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(34,211,238,0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(34,211,238,0.4)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: spacing.xs,
+  },
+
+  modalSuccessIconText: {
+    fontSize: 24,
+    color: colors.accentCyan,
+  },
+
+  modalSuccessTitle: {
+    ...typography.title,
+    color: colors.textPrimary,
+    textAlign: "center",
+  },
+
+  modalSuccessSub: {
+    ...typography.body,
+    color: colors.textMuted,
+    textAlign: "center",
+    lineHeight: 22,
   },
 });
