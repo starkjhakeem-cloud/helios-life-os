@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import settings
-from app.routers import agents, ai, analytics, auth, dashboard, goals, health, tasks
+from app.routers import agents, ai, analytics, auth, conversations, dashboard, goals, health, tasks
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +71,12 @@ app.include_router(
     ai.router,
     prefix=f"/api/{settings.api_version}/ai",
     tags=["ai"],
+)
+
+app.include_router(
+    conversations.router,
+    prefix=f"/api/{settings.api_version}/ai/conversations",
+    tags=["conversations"],
 )
 
 app.include_router(

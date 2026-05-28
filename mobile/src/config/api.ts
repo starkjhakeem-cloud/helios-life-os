@@ -21,6 +21,9 @@ export const API_ENDPOINTS = {
     chat:     "/api/v1/ai/chat",
     execute:  "/api/v1/ai/actions/execute",
   },
+  conversations: {
+    base: "/api/v1/ai/conversations",
+  },
   agents: {
     list: "/api/v1/agents",
   },

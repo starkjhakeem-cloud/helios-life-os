@@ -9,3 +9,5 @@ export { useAgentsStore } from "./useAgentsStore";
 export { useGoalsStore } from "./useGoalsStore";
 export { useTasksStore } from "./useTasksStore";
 export { useAnalyticsStore } from "./useAnalyticsStore";
+export { useConversationStore } from "./useConversationStore";
+export type { ConversationSummary } from "../services/conversationService";

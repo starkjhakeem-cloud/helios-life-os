@@ -5,6 +5,7 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -16,7 +17,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ApiError } from "../../services/apiClient";
 import { aiService } from "../../services/aiService";
-import { type ChatMessage, type RecommendedAction, useAIStore, useAuthStore, useGoalsStore, useTasksStore } from "../../store";
+import {
+  type ChatMessage,
+  type ConversationSummary,
+  type RecommendedAction,
+  useAuthStore,
+  useConversationStore,
+  useGoalsStore,
+  useTasksStore,
+} from "../../store";
 import { colors, radius, spacing, typography } from "../../theme/theme";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -40,6 +49,23 @@ function canExecuteAction(action: RecommendedAction): boolean {
 }
 
 type ExecState = "idle" | "executing" | "success" | "error";
+
+const WELCOME: ChatMessage = {
+  id: "helios-welcome",
+  role: "assistant",
+  content:
+    "Operator online. I am HELIOS — your AI life-operating system. " +
+    "I can assist with goal strategy, task prioritization, execution planning, and performance analytics. " +
+    "What would you like to work on?",
+  suggested_actions: [],
+  follow_up_questions: [
+    "What should I focus on today?",
+    "Help me plan my next goal.",
+    "How is my progress this week?",
+  ],
+  recommended_actions: [],
+  timestamp: new Date().toISOString(),
+};
 
 // ── Message bubble ────────────────────────────────────────────────────────────
 
@@ -196,7 +222,6 @@ function ActionReviewModal({ action, onConfirm, onCancel }: ModalProps) {
   const [execError, setExecError] = useState("");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Reset state each time a new action is opened
   const actionId = action?.id;
   useEffect(() => {
     setExecState("idle");
@@ -216,7 +241,6 @@ function ActionReviewModal({ action, onConfirm, onCancel }: ModalProps) {
     if (!action || !accessToken) return;
 
     if (!canExecute) {
-      // Non-executable action: just acknowledge without API call
       onConfirm(action.id);
       return;
     }
@@ -229,7 +253,6 @@ function ActionReviewModal({ action, onConfirm, onCancel }: ModalProps) {
       });
       setExecMessage(result.message);
       setExecState("success");
-      // Refresh the relevant store so Goals/Tasks tabs reflect the change
       if (action.type === "create_goal") {
         fetchGoals(accessToken).catch(() => {});
       } else {
@@ -258,7 +281,6 @@ function ActionReviewModal({ action, onConfirm, onCancel }: ModalProps) {
           <TouchableWithoutFeedback onPress={() => {}}>
             <View style={styles.modalCard}>
 
-              {/* ── Executing ── */}
               {execState === "executing" && (
                 <View style={styles.modalExecuting}>
                   <ActivityIndicator size="large" color={colors.accentCyan} />
@@ -266,7 +288,6 @@ function ActionReviewModal({ action, onConfirm, onCancel }: ModalProps) {
                 </View>
               )}
 
-              {/* ── Success ── */}
               {execState === "success" && (
                 <View style={styles.modalSuccess}>
                   <View style={styles.modalSuccessIcon}>
@@ -277,7 +298,6 @@ function ActionReviewModal({ action, onConfirm, onCancel }: ModalProps) {
                 </View>
               )}
 
-              {/* ── Error ── */}
               {execState === "error" && (
                 <View style={styles.modalErrorState}>
                   <Text style={styles.modalErrorTitle}>Execution Failed</Text>
@@ -301,7 +321,6 @@ function ActionReviewModal({ action, onConfirm, onCancel }: ModalProps) {
                 </View>
               )}
 
-              {/* ── Idle / review ── */}
               {execState === "idle" && action && (
                 <>
                   <View style={styles.modalTypeBadge}>
@@ -377,35 +396,177 @@ function ActionReviewModal({ action, onConfirm, onCancel }: ModalProps) {
   );
 }
 
+// ── History modal ─────────────────────────────────────────────────────────────
+
+type HistoryModalProps = {
+  visible: boolean;
+  conversations: ConversationSummary[];
+  currentConversationId: string | null;
+  isLoadingHistory: boolean;
+  onClose: () => void;
+  onSelect: (id: string) => void;
+  onNew: () => void;
+};
+
+function HistoryModal({
+  visible,
+  conversations,
+  currentConversationId,
+  isLoadingHistory,
+  onClose,
+  onSelect,
+  onNew,
+}: HistoryModalProps) {
+  const formatDate = (iso: string) => {
+    const d = new Date(iso);
+    const now = new Date();
+    const isToday =
+      d.getDate() === now.getDate() &&
+      d.getMonth() === now.getMonth() &&
+      d.getFullYear() === now.getFullYear();
+    if (isToday) {
+      return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    }
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={() => {}}>
+            <View style={[styles.modalCard, styles.historyCard]}>
+
+              <View style={styles.historyHeader}>
+                <Text style={styles.historyTitle}>CONVERSATION HISTORY</Text>
+                <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
+                  <Text style={styles.historyClose}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                style={styles.newConvButton}
+                onPress={() => { onNew(); onClose(); }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.newConvButtonText}>+ NEW CONVERSATION</Text>
+              </TouchableOpacity>
+
+              {isLoadingHistory && (
+                <View style={styles.historyLoading}>
+                  <ActivityIndicator size="small" color={colors.accentCyan} />
+                </View>
+              )}
+
+              {!isLoadingHistory && conversations.length === 0 && (
+                <View style={styles.historyEmpty}>
+                  <Text style={styles.historyEmptyText}>No conversations yet.</Text>
+                </View>
+              )}
+
+              {!isLoadingHistory && conversations.length > 0 && (
+                <ScrollView
+                  style={styles.historyList}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {conversations.map((conv) => {
+                    const isCurrent = conv.id === currentConversationId;
+                    return (
+                      <TouchableOpacity
+                        key={conv.id}
+                        style={[styles.historyRow, isCurrent && styles.historyRowActive]}
+                        onPress={() => { onSelect(conv.id); onClose(); }}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.historyRowBody}>
+                          <Text style={[styles.historyRowTitle, isCurrent && styles.historyRowTitleActive]} numberOfLines={1}>
+                            {conv.title}
+                          </Text>
+                          <Text style={styles.historyRowMeta}>
+                            {conv.message_count} {conv.message_count === 1 ? "message" : "messages"} · {formatDate(conv.updated_at)}
+                          </Text>
+                        </View>
+                        {isCurrent && <View style={styles.historyActiveDot} />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              )}
+
+            </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+  );
+}
+
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function AssistantScreen() {
   const insets = useSafeAreaInsets();
   const accessToken = useAuthStore((s) => s.accessToken);
-  const { chatMessages, isChatLoading, chatError, sendMessage, clearChat } = useAIStore();
+
+  const {
+    currentConversationId,
+    currentConversationTitle,
+    currentMessages,
+    conversations,
+    isInitializing,
+    isSending,
+    isLoadingHistory,
+    initError,
+    sendError,
+    initializeConversation,
+    createNewConversation,
+    loadConversation,
+    fetchConversations,
+    sendMessage,
+  } = useConversationStore();
 
   const [input, setInput] = useState("");
   const [contextMode, setContextMode] = useState(false);
   const [reviewingAction, setReviewingAction] = useState<RecommendedAction | null>(null);
   const [acknowledgedIds, setAcknowledgedIds] = useState<Set<string>>(new Set());
+  const [historyVisible, setHistoryVisible] = useState(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
+
+  // Initialize conversation on mount
+  useEffect(() => {
+    if (accessToken) {
+      initializeConversation(accessToken);
+    }
+  }, [accessToken]);
 
   // Scroll to bottom when messages change or typing indicator appears
   useEffect(() => {
-    if (chatMessages.length > 0) {
+    if (displayMessages.length > 0) {
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
     }
-  }, [chatMessages.length, isChatLoading]);
+  }, [currentMessages.length, isSending]);
+
+  // Refresh conversation list when history modal opens
+  useEffect(() => {
+    if (historyVisible && accessToken) {
+      fetchConversations(accessToken);
+    }
+  }, [historyVisible]);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
-    if (!text || !accessToken || isChatLoading) return;
+    if (!text || !accessToken || isSending || !currentConversationId) return;
     setInput("");
     await sendMessage(accessToken, {
       message: text,
       include_context: contextMode,
     });
-  }, [input, accessToken, isChatLoading, contextMode, sendMessage]);
+  }, [input, accessToken, isSending, currentConversationId, contextMode, sendMessage]);
 
   const handleFollowUp = useCallback((question: string) => {
     setInput(question);
@@ -424,6 +585,22 @@ export default function AssistantScreen() {
     setReviewingAction(null);
   }, []);
 
+  const handleNewConversation = useCallback(() => {
+    if (accessToken) createNewConversation(accessToken);
+  }, [accessToken, createNewConversation]);
+
+  const handleSelectConversation = useCallback((id: string) => {
+    if (accessToken) loadConversation(accessToken, id);
+  }, [accessToken, loadConversation]);
+
+  const handleRetryInit = useCallback(() => {
+    if (accessToken) initializeConversation(accessToken);
+  }, [accessToken, initializeConversation]);
+
+  // Show welcome message when conversation is empty
+  const displayMessages: ChatMessage[] =
+    currentMessages.length === 0 ? [WELCOME] : currentMessages;
+
   const renderItem = useCallback(
     ({ item }: { item: ChatMessage }) => (
       <MessageBubble
@@ -438,6 +615,8 @@ export default function AssistantScreen() {
 
   const keyExtractor = useCallback((item: ChatMessage) => item.id, []);
 
+  const isInputDisabled = isSending || isInitializing || !!initError || !currentConversationId;
+
   return (
     <KeyboardAvoidingView
       style={[styles.root, { paddingTop: insets.top }]}
@@ -446,9 +625,11 @@ export default function AssistantScreen() {
     >
       {/* Header */}
       <View style={styles.header}>
-        <View>
+        <View style={styles.headerLeft}>
           <Text style={styles.headerLabel}>HELIOS ASSISTANT</Text>
-          <Text style={styles.headerSub}>AI-powered intelligence layer</Text>
+          <Text style={styles.headerSub} numberOfLines={1}>
+            {currentConversationTitle || "AI-powered intelligence layer"}
+          </Text>
         </View>
 
         <View style={styles.headerActions}>
@@ -463,9 +644,23 @@ export default function AssistantScreen() {
             </Text>
           </TouchableOpacity>
 
-          {/* Clear conversation */}
-          <TouchableOpacity onPress={clearChat} style={styles.clearButton} activeOpacity={0.7}>
-            <Text style={styles.clearButtonText}>CLEAR</Text>
+          {/* History */}
+          <TouchableOpacity
+            onPress={() => setHistoryVisible(true)}
+            style={styles.headerIconButton}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.headerIconButtonText}>HISTORY</Text>
+          </TouchableOpacity>
+
+          {/* New conversation */}
+          <TouchableOpacity
+            onPress={handleNewConversation}
+            style={styles.headerIconButton}
+            activeOpacity={0.7}
+            disabled={isInitializing}
+          >
+            <Text style={[styles.headerIconButtonText, isInitializing && { opacity: 0.4 }]}>NEW</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -480,22 +675,42 @@ export default function AssistantScreen() {
         </View>
       )}
 
-      {/* Message list */}
-      <FlatList
-        ref={listRef}
-        data={chatMessages}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        ListFooterComponent={isChatLoading ? <TypingIndicator /> : null}
-      />
+      {/* Initializing state */}
+      {isInitializing && (
+        <View style={styles.centeredState}>
+          <ActivityIndicator color={colors.accentCyan} />
+          <Text style={styles.centeredStateText}>CONNECTING...</Text>
+        </View>
+      )}
 
-      {/* Error banner */}
-      {chatError ? (
+      {/* Init error state */}
+      {!isInitializing && initError && (
+        <View style={styles.centeredState}>
+          <Text style={styles.centeredErrorText}>{initError}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={handleRetryInit} activeOpacity={0.8}>
+            <Text style={styles.retryButtonText}>RETRY</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Message list */}
+      {!isInitializing && !initError && (
+        <FlatList
+          ref={listRef}
+          data={displayMessages}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          ListFooterComponent={isSending ? <TypingIndicator /> : null}
+        />
+      )}
+
+      {/* Send error banner */}
+      {sendError ? (
         <View style={styles.errorBanner}>
-          <Text style={styles.errorText}>{chatError}</Text>
+          <Text style={styles.errorText}>{sendError}</Text>
         </View>
       ) : null}
 
@@ -512,12 +727,12 @@ export default function AssistantScreen() {
           returnKeyType="send"
           onSubmitEditing={handleSend}
           blurOnSubmit={false}
-          editable={!isChatLoading}
+          editable={!isInputDisabled}
         />
         <TouchableOpacity
-          style={[styles.sendButton, (!input.trim() || isChatLoading) && styles.sendButtonDisabled]}
+          style={[styles.sendButton, (isInputDisabled || !input.trim()) && styles.sendButtonDisabled]}
           onPress={handleSend}
-          disabled={!input.trim() || isChatLoading}
+          disabled={isInputDisabled || !input.trim()}
           activeOpacity={0.8}
         >
           <Text style={styles.sendIcon}>↑</Text>
@@ -529,6 +744,17 @@ export default function AssistantScreen() {
         action={reviewingAction}
         onConfirm={handleAcknowledge}
         onCancel={handleCancelReview}
+      />
+
+      {/* Conversation history modal */}
+      <HistoryModal
+        visible={historyVisible}
+        conversations={conversations}
+        currentConversationId={currentConversationId}
+        isLoadingHistory={isLoadingHistory}
+        onClose={() => setHistoryVisible(false)}
+        onSelect={handleSelectConversation}
+        onNew={handleNewConversation}
       />
     </KeyboardAvoidingView>
   );
@@ -553,6 +779,11 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
 
+  headerLeft: {
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+
   headerLabel: {
     ...typography.label,
     color: colors.accent,
@@ -568,6 +799,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
+    flexShrink: 0,
   },
 
   toggleButton: {
@@ -593,7 +825,7 @@ const styles = StyleSheet.create({
     color: colors.accentCyan,
   },
 
-  clearButton: {
+  headerIconButton: {
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     borderRadius: radius.sm,
@@ -601,7 +833,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
 
-  clearButtonText: {
+  headerIconButtonText: {
     ...typography.label,
     color: colors.textMuted,
     fontSize: 10,
@@ -632,6 +864,42 @@ const styles = StyleSheet.create({
     color: colors.accentCyan,
     opacity: 0.85,
     flex: 1,
+  },
+
+  // Centered states (initializing / error)
+  centeredState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+  },
+
+  centeredStateText: {
+    ...typography.label,
+    color: colors.textMuted,
+    fontSize: 11,
+  },
+
+  centeredErrorText: {
+    ...typography.body,
+    color: "#ef4444",
+    textAlign: "center",
+    lineHeight: 22,
+  },
+
+  retryButton: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.accentCyan,
+  },
+
+  retryButtonText: {
+    ...typography.label,
+    color: colors.accentCyan,
+    fontSize: 11,
   },
 
   listContent: {
@@ -1182,5 +1450,111 @@ const styles = StyleSheet.create({
   modalExecText: {
     color: "#f59e0b",
     opacity: 1,
+  },
+
+  // ── History modal ─────────────────────────────────────────────────────────
+
+  historyCard: {
+    maxHeight: "80%",
+    padding: 0,
+    overflow: "hidden",
+  },
+
+  historyHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+
+  historyTitle: {
+    ...typography.label,
+    color: colors.accent,
+  },
+
+  historyClose: {
+    ...typography.body,
+    color: colors.textMuted,
+    fontSize: 16,
+  },
+
+  newConvButton: {
+    margin: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.accentCyan,
+    alignItems: "center",
+  },
+
+  newConvButtonText: {
+    ...typography.label,
+    color: colors.accentCyan,
+    fontSize: 11,
+  },
+
+  historyList: {
+    maxHeight: 360,
+  },
+
+  historyLoading: {
+    padding: spacing.xl,
+    alignItems: "center",
+  },
+
+  historyEmpty: {
+    padding: spacing.xl,
+    alignItems: "center",
+  },
+
+  historyEmptyText: {
+    ...typography.body,
+    color: colors.textMuted,
+  },
+
+  historyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+
+  historyRowActive: {
+    backgroundColor: "rgba(124,58,237,0.08)",
+  },
+
+  historyRowBody: {
+    flex: 1,
+    gap: 3,
+  },
+
+  historyRowTitle: {
+    ...typography.body,
+    color: colors.textPrimary,
+    fontSize: 14,
+  },
+
+  historyRowTitleActive: {
+    color: colors.accent,
+  },
+
+  historyRowMeta: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
+
+  historyActiveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.accent,
+    marginLeft: spacing.sm,
+    flexShrink: 0,
   },
 });
