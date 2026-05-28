@@ -2,99 +2,15 @@ import json
 from datetime import datetime, timezone
 
 from app.ai.base import AIProvider
+from app.ai.prompts import (
+    BRIEFING_SYSTEM,
+    PLAN_SYSTEM,
+    build_briefing_user_message,
+    build_chat_system,
+    build_chat_user_message,
+    build_plan_user_message,
+)
 from app.schemas.ai import BriefingPriority, ChatResponse, DailyBriefing, PlanResponse, PlanStep, RecommendedAction
-
-_BRIEFING_SYSTEM = """\
-You are HELIOS, an elite AI life-operating system.
-Generate a daily operational briefing for the operator.
-
-Return ONLY valid JSON — no markdown fences, no extra keys — matching this exact structure:
-{
-  "summary": "<2-3 sentence situational overview>",
-  "priorities": [
-    {"label": "<short action phrase>", "detail": "<one sentence explanation>"},
-    {"label": "<short action phrase>", "detail": "<one sentence explanation>"},
-    {"label": "<short action phrase>", "detail": "<one sentence explanation>"}
-  ],
-  "risks": [
-    "<risk statement>",
-    "<risk statement>"
-  ],
-  "recommendation": "<2-3 sentence tactical recommendation for today>"
-}
-
-Tone: professional, direct, operational. Focus on execution, goals, and forward momentum."""
-
-_PLAN_SYSTEM = """\
-You are HELIOS, an elite AI planning engine.
-Generate a structured execution plan based on the operator's objective.
-
-Return ONLY valid JSON — no markdown fences, no extra keys — matching this exact structure:
-{
-  "plan_title": "<concise plan title>",
-  "summary": "<3-4 sentence plan overview>",
-  "steps": [
-    {
-      "step_number": 1,
-      "title": "<phase name>",
-      "description": "<2-3 sentences describing what to do in this phase>",
-      "day_target": <day number when phase completes, integer>
-    }
-  ],
-  "estimated_timeline": "<e.g. '30 days'>",
-  "risks": ["<risk>", "<risk>", "<risk>"],
-  "recommendation": "<2-3 sentence recommendation for execution>"
-}
-
-Constraints:
-- Generate 4-7 sequential phases appropriate for the planning horizon
-- step_number values are 1-indexed and sequential
-- day_target values must be strictly ascending integers
-- The final step's day_target must equal the total horizon days
-- Tone: professional, operational, action-oriented"""
-
-_CHAT_SYSTEM = """\
-You are HELIOS, an elite AI life-operating system assistant.
-Answer the operator's question with precision and actionable insight.
-
-Return ONLY valid JSON — no markdown fences, no extra keys — matching this exact structure:
-{
-  "reply": "<your response — be direct, specific, and operational>",
-  "suggested_actions": [
-    "<concrete action the operator should take>",
-    "<concrete action the operator should take>"
-  ],
-  "follow_up_questions": [
-    "<natural follow-up question>",
-    "<natural follow-up question>",
-    "<natural follow-up question>"
-  ],
-  "recommended_actions": [
-    {
-      "id": "<unique id, e.g. rec-1>",
-      "type": "<create_task|update_task_status|create_goal|prioritize_tasks|generate_plan>",
-      "title": "<short action title>",
-      "description": "<one sentence describing what this action will do>",
-      "confidence": <float 0.0-1.0>,
-      "payload_preview": {"<human-readable key>": "<human-readable value>"},
-      "execution_payload": <structured dict for backend execution, or null>
-    }
-  ]
-}
-
-execution_payload rules (CRITICAL — backend executes this directly):
-- create_task: {"title": "<task title>", "priority": "low|medium|high|critical", "status": "todo"} — add "description"/"due_date"/"linked_goal_id" only if known
-- create_goal: {"title": "<goal title>", "status": "active"} — add "description"/"target_date" (YYYY-MM-DD) only if known
-- update_task_status: {"task_id": "<real id from operator context>", "status": "todo|in_progress|done"} — set null if you do not have the real task id
-- prioritize_tasks: null
-- generate_plan: null
-
-Other constraints:
-- reply: 2-5 sentences, professional and direct
-- suggested_actions: 2-3 items, specific and immediately actionable
-- follow_up_questions: exactly 3 items, phrased as the operator asking you
-- recommended_actions: 0-3 items. Only include if genuinely relevant. confidence is 0.0-1.0.
-- Tone: professional, concise, operational. No filler language."""
 
 
 class OpenAIProvider(AIProvider):
@@ -150,12 +66,10 @@ class OpenAIProvider(AIProvider):
         except json.JSONDecodeError as exc:
             raise RuntimeError("OpenAI returned malformed JSON.") from exc
 
-    def generate_briefing(self, user_name: str) -> DailyBriefing:
+    def generate_briefing(self, user_name: str, user_context: str | None = None) -> DailyBriefing:
+        user_msg = build_briefing_user_message(user_name=user_name, user_context=user_context)
         try:
-            data = self._call(
-                system=_BRIEFING_SYSTEM,
-                user=f"Generate a daily briefing for operator: {user_name}",
-            )
+            data = self._call(system=BRIEFING_SYSTEM, user=user_msg)
             return DailyBriefing(
                 summary=data["summary"],
                 priorities=[BriefingPriority(**p) for p in data["priorities"]],
@@ -175,16 +89,14 @@ class OpenAIProvider(AIProvider):
         goal_title: str | None,
         user_name: str,
     ) -> PlanResponse:
-        goal_line = f"Linked goal: {goal_title}" if goal_title else ""
-        user_msg = (
-            f"Operator: {user_name}\n"
-            f"Objective: {prompt}\n"
-            f"Planning horizon: {horizon} days\n"
-            f"{goal_line}"
-        ).strip()
-
+        user_msg = build_plan_user_message(
+            user_name=user_name,
+            prompt=prompt,
+            horizon=horizon,
+            goal_title=goal_title,
+        )
         try:
-            data = self._call(system=_PLAN_SYSTEM, user=user_msg)
+            data = self._call(system=PLAN_SYSTEM, user=user_msg)
             return PlanResponse(
                 plan_title=data["plan_title"],
                 summary=data["summary"],
@@ -206,23 +118,12 @@ class OpenAIProvider(AIProvider):
         context_type: str | None,
         user_context: str | None = None,
     ) -> ChatResponse:
-        # Build the system prompt — append user context block when provided so
-        # the model can give specific, grounded advice based on real user data.
-        system = _CHAT_SYSTEM
-        if user_context:
-            system = (
-                system
-                + f"\n\nOPERATOR'S CURRENT STATE (live data — use this to give specific, "
-                f"personalised advice):\n{user_context}"
-            )
-
-        context_line = f"Context domain: {context_type}" if context_type else ""
-        user_msg = (
-            f"Operator: {user_name}\n"
-            f"{context_line}\n"
-            f"Message: {message}"
-        ).strip()
-
+        system = build_chat_system(user_context=user_context)
+        user_msg = build_chat_user_message(
+            user_name=user_name,
+            message=message,
+            context_type=context_type,
+        )
         try:
             data = self._call(system=system, user=user_msg)
             # Parse recommended_actions gracefully — malformed entries are dropped rather

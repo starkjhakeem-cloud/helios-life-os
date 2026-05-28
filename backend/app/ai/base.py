@@ -5,7 +5,7 @@ from app.schemas.ai import ChatResponse, DailyBriefing, PlanResponse
 
 class AIProvider(ABC):
     @abstractmethod
-    def generate_briefing(self, user_name: str) -> DailyBriefing: ...
+    def generate_briefing(self, user_name: str, user_context: str | None = None) -> DailyBriefing: ...
 
     @abstractmethod
     def generate_plan(

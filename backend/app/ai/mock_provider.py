@@ -266,7 +266,7 @@ _RESPONSES: dict[str, dict] = {
 # ── Provider ──────────────────────────────────────────────────────────────────
 
 class MockAIProvider(AIProvider):
-    def generate_briefing(self, user_name: str) -> DailyBriefing:
+    def generate_briefing(self, user_name: str, user_context: str | None = None) -> DailyBriefing:
         return DailyBriefing(
             summary=(
                 f"Operator {user_name}, all systems nominal. Goal and task tracking is active, "

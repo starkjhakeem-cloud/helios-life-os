@@ -30,9 +30,16 @@ router = APIRouter()
 
 
 @router.get("/briefing", response_model=DailyBriefing)
-def get_daily_briefing(current_user: User = Depends(get_current_user)) -> DailyBriefing:
+def get_daily_briefing(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DailyBriefing:
+    user_context = build_user_context(user_id=current_user.id, db=db)
     try:
-        return get_ai_provider().generate_briefing(user_name=current_user.name)
+        return get_ai_provider().generate_briefing(
+            user_name=current_user.name,
+            user_context=user_context,
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
 
