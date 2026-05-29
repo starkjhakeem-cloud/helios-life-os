@@ -24,4 +24,7 @@ export const authService = {
 
   me: (token: string) =>
     apiClient.get<MeResponse>(API_ENDPOINTS.auth.me, token),
+
+  deleteAccount: (token: string) =>
+    apiClient.del(API_ENDPOINTS.auth.account, token),
 };

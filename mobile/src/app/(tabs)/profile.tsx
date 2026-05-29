@@ -219,6 +219,8 @@ export default function ProfileScreen() {
   const user = useAuthStore((s) => s.user);
   const accessToken = useAuthStore((s) => s.accessToken);
   const logout = useAuthStore((s) => s.logout);
+  const deleteAccount = useAuthStore((s) => s.deleteAccount);
+  const authLoading = useAuthStore((s) => s.isLoading);
   const [version, setVersion] = useState<VersionResponse | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [permRequesting, setPermRequesting] = useState(false);
@@ -240,7 +242,6 @@ export default function ProfileScreen() {
     theme_preference,
     notifications_enabled,
     reminder_notifications,
-    ai_notifications,
     default_planning_horizon,
     isSaving: prefsSaving,
     fetchPreferences,
@@ -268,6 +269,21 @@ export default function ProfileScreen() {
       { text: "Cancel", style: "cancel" },
       { text: "Sign Out", style: "destructive", onPress: logout },
     ]);
+  }
+
+  function handleDeleteAccount() {
+    Alert.alert(
+      "Delete Account",
+      "This will permanently delete your account and all data — goals, tasks, reminders, and conversations. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete Account",
+          style: "destructive",
+          onPress: () => deleteAccount(),
+        },
+      ],
+    );
   }
 
   async function handleRequestPermissions() {
@@ -528,25 +544,21 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
 
-          <View style={styles.cardDivider} />
-
-          {/* AI notifications — future feature */}
-          <View style={styles.prefRow}>
-            <View style={styles.prefLabelGroup}>
-              <Text style={[styles.prefLabel, styles.prefLabelDisabled]}>AI Alerts</Text>
-              <Text style={styles.prefSub}>Coming in a future update</Text>
-            </View>
-            <TouchableOpacity style={styles.togglePill} disabled activeOpacity={0.7}>
-              <Text style={[styles.toggleText, { color: colors.textMuted }]}>
-                {ai_notifications ? "ON" : "OFF"}
-              </Text>
-            </TouchableOpacity>
-          </View>
         </View>
 
         {/* Logout */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
           <Text style={styles.logoutText}>SIGN OUT</Text>
+        </TouchableOpacity>
+
+        {/* Delete Account */}
+        <TouchableOpacity
+          style={styles.deleteAccountButton}
+          onPress={handleDeleteAccount}
+          disabled={authLoading}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.deleteAccountText}>DELETE ACCOUNT</Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -925,6 +937,19 @@ const styles = StyleSheet.create({
     ...typography.label,
     color: "#ef4444",
     fontSize: 13,
+  },
+
+  deleteAccountButton: {
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    alignItems: "center",
+    marginTop: spacing.sm,
+  },
+
+  deleteAccountText: {
+    ...typography.label,
+    color: colors.textMuted,
+    fontSize: 11,
   },
 
   // New reminder modal

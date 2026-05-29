@@ -12,9 +12,10 @@ export const API_ENDPOINTS = {
   health:  "/api/v1/health",
   version: "/api/v1/version",
   auth: {
-    login:  "/api/v1/auth/login",
-    signup: "/api/v1/auth/signup",
-    me:     "/api/v1/auth/me",
+    login:   "/api/v1/auth/login",
+    signup:  "/api/v1/auth/signup",
+    me:      "/api/v1/auth/me",
+    account: "/api/v1/auth/account",
   },
   dashboard: {
     summary: "/api/v1/dashboard/summary",

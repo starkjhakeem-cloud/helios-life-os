@@ -29,6 +29,7 @@ type AuthState = {
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
+  deleteAccount: () => Promise<void>;
   clearError: () => void;
   // Validates a persisted token on app start — clears session if expired.
   revalidate: () => Promise<void>;
@@ -82,6 +83,31 @@ export const useAuthStore = create<AuthState>()(
         useSettingsStore.getState().reset();
         set({ user: null, accessToken: null, error: null });
       },
+
+      deleteAccount: async () => {
+        const { accessToken } = get();
+        if (!accessToken) return;
+        set({ isLoading: true, error: null });
+        try {
+          await authService.deleteAccount(accessToken);
+          // Reuse logout to clear all local state after deletion.
+          useGoalsStore.getState().reset();
+          useTasksStore.getState().reset();
+          useAnalyticsStore.getState().reset();
+          useAIStore.getState().reset();
+          useDashboardStore.getState().reset();
+          useAgentsStore.getState().reset();
+          useConversationStore.getState().reset();
+          useRemindersStore.getState().reset();
+          useSettingsStore.getState().reset();
+          set({ user: null, accessToken: null, isLoading: false, error: null });
+        } catch (err) {
+          const message =
+            err instanceof ApiError ? err.message : "Failed to delete account. Please try again.";
+          set({ error: message, isLoading: false });
+        }
+      },
+
       clearError: () => set({ error: null }),
 
       revalidate: async () => {

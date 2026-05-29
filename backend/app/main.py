@@ -3,9 +3,12 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import settings
+from app.core.limiter import limiter
 from app.routers import agents, ai, analytics, auth, conversations, dashboard, goals, health, reminders, tasks
 from app.routers import settings as settings_router
 
@@ -26,6 +29,10 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+# Rate limiter — 429 responses use slowapi's built-in handler.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Parse comma-separated CORS_ORIGINS from config (e.g. "https://a.com,https://b.com")
 _cors_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]

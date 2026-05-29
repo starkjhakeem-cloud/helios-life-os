@@ -17,8 +17,8 @@ These are things that look wrong to any technical observer right now.
 
 | Item | Detail | Priority | Difficulty |
 |---|---|---|---|
-| **Dashboard metrics are hardcoded** | `GET /dashboard/summary` returns hard-coded values: "82 Productivity", "5h 32m Focus Time", "12 Tasks Done", "68% Energy". The analytics endpoint already computes real values from the DB. Wire them together. | Must-have | Medium |
-| **`openai` dependency is unpinned** | `requirements.txt` has `openai>=1.0.0` while every other dep is pinned to an exact version. If `openai` releases a v2 with breaking changes, the production build silently breaks. Pin to the currently installed version. | Should-have | Low |
+| ~~**Dashboard metrics are hardcoded**~~ | ✅ **Fixed in Phase 42.** Dashboard now computes Active Goals, Tasks Done, Completion Rate, and Open Tasks from the user's live PostgreSQL data. Section text adapts to the user's data state. | Must-have | Medium |
+| ~~**`openai` dependency is unpinned**~~ | ✅ **Fixed in Phase 42.** Pinned to `openai==2.38.0` — the version verified in the running container. | Should-have | Low |
 | **Splash image is wrong size** | `splash-icon.png` is 228×213 px (non-square, tiny). On iOS, Expo's splash screen will scale it up, producing a blurry result. Replace with a square PNG ≥ 1024×1024. | Must-have (for TestFlight) | Low |
 
 ---
@@ -27,11 +27,11 @@ These are things that look wrong to any technical observer right now.
 
 | Item | Detail | Priority | Difficulty |
 |---|---|---|---|
-| **No rate limiting on auth endpoints** | `/signup` and `/login` have no brute-force protection. A bot can attempt thousands of password guesses without restriction. Add `slowapi` or similar per-IP rate limiting (e.g., 10 requests/minute on auth routes). | Must-have (for public release) | Medium |
+| ~~**No rate limiting on auth endpoints**~~ | ✅ **Fixed in Phase 42.** Added `slowapi==0.1.9`. `/login` is limited to 10/minute per IP; `/signup` to 5/minute per IP. Exceeding the limit returns HTTP 429. | Must-have (for public release) | Medium |
 | **JWT stored in AsyncStorage (unencrypted)** | AsyncStorage is not encrypted on-device. iOS Keychain (`expo-secure-store`) is the correct place for sensitive tokens. Migration requires replacing the Zustand persist storage adapter. | Should-have | Medium |
 | **No refresh tokens** | Access tokens expire in 60 minutes. Users must re-login frequently. Implement a `POST /auth/refresh` endpoint with a longer-lived refresh token stored in AsyncStorage (or Keychain after the above fix). | Should-have | High |
 | **`backend/.env` in early git history** | The `.env` file appears in 5 early commits. The committed values were placeholders (`your-secret-here`), so no real secret was exposed. Before making the repository public, run: `git filter-repo --path backend/.env --invert-paths` | Must-have (before public repo) | Low |
-| **No account deletion** | Users can sign out but have no way to delete their account or data. Required by Apple App Store guidelines (privacy regulation). | Must-have (for App Store) | Medium |
+| ~~**No account deletion**~~ | ✅ **Fixed in Phase 42.** `DELETE /api/v1/auth/account` endpoint permanently deletes the user and all associated data via CASCADE. Mobile: "DELETE ACCOUNT" button in Profile with confirmation alert; `deleteAccount()` action in `useAuthStore` clears all stores on success. | Must-have (for App Store) | Medium |
 | **No email verification** | Any string passing basic format validation is accepted at signup. Adding OTP or link-based verification prevents spam accounts and is expected by App Store reviewers. | Should-have | High |
 
 ---
@@ -41,7 +41,7 @@ These are things that look wrong to any technical observer right now.
 | Item | Detail | Priority | Difficulty |
 |---|---|---|---|
 | **Date inputs use plain text** | Goal target date, task due date, and reminder time are plain text fields requiring ISO 8601 format. Replace with native date/time pickers (`@react-native-community/datetimepicker` or Expo's date picker) for standard iOS UX. | Should-have | Medium |
-| **"AI Alerts — Coming in a future update" visible** | The Profile/Preferences section shows a disabled AI notifications toggle with the text "Coming in a future update". Either implement it or remove it from the UI to avoid looking unfinished during demos. | Must-have (for demo) | Low |
+| ~~**"AI Alerts — Coming in a future update" visible**~~ | ✅ **Fixed in Phase 42.** The disabled AI notifications row with "Coming in a future update" text was removed from the Preferences section. The `ai_notifications` preference is still stored in the backend for future use. | Must-have (for demo) | Low |
 | **No empty state on Dashboard** | If a new user has no goals or tasks, the Home screen shows hardcoded metrics and a generic AI briefing that doesn't acknowledge the empty state. Add a first-run onboarding card or contextual "Get started" prompt. | Should-have | Medium |
 | **Error messages are generic on network failure** | When the backend is unreachable, users see "Network error. Check your connection." on all screens simultaneously. A single top-level error banner would be cleaner than per-screen errors. | Could-have | Medium |
 | **No search or filter on Goals/Tasks** | With >20 goals or tasks, users have no way to filter by status or search by title. | Could-have | Medium |
@@ -66,7 +66,7 @@ These are things that look wrong to any technical observer right now.
 
 | Item | Detail | Priority | Difficulty |
 |---|---|---|---|
-| **Dashboard not connected to real data** | See Critical Fixes #1. The `/dashboard/summary` endpoint returns hardcoded values; `/analytics/summary` has real computed data. Wire them. | Must-have | Medium |
+| ~~**Dashboard not connected to real data**~~ | ✅ **Fixed in Phase 42.** See Critical Fixes #1 above. | Must-have | Medium |
 | **Connection pool is tight** | `pool_size=5, max_overflow=0` means only 5 simultaneous DB connections before requests queue. Under load (e.g., concurrent AI calls) this becomes a bottleneck. Increase `max_overflow` to 10 for production. | Should-have | Low |
 | **Analytics computed on every request** | `/analytics/summary` runs a full table scan on goals and tasks on each call. At low scale this is fine. At >1000 rows per user, consider caching with a short TTL (e.g., 60 seconds via Redis or in-memory). | Could-have | High |
 | **No compound database indexes** | `ix_goals_user_id` and `ix_tasks_user_id` exist, but queries that filter by both `user_id` and `status` would benefit from compound indexes. | Could-have | Low |
@@ -104,14 +104,10 @@ These are things that look wrong to any technical observer right now.
 
 These are sequenced for maximum impact relative to effort.
 
-### Phase 42 — Live Dashboard Metrics
-**What:** Replace the hardcoded dashboard values with real computed data from the user's goals and tasks. The analytics endpoint already has all the logic. This is primarily about wiring `/analytics/summary` into `/dashboard/summary` and updating the Home screen tile display.
+### ✅ Phase 42 — High-Priority Post-V1 Fixes (completed)
+**Fixed:** Live dashboard metrics, rate limiting on auth, account deletion, AI Alerts UI removal, `openai` version pinning.
 
-**Why first:** Every demo starts on the Home screen. Showing "82 Productivity" and "5h 32m Focus Time" (hardcoded) to a recruiter or engineer immediately undermines credibility. Real data makes the portfolio significantly stronger.
-
-**Scope:** `backend/app/routers/dashboard.py` (compute from DB), `mobile/src/app/(tabs)/index.tsx` (display updates), possibly update `DashboardSummary` schema.
-
-**Difficulty:** Medium
+See git log for the full diff.
 
 ---
 
@@ -163,8 +159,8 @@ These are sequenced for maximum impact relative to effort.
 
 | Phase | Theme | Must-haves addressed | Difficulty |
 |---|---|---|---|
-| 42 | Live dashboard metrics | Dashboard hardcoded data | Medium |
-| 43 | Rate limiting + AI context | Auth security, AI context | Low–Medium |
+| ~~42~~ | ~~Live dashboard metrics~~ | ✅ Done — dashboard live, rate limiting, account deletion, AI Alerts removed | — |
+| 43 | AI context always-on | AI context injection in chat | Low |
 | 44 | OpenAI activation | Real AI responses | Low |
 | 45 | TestFlight distribution | Bundle ID, EAS build, real device | Low–Medium |
 | 46 | Assets + screenshots | Splash image, icon audit, screenshots | Low |

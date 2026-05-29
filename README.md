@@ -590,11 +590,11 @@ In development (`__DEV__ === true`) the app always connects to `localhost:8000`.
 - [x] **Phase 39** — Portfolio and demo assets — architecture overview, demo plan, portfolio summary
 - [x] **Phase 40** — V1 completion audit — logout store fixes, OpenAI documentation corrected
 - [x] **Phase 41** — Post-V1 backlog — prioritized next phases, difficulty ratings, honest known gaps
+- [x] **Phase 42** — High-priority post-V1 fixes: live dashboard metrics, auth rate limiting, account deletion, AI Alerts UI removed, `openai` pinned
 
 **Planned**
 
-- [ ] **Phase 42** — Live dashboard metrics (replace hardcoded tiles with real goal/task data)
-- [ ] **Phase 43** — Rate limiting on auth endpoints + AI context always-on
+- [ ] **Phase 43** — AI context always-on in chat (send `include_context: true` to AI assistant)
 - [ ] **Phase 44** — OpenAI activation (implementation complete; add key + set `AI_PROVIDER=openai`)
 - [ ] **Phase 45** — TestFlight distribution (EAS build + Apple credentials)
 - [ ] **Phase 46** — Splash image, icon audit, App Store screenshots
