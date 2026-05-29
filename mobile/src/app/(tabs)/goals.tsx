@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
   ActivityIndicator,
   StyleSheet,
   ScrollView,
+  RefreshControl,
   Modal,
   KeyboardAvoidingView,
   Platform,
@@ -13,6 +14,7 @@ import {
   Keyboard,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SymbolView } from "expo-symbols";
 
 import GoalCard from "../../components/GoalCard";
 import Input from "../../components/ui/Input";
@@ -38,10 +40,12 @@ export default function GoalsScreen() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [formError, setFormError] = useState<string | null>(null);
 
+  const onRefresh = useCallback(() => {
+    if (accessToken) fetchGoals(accessToken);
+  }, [accessToken, fetchGoals]);
+
   useEffect(() => {
-    if (accessToken) {
-      fetchGoals(accessToken);
-    }
+    if (accessToken) fetchGoals(accessToken);
   }, [accessToken, fetchGoals]);
 
   function openModal() {
@@ -92,6 +96,13 @@ export default function GoalsScreen() {
           styles.container,
           { paddingTop: insets.top + spacing.md },
         ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={isLoading}
+            onRefresh={onRefresh}
+            tintColor={colors.accentCyan}
+          />
+        }
       >
         <View style={styles.heroCard}>
           <Text style={styles.heroLabel}>HELIOS GOALS</Text>
@@ -121,6 +132,7 @@ export default function GoalsScreen() {
 
         {goals.length === 0 && !isLoading ? (
           <View style={styles.emptyState}>
+            <SymbolView name="target" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
             <Text style={styles.emptyText}>
               Your objectives will appear here once you create them.
             </Text>
@@ -178,6 +190,7 @@ export default function GoalsScreen() {
               value={form.title}
               onChangeText={(t) => setForm((f) => ({ ...f, title: t }))}
               error={formError ?? undefined}
+              autoFocus
             />
 
             <Input
@@ -295,6 +308,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.xl,
     alignItems: "center",
+    gap: spacing.md,
   },
 
   emptyText: {

@@ -1,5 +1,6 @@
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { SymbolView } from "expo-symbols";
+import * as Haptics from "expo-haptics";
 
 import { colors, spacing, radius, typography } from "../theme/theme";
 import type { Task } from "../services/tasksService";
@@ -48,6 +49,16 @@ export default function TaskCard({ task, onStatusChange, onDelete }: Props) {
   const statusColor   = STATUS_COLOR[task.status]     ?? colors.textMuted;
   const nextStatus    = STATUS_NEXT[task.status]      ?? "todo";
 
+  function handleStatusChange() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    onStatusChange(nextStatus);
+  }
+
+  function handleDelete() {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+    onDelete();
+  }
+
   return (
     <View style={styles.card}>
       {/* Left priority bar */}
@@ -56,8 +67,9 @@ export default function TaskCard({ task, onStatusChange, onDelete }: Props) {
       <View style={styles.body}>
         <View style={styles.header}>
           <TouchableOpacity
-            onPress={() => onStatusChange(nextStatus)}
+            onPress={handleStatusChange}
             style={styles.statusButton}
+            activeOpacity={0.7}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <SymbolView
@@ -87,7 +99,8 @@ export default function TaskCard({ task, onStatusChange, onDelete }: Props) {
           </View>
 
           <TouchableOpacity
-            onPress={onDelete}
+            onPress={handleDelete}
+            activeOpacity={0.7}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <SymbolView
@@ -109,26 +122,14 @@ export default function TaskCard({ task, onStatusChange, onDelete }: Props) {
           <View style={styles.metaRow}>
             {task.due_date ? (
               <View style={styles.metaItem}>
-                <SymbolView
-                  name="calendar"
-                  size={11}
-                  tintColor={colors.textMuted}
-                  resizeMode="scaleAspectFit"
-                />
+                <SymbolView name="calendar" size={11} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
                 <Text style={styles.metaText}>{task.due_date}</Text>
               </View>
             ) : null}
             {task.linked_goal_id ? (
               <View style={styles.metaItem}>
-                <SymbolView
-                  name="target"
-                  size={11}
-                  tintColor={colors.accent}
-                  resizeMode="scaleAspectFit"
-                />
-                <Text style={[styles.metaText, { color: colors.accent }]}>
-                  Goal linked
-                </Text>
+                <SymbolView name="target" size={11} tintColor={colors.accent} resizeMode="scaleAspectFit" />
+                <Text style={[styles.metaText, { color: colors.accent }]}>Goal linked</Text>
               </View>
             ) : null}
           </View>

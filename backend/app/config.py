@@ -22,5 +22,11 @@ class Settings(BaseSettings):
     # Model used when ai_provider=openai. gpt-4o-mini is cheap and fast.
     openai_model: str = "gpt-4o-mini"
 
+    # CORS — comma-separated list of allowed origins.
+    # Default "*" is acceptable for a native mobile API (no browser same-origin
+    # policy applies). Restrict this when adding a web frontend.
+    # Example: CORS_ORIGINS=https://app.helios.io,https://www.helios.io
+    cors_origins: str = "*"
+
 
 settings = Settings()

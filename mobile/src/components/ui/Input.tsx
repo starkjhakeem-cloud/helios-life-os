@@ -1,3 +1,4 @@
+import { forwardRef, useState } from "react";
 import { View, TextInput, Text, StyleSheet, type TextInputProps } from "react-native";
 import { colors, spacing, radius, typography } from "../../theme/theme";
 
@@ -6,20 +7,41 @@ type Props = TextInputProps & {
   error?: string;
 };
 
-export default function Input({ label, error, style, ...rest }: Props) {
+const Input = forwardRef<TextInput, Props>(function Input(
+  { label, error, style, onFocus, onBlur, ...rest },
+  ref,
+) {
+  const [focused, setFocused] = useState(false);
+
   return (
     <View style={styles.container}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
       <TextInput
-        style={[styles.input, error ? styles.inputError : null, style]}
+        ref={ref}
+        style={[
+          styles.input,
+          focused && styles.inputFocused,
+          error ? styles.inputError : null,
+          style,
+        ]}
         placeholderTextColor={colors.textMuted}
         autoCapitalize="none"
+        onFocus={(e) => {
+          setFocused(true);
+          onFocus?.(e);
+        }}
+        onBlur={(e) => {
+          setFocused(false);
+          onBlur?.(e);
+        }}
         {...rest}
       />
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </View>
   );
-}
+});
+
+export default Input;
 
 const styles = StyleSheet.create({
   container: {
@@ -38,6 +60,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     color: colors.textPrimary,
     ...typography.body,
+  },
+  inputFocused: {
+    borderColor: colors.accentCyan,
   },
   inputError: {
     borderColor: "#ef4444",

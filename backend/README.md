@@ -43,7 +43,10 @@ backend/
 │   ├── models/
 │   │   ├── user.py             # users table
 │   │   ├── goal.py             # goals table (FK → users)
-│   │   └── task.py             # tasks table (FK → users, FK → goals SET NULL)
+│   │   ├── task.py             # tasks table (FK → users, FK → goals SET NULL)
+│   │   ├── conversation.py     # conversation summaries table
+│   │   ├── reminder.py         # reminders table (FK → users, tasks, goals)
+│   │   └── user_preferences.py # 1-to-1 preferences table (FK → users)
 │   ├── routers/
 │   │   ├── auth.py             # POST /signup, POST /login, GET /me
 │   │   ├── dashboard.py        # GET /dashboard/summary
@@ -51,7 +54,10 @@ backend/
 │   │   ├── tasks.py            # GET/POST /tasks, PATCH/DELETE /tasks/{id}
 │   │   ├── analytics.py        # GET /analytics/summary
 │   │   ├── agents.py           # GET /agents
-│   │   ├── ai.py               # GET /ai/briefing, POST /ai/plan
+│   │   ├── ai.py               # GET /ai/briefing, POST /ai/plan, POST /ai/chat
+│   │   ├── conversations.py    # GET /ai/conversations
+│   │   ├── reminders.py        # GET/POST /reminders, PATCH/DELETE /reminders/{id}
+│   │   ├── settings.py         # GET/PATCH /settings/preferences
 │   │   └── health.py           # GET /health, GET /version
 │   ├── schemas/
 │   │   ├── auth.py             # SignupRequest, LoginRequest, AuthResponse, UserOut
@@ -59,7 +65,10 @@ backend/
 │   │   ├── tasks.py            # TaskCreate, TaskUpdate, TaskOut, TasksResponse
 │   │   ├── analytics.py        # AnalyticsSummary
 │   │   ├── agents.py           # AgentProfile, AgentsResponse
-│   │   ├── ai.py               # PlanRequest, PlanResponse, DailyBriefing
+│   │   ├── ai.py               # PlanRequest, PlanResponse, DailyBriefing, ChatRequest
+│   │   ├── conversations.py    # ConversationSummary
+│   │   ├── reminders.py        # ReminderCreate, ReminderUpdate, ReminderOut
+│   │   ├── settings.py         # PreferencesOut, PreferencesUpdate
 │   │   └── dashboard.py        # DashboardSummary, MetricItem, SectionItem
 │   ├── config.py               # Settings — pydantic-settings, reads from .env
 │   └── main.py                 # FastAPI app, CORS middleware, exception handlers
@@ -67,7 +76,10 @@ backend/
 │   └── versions/
 │       ├── 001_initial_user_table.py
 │       ├── 002_goals_table.py
-│       └── 003_tasks_table.py
+│       ├── 003_tasks_table.py
+│       ├── 004_conversations_table.py
+│       ├── 005_reminders_table.py
+│       └── 006_user_preferences_table.py
 ├── docker-compose.yml
 ├── Dockerfile
 ├── requirements.txt
@@ -83,12 +95,14 @@ Copy `.env.example` to `.env` before running. The `.env` file is git-ignored.
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `DATABASE_URL` | Yes | `postgresql://helios:helios@localhost:5432/helios` | PostgreSQL connection string — docker-compose sets the `db` hostname automatically |
-| `JWT_SECRET_KEY` | Yes | placeholder | HS256 signing key — generate with `secrets.token_hex(32)` |
+| `JWT_SECRET_KEY` | **Yes** | placeholder | HS256 signing key — generate with `secrets.token_hex(32)` |
 | `JWT_ALGORITHM` | No | `HS256` | JWT algorithm |
 | `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | No | `60` | Token lifetime |
 | `DEBUG` | No | `false` | Re-raises unhandled exceptions in dev instead of returning 500 |
+| `CORS_ORIGINS` | No | `*` | Comma-separated allowed origins — `*` is safe for mobile-only APIs |
 | `AI_PROVIDER` | No | `mock` | `mock` for deterministic responses or `openai` for GPT |
 | `OPENAI_API_KEY` | Conditional | — | Required when `AI_PROVIDER=openai` |
+| `OPENAI_MODEL` | No | `gpt-4o-mini` | Model to use with the OpenAI provider |
 
 ---
 

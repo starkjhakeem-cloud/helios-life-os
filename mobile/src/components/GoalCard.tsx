@@ -1,5 +1,6 @@
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { SymbolView } from "expo-symbols";
+import * as Haptics from "expo-haptics";
 
 import { colors, spacing, radius, typography } from "../theme/theme";
 import type { Goal } from "../services/goalsService";
@@ -32,12 +33,23 @@ export default function GoalCard({ goal, onStatusChange, onDelete }: Props) {
   const dotColor = STATUS_COLOR[goal.status] ?? colors.textMuted;
   const nextStatus = STATUS_NEXT[goal.status] ?? "active";
 
+  function handleStatusChange() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    onStatusChange(nextStatus);
+  }
+
+  function handleDelete() {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+    onDelete();
+  }
+
   return (
     <View style={styles.card}>
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => onStatusChange(nextStatus)}
+          onPress={handleStatusChange}
           style={styles.statusButton}
+          activeOpacity={0.7}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <SymbolView
@@ -50,10 +62,7 @@ export default function GoalCard({ goal, onStatusChange, onDelete }: Props) {
 
         <View style={styles.titleBlock}>
           <Text
-            style={[
-              styles.title,
-              goal.status === "completed" && styles.titleDone,
-            ]}
+            style={[styles.title, goal.status === "completed" && styles.titleDone]}
             numberOfLines={2}
           >
             {goal.title}
@@ -64,7 +73,8 @@ export default function GoalCard({ goal, onStatusChange, onDelete }: Props) {
         </View>
 
         <TouchableOpacity
-          onPress={onDelete}
+          onPress={handleDelete}
+          activeOpacity={0.7}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <SymbolView

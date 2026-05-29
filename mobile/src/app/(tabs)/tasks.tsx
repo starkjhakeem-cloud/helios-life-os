@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
   ActivityIndicator,
   StyleSheet,
   ScrollView,
+  RefreshControl,
   Modal,
   KeyboardAvoidingView,
   Platform,
@@ -13,6 +14,7 @@ import {
   Keyboard,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SymbolView } from "expo-symbols";
 
 import TaskCard from "../../components/TaskCard";
 import Input from "../../components/ui/Input";
@@ -57,10 +59,12 @@ export default function TasksScreen() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [formError, setFormError] = useState<string | null>(null);
 
+  const onRefresh = useCallback(() => {
+    if (accessToken) fetchTasks(accessToken);
+  }, [accessToken, fetchTasks]);
+
   useEffect(() => {
-    if (accessToken) {
-      fetchTasks(accessToken);
-    }
+    if (accessToken) fetchTasks(accessToken);
   }, [accessToken, fetchTasks]);
 
   function openModal() {
@@ -113,6 +117,13 @@ export default function TasksScreen() {
           styles.container,
           { paddingTop: insets.top + spacing.md },
         ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={isLoading}
+            onRefresh={onRefresh}
+            tintColor={colors.accentCyan}
+          />
+        }
       >
         <View style={styles.heroCard}>
           <Text style={styles.heroLabel}>HELIOS TASKS</Text>
@@ -142,6 +153,7 @@ export default function TasksScreen() {
 
         {tasks.length === 0 && !isLoading ? (
           <View style={styles.emptyState}>
+            <SymbolView name="checklist" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
             <Text style={styles.emptyText}>
               Your action items will appear here once you create them.
             </Text>
@@ -198,6 +210,7 @@ export default function TasksScreen() {
               value={form.title}
               onChangeText={(t) => setForm((f) => ({ ...f, title: t }))}
               error={formError ?? undefined}
+              autoFocus
             />
 
             <Input
@@ -377,6 +390,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.xl,
     alignItems: "center",
+    gap: spacing.md,
   },
 
   emptyText: {

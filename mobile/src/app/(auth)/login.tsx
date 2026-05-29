@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { View, StyleSheet } from "react-native";
+import { useRef, useState } from "react";
+import { View, StyleSheet, TextInput } from "react-native";
 import { Link } from "expo-router";
 import { useAuthStore } from "../../store";
 import { Screen, Text, Button, Input } from "../../components/ui";
@@ -10,6 +10,8 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
   const { login, isLoading, error, clearError } = useAuthStore();
+
+  const passwordRef = useRef<TextInput>(null);
 
   function validate(): boolean {
     const e = email.trim();
@@ -47,8 +49,11 @@ export default function LoginScreen() {
           keyboardType="email-address"
           autoComplete="email"
           returnKeyType="next"
+          onSubmitEditing={() => passwordRef.current?.focus()}
+          blurOnSubmit={false}
         />
         <Input
+          ref={passwordRef}
           label="PASSWORD"
           value={password}
           onChangeText={(t) => { setPassword(t); setLocalError(null); }}

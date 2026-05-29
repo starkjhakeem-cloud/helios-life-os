@@ -7,8 +7,11 @@ import { authService } from "../services/authService";
 import { useAIStore } from "./useAIStore";
 import { useAgentsStore } from "./useAgentsStore";
 import { useAnalyticsStore } from "./useAnalyticsStore";
+import { useConversationStore } from "./useConversationStore";
 import { useDashboardStore } from "./useDashboardStore";
 import { useGoalsStore } from "./useGoalsStore";
+import { useRemindersStore } from "./useRemindersStore";
+import { useSettingsStore } from "./useSettingsStore";
 import { useTasksStore } from "./useTasksStore";
 
 export type User = {
@@ -44,6 +47,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { user, access_token } = await authService.login(email, password);
           set({ user, accessToken: access_token, isLoading: false });
+          useSettingsStore.getState().fetchPreferences(access_token).catch(() => {});
         } catch (err) {
           const message =
             err instanceof ApiError ? err.message : "Login failed. Please try again.";
@@ -56,6 +60,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { user, access_token } = await authService.signup(name, email, password);
           set({ user, accessToken: access_token, isLoading: false });
+          useSettingsStore.getState().fetchPreferences(access_token).catch(() => {});
         } catch (err) {
           const message =
             err instanceof ApiError ? err.message : "Signup failed. Please try again.";
@@ -72,6 +77,9 @@ export const useAuthStore = create<AuthState>()(
         useAIStore.getState().reset();
         useDashboardStore.getState().reset();
         useAgentsStore.getState().reset();
+        useConversationStore.getState().reset();
+        useRemindersStore.getState().reset();
+        useSettingsStore.getState().reset();
         set({ user: null, accessToken: null, error: null });
       },
       clearError: () => set({ error: null }),

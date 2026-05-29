@@ -18,6 +18,7 @@ Built mobile-first with React Native / Expo and a FastAPI backend, HELIOS is an 
 - [API Reference](#api-reference)
 - [AI Architecture](#ai-architecture)
 - [Security](#security)
+- [Deployment](#deployment)
 - [Screenshots](#screenshots)
 - [Roadmap](#roadmap)
 
@@ -28,60 +29,71 @@ Built mobile-first with React Native / Expo and a FastAPI backend, HELIOS is an 
 HELIOS gives users a single system to manage goals, tasks, and daily priorities — backed by a structured AI planning engine. The name stands for the project's ambition: a full life-operating layer that surfaces what matters and when.
 
 **What's working today:**
-- JWT-authenticated REST API with full CRUD for goals and tasks
-- PostgreSQL persistence with Alembic migrations
+- JWT-authenticated REST API with full CRUD for goals, tasks, reminders, and user preferences
+- PostgreSQL persistence with 6 Alembic migrations tracking schema evolution
 - Real-time analytics computed from live user data
-- AI briefing and execution plan generation (mock provider; OpenAI integration prepared)
-- Persistent login across app restarts with token revalidation
-- Dark-themed iOS UI with a five-tab navigation shell
+- AI daily briefing, execution plan generator, and conversational assistant (mock provider default; OpenAI integration complete — activate with two env vars)
+- Persistent AI conversation history with per-conversation message storage
+- Local push notifications via Expo Notifications with per-user enable/disable preferences
+- User preferences system (theme, planning horizon, notification toggles) persisted to PostgreSQL
+- Persistent login across app restarts with token revalidation on every cold start
+- Dark-themed iOS app with 7-tab navigation shell, haptic feedback, and pull-to-refresh
 
 ---
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────┐
-│               HELIOS iOS App                         │
-│           React Native 0.83 / Expo SDK 55            │
-│                                                      │
-│   (auth)          (tabs)                             │
-│   Login ──────►  Home · Analytics · Agents           │
-│   Signup          Goals · Tasks                      │
-│        │                │                            │
-│        └──── Zustand ───┘  (7 stores, persisted      │
-│              Stores        auth via AsyncStorage)     │
-│                  │                                    │
-│          fetch + AbortController + JWT               │
-└──────────────────┼───────────────────────────────────┘
-                   │  Authorization: Bearer <token>
-                   │  Content-Type: application/json
-                   ▼
-┌──────────────────────────────────────────────────────┐
-│              FastAPI Backend (Python 3.12)            │
-│                                                      │
-│  /auth   /goals   /tasks   /analytics                │
-│  /dashboard  /agents  /ai/briefing  /ai/plan         │
-│                                                      │
-│  Pydantic v2 validation → SQLAlchemy 2.0 ORM         │
-│                                                      │
-│  ┌─────────────────────────────────────┐             │
-│  │        AI Provider Layer            │             │
-│  │  AIProvider (abstract)              │             │
-│  │    ├── MockAIProvider  ← default    │             │
-│  │    └── OpenAIProvider  ← stub       │             │
-│  └─────────────────────────────────────┘             │
-└──────────────────┬───────────────────────────────────┘
-                   │  SQLAlchemy / psycopg2
-                   ▼
-┌──────────────────────────────────────────────────────┐
-│           PostgreSQL 16 (Docker volume)              │
-│                                                      │
-│   users ──< goals ──< tasks                          │
-│   UUID PKs · FK constraints · tz-aware timestamps    │
-└──────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│                    HELIOS iOS App                          │
+│              React Native 0.83 / Expo SDK 55               │
+│                                                            │
+│  (auth)          (tabs — 7 screens)                        │
+│  Login ──────►  Home · Analytics · Agents · Assistant      │
+│  Signup          Goals · Tasks · Profile                   │
+│       │                 │                                   │
+│       └──── Zustand ────┘  11 stores                       │
+│             Stores         auth + settings persisted        │
+│             (AsyncStorage) all others in-memory            │
+│                  │                                          │
+│         fetch + AbortController + 15 s timeout             │
+│         Authorization: Bearer <JWT>                         │
+└──────────────────────┼─────────────────────────────────────┘
+                       │  HTTPS (HTTP in local dev)
+                       ▼
+┌────────────────────────────────────────────────────────────┐
+│               FastAPI Backend (Python 3.12)                │
+│                                                            │
+│  /auth  /goals  /tasks  /analytics  /dashboard             │
+│  /agents  /ai/briefing  /ai/plan  /ai/chat                 │
+│  /ai/actions/execute  /ai/conversations                    │
+│  /reminders  /settings/preferences  /health                │
+│                                                            │
+│  Pydantic v2 validation → SQLAlchemy 2.0 ORM               │
+│                                                            │
+│  ┌──────────────────────────────────────────┐              │
+│  │           AI Provider Layer              │              │
+│  │  AIProvider (abstract base class)        │              │
+│  │    ├── MockAIProvider  ← default         │              │
+│  │    └── OpenAIProvider  ← complete impl    │              │
+│  │  context_builder: injects live user data │              │
+│  └──────────────────────────────────────────┘              │
+└──────────────────────┬─────────────────────────────────────┘
+                       │  SQLAlchemy / psycopg2
+                       ▼
+┌────────────────────────────────────────────────────────────┐
+│              PostgreSQL 16 (Docker volume)                 │
+│                                                            │
+│  users ──< goals ──< tasks                                 │
+│        ──< conversations ──< conversation_messages         │
+│        ──< reminders                                       │
+│        ──  user_preferences  (1-to-1)                      │
+│                                                            │
+│  UUID PKs · FK constraints · CASCADE/SET NULL · Alembic    │
+└────────────────────────────────────────────────────────────┘
 ```
 
-All services run locally via Docker Compose. The mobile app communicates with the API over `localhost:8000` in development.
+All services run locally via Docker Compose. The mobile app communicates with the API over `localhost:8000` in development; the production URL is injected via `EXPO_PUBLIC_API_URL` at EAS Build time.
 
 ---
 
@@ -136,37 +148,43 @@ HELIOS/
 │   │   │   └── session.py      # Session factory + get_db dependency
 │   │   ├── dependencies/
 │   │   │   └── auth.py         # get_current_user FastAPI dependency
-│   │   ├── models/             # SQLAlchemy ORM models
+│   │   ├── models/             # SQLAlchemy ORM models (user, goal, task, reminder, prefs)
 │   │   ├── routers/            # Route handlers (one file per resource)
 │   │   ├── schemas/            # Pydantic request/response models
-│   │   ├── config.py           # Settings (pydantic-settings)
-│   │   └── main.py             # App factory, middleware, exception handlers
+│   │   ├── config.py           # Settings (pydantic-settings, reads .env)
+│   │   └── main.py             # App factory, CORS middleware, exception handlers
 │   ├── alembic/
-│   │   └── versions/           # 001_users → 002_goals → 003_tasks
-│   ├── docker-compose.yml
-│   ├── Dockerfile
+│   │   └── versions/           # 001_users → … → 006_user_preferences
+│   ├── docker-compose.yml      # Local development (bind-mount + --reload)
+│   ├── Dockerfile              # Production image (alembic + uvicorn, no --reload)
 │   ├── requirements.txt
-│   └── .env.example            # Environment template (copy to .env)
+│   └── .env.example            # Environment template — copy to .env
 │
 ├── mobile/                     # React Native / Expo app
+│   ├── .env.example            # Expo env variable template
 │   └── src/
 │       ├── app/
 │       │   ├── _layout.tsx     # Root layout — hydration guard + auth routing
 │       │   ├── (auth)/         # Login, Signup screens
-│       │   └── (tabs)/         # Home, Analytics, Agents, Goals, Tasks
+│       │   └── (tabs)/         # Home, Analytics, Agents, Goals, Tasks, Profile
 │       ├── components/         # AgentCard, GoalCard, TaskCard, PlanCard, ...
 │       ├── components/ui/      # Button, Input, Screen, Text primitives
 │       ├── config/
-│       │   └── api.ts          # BASE_URL + all endpoint constants
+│       │   └── api.ts          # API_CONFIG (EXPO_PUBLIC_API_URL) + all endpoints
 │       ├── hooks/
 │       │   └── useBackendHealth.ts
 │       ├── services/           # apiClient + per-resource service modules
-│       ├── store/              # Zustand: useAuthStore + 6 data stores
+│       ├── store/              # Zustand: useAuthStore + 8 data stores
 │       └── theme/
 │           └── theme.ts        # Colors, spacing, radius, typography tokens
 │
-├── docs/                       # (planned: architecture diagrams, API specs)
-└── infrastructure/             # (planned: deployment configs)
+└── docs/
+    ├── deployment.md           # Production deployment guide (Render, Railway, Fly.io)
+    ├── ios-release.md          # TestFlight / App Store release checklist
+    ├── architecture-overview.md  # Deep-dive system and data architecture
+    ├── demo-plan.md            # Screenshot checklist and demo walkthrough script
+    ├── portfolio-summary.md    # Recruiter-facing project summary
+    └── post-v1-backlog.md      # Prioritized backlog and recommended next phases
 ```
 
 ---
@@ -210,12 +228,37 @@ HELIOS/
 - Each profile includes name, role, status, description, and priority
 - Protected endpoint — requires valid JWT
 
-**AI Planning (mock)**
-- Daily briefing: summary, priorities, risks, recommendation
-- Execution plan generator: structured multi-phase plan from a text prompt
-- Plans adapt to the requested horizon (1–365 days)
-- Optional goal context: pass a `goal_id` to anchor the plan to a specific goal
-- AI responses are currently generated by a mock provider (see [AI Architecture](#ai-architecture))
+**AI Planning and Chat (mock provider)**
+- Daily briefing: summary, priorities, risks, and recommendation
+- Execution plan generator: structured multi-step plan from a text prompt, scoped to a configurable planning horizon
+- Optional goal context: anchor a plan to a specific goal for targeted advice
+- Conversational AI assistant with follow-up questions and action recommendations
+- AI can recommend actions (create task, create goal, update status) and execute them after user confirmation
+- Persistent conversation history: all exchanges stored in PostgreSQL, reloaded on app start
+- Provider abstraction: swap between mock and OpenAI by changing one environment variable
+- Live user context injection: AI sees the user's current goals and tasks when context is enabled
+
+**Reminders**
+- Create reminders with a title, optional note, and future date/time
+- Enable and disable individual reminders
+- Local push notifications scheduled via Expo Notifications (no server required)
+- Notification permissions requested safely, with graceful handling for denied state
+- All reminders stored in PostgreSQL and synced to the device on login
+
+**User Preferences**
+- Theme preference (system / dark / light) stored per user
+- Default planning horizon (3 / 7 / 14 / 30 days) used as the AI plan default
+- Notification master toggle and reminder-specific toggle
+- All preferences persisted to PostgreSQL and loaded into AsyncStorage on login
+- Optimistic updates: UI reflects changes instantly while the API call runs in the background
+
+**Settings and Profile**
+- User account info (name, email, member since)
+- System version info from the live backend
+- Notification permission status with in-app request flow
+- Reminders management (create, enable/disable, delete)
+- User preferences panel with segmented pickers and toggles
+- Sign-out with complete state wipe across all stores
 
 ### Planned
 
@@ -288,17 +331,17 @@ All backend configuration is loaded from `backend/.env`. Copy `backend/.env.exam
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `APP_NAME` | No | `HELIOS` | Service name shown in health responses |
-| `API_VERSION` | No | `v1` | API version prefix (`/api/v1/...`) |
-| `DEBUG` | No | `false` | Set `true` to re-raise exceptions in development |
-| `DATABASE_URL` | Yes | `postgresql://...` | PostgreSQL connection string (docker-compose overrides this automatically) |
-| `JWT_SECRET_KEY` | Yes | — | HS256 signing key — generate with `secrets.token_hex(32)` |
+| `DATABASE_URL` | Yes | `postgresql://helios:helios@localhost:5432/helios` | PostgreSQL connection string — docker-compose sets the `db` hostname automatically |
+| `JWT_SECRET_KEY` | **Yes** | placeholder | HS256 signing key — generate with `secrets.token_hex(32)` |
 | `JWT_ALGORITHM` | No | `HS256` | JWT signing algorithm |
 | `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | No | `60` | Token lifetime in minutes |
-| `AI_PROVIDER` | No | `mock` | AI backend: `mock` or `openai` |
+| `DEBUG` | No | `false` | Re-raises unhandled exceptions; never `true` in production |
+| `CORS_ORIGINS` | No | `*` | Comma-separated allowed origins — restrict when adding a web frontend |
+| `AI_PROVIDER` | No | `mock` | AI backend: `mock` (no external calls) or `openai` |
 | `OPENAI_API_KEY` | Conditional | — | Required only when `AI_PROVIDER=openai` |
+| `OPENAI_MODEL` | No | `gpt-4o-mini` | Model to use with the OpenAI provider |
 
-> `JWT_SECRET_KEY` must be set to a strong random value in any non-local environment. The default in `.env.example` is a placeholder.
+> `JWT_SECRET_KEY` must be a strong random value in any non-local deployment. Generate one: `python3 -c "import secrets; print(secrets.token_hex(32))"`
 
 ---
 
@@ -330,6 +373,15 @@ Interactive documentation is available at **[http://localhost:8000/docs](http://
 | `GET` | `/api/v1/agents` | Yes | List AI agent profiles |
 | `GET` | `/api/v1/ai/briefing` | Yes | Daily AI briefing |
 | `POST` | `/api/v1/ai/plan` | Yes | Generate an execution plan |
+| `POST` | `/api/v1/ai/chat` | Yes | Conversational AI with action recommendations |
+| `POST` | `/api/v1/ai/actions/execute` | Yes | Execute an AI-recommended action |
+| `GET` | `/api/v1/ai/conversations` | Yes | List saved conversation summaries |
+| `GET` | `/api/v1/reminders` | Yes | List reminders for current user |
+| `POST` | `/api/v1/reminders` | Yes | Create a reminder |
+| `PATCH` | `/api/v1/reminders/{id}` | Yes | Update a reminder |
+| `DELETE` | `/api/v1/reminders/{id}` | Yes | Delete a reminder |
+| `GET` | `/api/v1/settings/preferences` | Yes | Get user preferences (creates defaults on first call) |
+| `PATCH` | `/api/v1/settings/preferences` | Yes | Update user preferences |
 
 ### Error format
 
@@ -364,55 +416,138 @@ app/ai/
 ├── base.py          # AIProvider — abstract base with generate_briefing() and generate_plan()
 ├── factory.py       # get_ai_provider() — reads AI_PROVIDER from config, returns instance
 ├── mock_provider.py # Deterministic responses for development and testing
-└── openai_provider.py  # OpenAI stub — raises NotImplementedError until implemented
+└── openai_provider.py  # Full OpenAI implementation with structured error handling
 ```
 
 **Current state:** `AI_PROVIDER=mock` (default). The mock provider returns structured, contextually relevant responses without any external API calls.
 
 **To enable OpenAI:**
-1. `pip install openai`
-2. Set `AI_PROVIDER=openai` in `.env`
-3. Set `OPENAI_API_KEY=sk-...` in `.env`
-4. Implement `OpenAIProvider.generate_briefing()` and `generate_plan()` in `app/ai/openai_provider.py`
+1. Set `AI_PROVIDER=openai` in `.env`
+2. Set `OPENAI_API_KEY=sk-...` in `.env`
 
-The router code in `app/routers/ai.py` does not need to change — it calls `get_ai_provider()` and the factory handles the rest.
+That's it. `OpenAIProvider` is a complete implementation covering briefing, planning, and chat — with structured error handling for `AuthenticationError`, `RateLimitError`, `APIConnectionError`, and `APIStatusError`. The `openai` package is already in `requirements.txt`.
+
+The router code in `app/routers/ai.py` does not need to change — it calls `get_ai_provider()` and the factory validates the key and returns the appropriate instance.
 
 ---
 
 ## Security
 
-Phase 20 implemented the following hardening measures:
+### Phase 37 audit findings
+
+A full security audit was performed across all backend routes, schemas, auth dependencies, and frontend token handling. The following issues were found and fixed:
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| 1 | `POST /tasks` — `linked_goal_id` stored without ownership check | Medium | **Fixed** |
+| 2 | `POST /reminders` — `task_id` and `goal_id` stored without ownership check | Medium | **Fixed** |
+| 3 | AI `execute_action(create_task)` — `linked_goal_id` stored without ownership check | Medium | **Fixed** |
+| 4 | No startup warning when `JWT_SECRET_KEY` is a known weak placeholder | Low | **Fixed** |
+| 5 | `backend/.env` appears in early git history (value was a placeholder `your-secret-here`, not a real secret) | Low | **Documented** |
+
+All other surfaces checked out clean: every route uses `get_current_user`, every DB query filters by `current_user.id`, no password ever appears in a response schema, JWT uses an explicit algorithm allowlist, login gives identical 401 for "not found" vs "wrong password", and logout clears all in-memory state.
+
+**Fix 1–3**: Each of the three creation endpoints now fetches the referenced record with `WHERE id = ? AND user_id = current_user.id` before accepting it. A 404 is returned if the record doesn't exist or belongs to a different user.
+
+**Fix 4**: `main.py` logs a `WARNING` at startup if `JWT_SECRET_KEY` matches any known placeholder. This catches misconfigured deployments without breaking local development.
+
+**Fix 5 (historical .env)**: The committed values were always placeholders (`your-secret-here`), so no real secret was ever exposed. Before a public repository release, purge the history with `git filter-repo --path backend/.env --invert-paths`. See [docs/deployment.md](docs/deployment.md) for instructions.
+
+---
+
+### What is correctly hardened
 
 **Secrets**
-- `backend/.env` is excluded from version control via `backend/.gitignore`
-- `backend/.env.example` is the committed template (contains no real secrets)
-- `JWT_SECRET_KEY` must be explicitly set; the default in `.env.example` is a placeholder
+- `backend/.env` excluded from version control (`backend/.gitignore`)
+- `backend/.env.example` is the committed template — no real values
+- Startup logs a warning if `JWT_SECRET_KEY` is a weak placeholder
 
 **Authentication**
-- Passwords hashed with bcrypt (default work factor 12)
-- JWT tokens validated on every protected request — algorithm is explicitly allowlisted (`algorithms=[settings.jwt_algorithm]`) to prevent algorithm-confusion attacks
-- `HTTPBearer(auto_error=False)` used to return `401` instead of FastAPI's default `403` on missing credentials
-- Login returns identical 401 for both "user not found" and "wrong password" — timing-safe via bcrypt's constant-time compare
+- Passwords hashed with bcrypt (random salt, default work factor 12)
+- JWT algorithm explicitly allowlisted (`algorithms=[settings.jwt_algorithm]`) — prevents algorithm-confusion attacks
+- JWT `"type": "access"` claim checked — prevents token type confusion
+- `HTTPBearer(auto_error=False)` returns `401` instead of FastAPI's default `403`
+- Login returns identical `401` for "not found" and "wrong password" — timing-safe via bcrypt constant-time compare
+
+**Authorization**
+- Every endpoint uses `Depends(get_current_user)`
+- Every query filters by `current_user.id` — cross-user data access is not possible at the ORM layer
+- Optional foreign key fields (`linked_goal_id`, `task_id`, `goal_id`) are now validated to belong to `current_user` before being stored
 
 **Input validation**
-- All `status` and `priority` fields use `Pydantic Literal` types — invalid enum values rejected at the boundary with a descriptive 422
+- All `status` and `priority` fields use `Pydantic Literal` types — invalid values rejected at the boundary with a 422
 - String fields have `min_length` and `max_length` constraints throughout
 - Email normalised (strip + lowercase) before storage and lookup
 
 **CORS**
-- `allow_credentials=False` — authentication is via Bearer token in the `Authorization` header, not cookies
-- `allow_origins=["*"]` is intentional for a local-dev mobile API; restrict to specific origins before web deployment
+- `allow_credentials=False` — auth is via Bearer token in the `Authorization` header, not cookies
+- `CORS_ORIGINS` is configurable via environment variable (default `*` is safe for a native mobile API)
 - `allow_methods` and `allow_headers` are explicitly scoped
 
 **Session management**
-- `revalidate()` calls `/auth/me` on every app start — expired tokens are cleared before any protected screen renders
-- Logout calls `reset()` on all six data stores before clearing credentials — no stale user data persists in memory
+- `revalidate()` calls `/auth/me` on every app start — expired tokens cleared before any protected screen renders
+- Logout calls `reset()` on all 9 data stores before clearing credentials — no stale user data in memory
 
-**What is not yet implemented**
-- Refresh tokens (access tokens expire after 60 minutes, requiring re-login)
-- Rate limiting on auth endpoints
-- HTTPS enforcement (local dev uses HTTP)
-- Secure enclave / Keychain storage for the JWT (AsyncStorage is unencrypted on-device)
+---
+
+### Known limitations (honest)
+
+| Limitation | Notes |
+|---|---|
+| No refresh tokens | Access tokens expire after 60 minutes; users must re-login |
+| No rate limiting | Auth endpoints (`/signup`, `/login`) have no brute-force protection |
+| HTTP in local dev | HTTPS is only in effect when deployed behind a TLS-terminating proxy |
+| AsyncStorage is unencrypted | JWT stored in AsyncStorage; not in iOS Keychain or Android Keystore |
+| No account deletion | Users can sign out but cannot delete their account or data |
+| No email verification | Any email format is accepted at signup |
+
+---
+
+## Deployment
+
+The full deployment guide is in [docs/deployment.md](docs/deployment.md). This section summarises the key points.
+
+### Backend — hosting targets
+
+The backend is a stateless FastAPI container. Any platform that runs Docker works:
+
+| Platform | Notes |
+|---|---|
+| **Render** | Deploy from GitHub, automatic TLS, free PostgreSQL trial |
+| **Railway** | Mono-repo friendly, auto-detects Dockerfile, built-in PostgreSQL plugin |
+| **Fly.io** | CLI-first, `fly launch` from `backend/`, Postgres clusters available |
+
+The `Dockerfile` is production-ready: it copies Alembic migrations into the image and runs `alembic upgrade head` before starting Uvicorn (no `--reload`). The `docker-compose.yml` overrides this for local development only.
+
+### Database
+
+Use a managed PostgreSQL service — never run the database in the same container as the API in production. Recommended options: **Supabase**, **Neon**, **Railway PostgreSQL**, or **Render PostgreSQL**.
+
+### Mobile — Expo / EAS Build
+
+Production iOS/Android builds go through [EAS Build](https://docs.expo.dev/build/introduction/). The production API URL is injected at build time via `EXPO_PUBLIC_API_URL`:
+
+```json
+// eas.json
+{
+  "build": {
+    "production": {
+      "env": { "EXPO_PUBLIC_API_URL": "https://your-api.your-domain.com" }
+    }
+  }
+}
+```
+
+In development (`__DEV__ === true`) the app always connects to `localhost:8000`.
+
+### Pre-deployment checklist
+
+- [ ] Strong `JWT_SECRET_KEY` set in the hosting platform's secret manager
+- [ ] `DATABASE_URL` points to managed PostgreSQL (not localhost)
+- [ ] `DEBUG=false`
+- [ ] Backend reachable over HTTPS before building the EAS binary
+- [ ] `EXPO_PUBLIC_API_URL` set in the EAS build profile
+- [ ] `/api/v1/health` returns 200 on the production URL
 
 ---
 
@@ -432,25 +567,41 @@ Phase 20 implemented the following hardening measures:
 
 ## Roadmap
 
-The project is developed in numbered phases. Completed phases are marked.
+**Completed (Phases 1–39)**
 
-**Completed**
-- [x] Phase 1–12: Project scaffold, UI components, design system, navigation shell, backend API foundation, JWT auth, database layer
-- [x] Phase 13: AI agents tab and protected agent profiles endpoint
-- [x] Phase 14: Goals system — full CRUD with PostgreSQL persistence
-- [x] Phase 15: Tasks system — full CRUD with priority levels and goal linking
-- [x] Phase 16: Analytics — live aggregation from database
-- [x] Phase 17: AI planning — mock briefing and execution plan generator
-- [x] Phase 18: Auth persistence — AsyncStorage, hydration guard, token revalidation
-- [x] Phase 19: OpenAI integration preparation — provider abstraction, factory, OpenAI stub
-- [x] Phase 20: Security hardening — gitignore, CORS fix, enum validation, logout cleanup
+- [x] **Phases 1–12** — Project scaffold, design system, navigation shell, backend API foundation, JWT authentication, PostgreSQL database layer
+- [x] **Phase 13** — AI agents tab and protected agent profiles endpoint
+- [x] **Phase 14** — Goals system — full CRUD with PostgreSQL persistence
+- [x] **Phase 15** — Tasks system — CRUD with priority levels, due dates, and goal linking
+- [x] **Phase 16** — Analytics — live aggregation from PostgreSQL at request time
+- [x] **Phase 17** — AI planning — daily briefing and execution plan generator with mock provider
+- [x] **Phase 18** — Auth persistence — AsyncStorage, hydration guard, token revalidation on cold start
+- [x] **Phase 19** — OpenAI provider — abstract base class, factory pattern, complete OpenAI implementation with error handling
+- [x] **Phase 20** — Security hardening — CORS, enum validation, logout state wipe
+- [x] **Phases 21–25** — AI chat/assistant, action recommendations, one-tap action execution
+- [x] **Phase 26** — Persistent AI conversation history — full message storage in PostgreSQL
+- [x] **Phases 27–32** — AI context builder, prompt engineering improvements, conversation management
+- [x] **Phase 33** — Reminders and local notifications — Expo Notifications, per-reminder scheduling
+- [x] **Phase 34** — User preferences system — theme, planning horizon, notification toggles, PostgreSQL persistence
+- [x] **Phase 35** — Deployment readiness — production Dockerfile, CORS configuration, EAS environment variables
+- [x] **Phase 36** — Mobile polish — haptic feedback, input focus states, keyboard chaining, pull-to-refresh, SF Symbol empty states
+- [x] **Phase 37** — Security audit — FK ownership validation, JWT startup warning, known-limitations documentation
+- [x] **Phase 38** — iOS / TestFlight preparation — bundle identifier, build number, EAS build profiles, splash screen
+- [x] **Phase 39** — Portfolio and demo assets — architecture overview, demo plan, portfolio summary
+- [x] **Phase 40** — V1 completion audit — logout store fixes, OpenAI documentation corrected
+- [x] **Phase 41** — Post-V1 backlog — prioritized next phases, difficulty ratings, honest known gaps
 
 **Planned**
-- [ ] Phase 21: Documentation and portfolio readiness ← _current_
-- [ ] Phase 22: OpenAI integration — real GPT responses for briefings and plans
-- [ ] Phase 23: Refresh token support and longer-lived sessions
-- [ ] Phase 24: Push notifications for overdue tasks and daily briefing
-- [ ] Phase 25: Biometric authentication (Face ID / Touch ID)
-- [ ] Phase 26: Live dashboard metrics computed from real user activity
-- [ ] Phase 27: App Store build and deployment configuration
-- [ ] Phase 28+: Calendar integration, multi-device sync, agent autonomy
+
+- [ ] **Phase 42** — Live dashboard metrics (replace hardcoded tiles with real goal/task data)
+- [ ] **Phase 43** — Rate limiting on auth endpoints + AI context always-on
+- [ ] **Phase 44** — OpenAI activation (implementation complete; add key + set `AI_PROVIDER=openai`)
+- [ ] **Phase 45** — TestFlight distribution (EAS build + Apple credentials)
+- [ ] **Phase 46** — Splash image, icon audit, App Store screenshots
+- [ ] Refresh tokens — longer-lived sessions without re-login
+- [ ] Remote push notifications (APNs) — server-triggered alerts
+- [ ] Face ID / Touch ID — biometric authentication
+- [ ] Date picker components — replace plain-text date inputs
+- [ ] Account deletion — required for App Store compliance
+
+See [docs/post-v1-backlog.md](docs/post-v1-backlog.md) for the full prioritized backlog with difficulty ratings.

@@ -1,5 +1,9 @@
+// Production API URL — set EXPO_PUBLIC_API_URL in your build environment or .env
+// to override the default. Falls back to localhost in development.
+const _prodUrl = process.env.EXPO_PUBLIC_API_URL ?? "https://api.helios.app";
+
 export const API_CONFIG = {
-  BASE_URL: __DEV__ ? "http://localhost:8000" : "https://api.helios.app",
+  BASE_URL: __DEV__ ? "http://localhost:8000" : _prodUrl,
   // Raised to 15s — AI endpoints (briefing, plan, chat) can take several seconds
   TIMEOUT_MS: 15000,
 } as const;
@@ -23,6 +27,12 @@ export const API_ENDPOINTS = {
   },
   conversations: {
     base: "/api/v1/ai/conversations",
+  },
+  reminders: {
+    base: "/api/v1/reminders",
+  },
+  settings: {
+    preferences: "/api/v1/settings/preferences",
   },
   agents: {
     list: "/api/v1/agents",

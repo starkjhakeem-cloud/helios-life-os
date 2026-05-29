@@ -1,4 +1,5 @@
 import { Pressable, Text, ActivityIndicator, StyleSheet } from "react-native";
+import * as Haptics from "expo-haptics";
 import { colors, spacing, radius, typography } from "../../theme/theme";
 
 type ButtonVariant = "primary" | "secondary" | "ghost";
@@ -13,9 +14,9 @@ type Props = {
 };
 
 const variantStyle = {
-  primary:   { backgroundColor: colors.accent,       borderWidth: 0,  borderColor: "transparent" },
-  secondary: { backgroundColor: colors.surface,      borderWidth: 1,  borderColor: colors.border },
-  ghost:     { backgroundColor: "transparent",        borderWidth: 1,  borderColor: colors.border },
+  primary:   { backgroundColor: colors.accent,  borderWidth: 0, borderColor: "transparent" },
+  secondary: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  ghost:     { backgroundColor: "transparent",  borderWidth: 1, borderColor: colors.border },
 } as const;
 
 const labelColor: Record<ButtonVariant, string> = {
@@ -32,9 +33,14 @@ export default function Button({
   fullWidth = false,
   loading = false,
 }: Props) {
+  function handlePress() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    onPress();
+  }
+
   return (
     <Pressable
-      onPress={onPress}
+      onPress={handlePress}
       disabled={disabled || loading}
       style={({ pressed }) => [
         styles.base,
@@ -47,9 +53,7 @@ export default function Button({
       {loading ? (
         <ActivityIndicator color={labelColor[variant]} size="small" />
       ) : (
-        <Text style={[styles.label, { color: labelColor[variant] }]}>
-          {label}
-        </Text>
+        <Text style={[styles.label, { color: labelColor[variant] }]}>{label}</Text>
       )}
     </Pressable>
   );

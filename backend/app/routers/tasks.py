@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
+from app.models.goal import Goal
 from app.models.task import Task
 from app.models.user import User
 from app.schemas.tasks import TaskCreate, TaskOut, TasksResponse, TaskUpdate
@@ -52,6 +53,14 @@ def create_task(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> TaskOut:
+    # Verify the linked goal belongs to the current user — prevents cross-user FK linkage.
+    if payload.linked_goal_id:
+        goal = db.execute(
+            select(Goal).where(Goal.id == payload.linked_goal_id, Goal.user_id == current_user.id)
+        ).scalar_one_or_none()
+        if not goal:
+            raise HTTPException(status_code=404, detail="Goal not found.")
+
     now = datetime.now(timezone.utc)
     task = Task(
         id=str(uuid.uuid4()),

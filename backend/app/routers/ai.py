@@ -115,6 +115,16 @@ def execute_action(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=exc.errors(),
             )
+        # Verify any linked goal belongs to the current user.
+        if task_data.linked_goal_id:
+            goal = db.execute(
+                select(Goal).where(
+                    Goal.id == task_data.linked_goal_id,
+                    Goal.user_id == current_user.id,
+                )
+            ).scalar_one_or_none()
+            if not goal:
+                raise HTTPException(status_code=404, detail="Goal not found.")
         task = Task(
             id=str(uuid.uuid4()),
             user_id=current_user.id,

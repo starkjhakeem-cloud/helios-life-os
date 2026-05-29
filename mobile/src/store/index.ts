@@ -11,3 +11,7 @@ export { useTasksStore } from "./useTasksStore";
 export { useAnalyticsStore } from "./useAnalyticsStore";
 export { useConversationStore } from "./useConversationStore";
 export type { ConversationSummary } from "../services/conversationService";
+export { useRemindersStore } from "./useRemindersStore";
+export type { ReminderOut } from "../services/reminderService";
+export { useSettingsStore } from "./useSettingsStore";
+export type { ThemePreference, PreferencesOut } from "../services/settingsService";

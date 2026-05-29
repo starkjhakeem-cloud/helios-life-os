@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { View, StyleSheet } from "react-native";
+import { useRef, useState } from "react";
+import { View, StyleSheet, TextInput } from "react-native";
 import { Link } from "expo-router";
 import { useAuthStore } from "../../store";
 import { Screen, Text, Button, Input } from "../../components/ui";
@@ -11,6 +11,9 @@ export default function SignupScreen() {
   const [password, setPassword] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
   const { signup, isLoading, error, clearError } = useAuthStore();
+
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
 
   function validate(): boolean {
     if (!name.trim()) { setLocalError("Name is required."); return false; }
@@ -49,8 +52,11 @@ export default function SignupScreen() {
           autoCapitalize="words"
           autoComplete="name"
           returnKeyType="next"
+          onSubmitEditing={() => emailRef.current?.focus()}
+          blurOnSubmit={false}
         />
         <Input
+          ref={emailRef}
           label="EMAIL"
           value={email}
           onChangeText={(t) => { setEmail(t); setLocalError(null); }}
@@ -58,8 +64,11 @@ export default function SignupScreen() {
           keyboardType="email-address"
           autoComplete="email"
           returnKeyType="next"
+          onSubmitEditing={() => passwordRef.current?.focus()}
+          blurOnSubmit={false}
         />
         <Input
+          ref={passwordRef}
           label="PASSWORD"
           value={password}
           onChangeText={(t) => { setPassword(t); setLocalError(null); }}

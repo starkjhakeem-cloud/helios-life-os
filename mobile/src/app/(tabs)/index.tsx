@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { View, Text, ActivityIndicator, StyleSheet, ScrollView } from "react-native";
+import { useCallback, useEffect } from "react";
+import { View, Text, ActivityIndicator, StyleSheet, ScrollView, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import BriefingCard from "../../components/BriefingCard";
@@ -29,6 +29,13 @@ export default function HomeScreen() {
   const accessToken = useAuthStore((s) => s.accessToken);
   const userName = useAuthStore((s) => s.user?.name ?? "Operator");
 
+  const onRefresh = useCallback(() => {
+    if (accessToken) {
+      fetchSummary(accessToken);
+      fetchBriefing(accessToken);
+    }
+  }, [accessToken, fetchSummary, fetchBriefing]);
+
   useEffect(() => {
     if (accessToken) {
       fetchSummary(accessToken);
@@ -44,6 +51,13 @@ export default function HomeScreen() {
         styles.container,
         { paddingTop: insets.top + spacing.md },
       ]}
+      refreshControl={
+        <RefreshControl
+          refreshing={dashLoading || aiLoading}
+          onRefresh={onRefresh}
+          tintColor={colors.accentCyan}
+        />
+      }
     >
       <View style={styles.heroCard}>
         <Text style={styles.heroLabel}>HELIOS COMMAND</Text>

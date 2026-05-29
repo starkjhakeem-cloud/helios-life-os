@@ -8,7 +8,10 @@
     "scheme": "helios",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/images/icon.png"
+      "icon": "./assets/images/icon.png",
+      "bundleIdentifier": "com.helios.app",
+      "buildNumber": "1",
+      "supportsTablet": false
     },
     "android": {
       "adaptiveIcon": {
@@ -17,6 +20,7 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
+      "versionCode": 1,
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -29,10 +33,23 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#208AEF",
+          "ios": {
+            "image": "./assets/images/splash-icon.png",
+            "imageWidth": 200,
+            "backgroundColor": "#208AEF"
+          },
           "android": {
             "image": "./assets/images/splash-icon.png",
             "imageWidth": 76
           }
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#7c3aed",
+          "sounds": []
         }
       ]
     ],
