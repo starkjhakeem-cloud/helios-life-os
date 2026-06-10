@@ -207,6 +207,26 @@ pytest
 
 ---
 
+## Production Deployment Notes
+
+The backend `Dockerfile` is production-ready and starts the API with database migrations applied:
+
+```dockerfile
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+```
+
+In production:
+
+- Use `DATABASE_URL` from your managed PostgreSQL provider.
+- Set `JWT_SECRET_KEY` to a strong random value in your platform's secret manager.
+- Keep `DEBUG=false` for all non-local environments.
+- Set `CORS_ORIGINS` explicitly when your backend is used by browser-based clients.
+- Set `AI_PROVIDER=openai` only if you also provide `OPENAI_API_KEY`.
+
+Local Docker Compose is intentionally kept separate from production. The `docker-compose.yml` file is for development only; it mounts source code and runs Uvicorn with `--reload`.
+
+---
+
 ## Docker Compose Services
 
 ```yaml

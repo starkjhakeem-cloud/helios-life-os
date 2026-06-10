@@ -531,6 +531,20 @@ npm test
 
 The full deployment guide is in [docs/deployment.md](docs/deployment.md). This section summarises the key points.
 
+### Production readiness
+- `DATABASE_URL` supports local Docker Compose and hosted PostgreSQL services.
+- `JWT_SECRET_KEY` must be set in the environment, never committed.
+- `CORS_ORIGINS` is configurable through environment variables.
+- `OPENAI_API_KEY` is also environment-based and only required when `AI_PROVIDER=openai`.
+- The backend Dockerfile is production-ready; local development uses `docker-compose.yml` with `--reload`.
+
+### Deployment checklist
+- [ ] `DEBUG=false` in production
+- [ ] `CORS_ORIGINS` restricted for browser clients
+- [ ] `JWT_SECRET_KEY` strong and secret
+- [ ] `DATABASE_URL` pointing to managed Postgres
+- [ ] `OPENAI_API_KEY` only if `AI_PROVIDER=openai`
+
 ### Backend — hosting targets
 
 The backend is a stateless FastAPI container. Any platform that runs Docker works:

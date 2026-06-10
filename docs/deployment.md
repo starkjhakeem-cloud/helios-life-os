@@ -303,3 +303,21 @@ curl -X POST https://your-api.your-domain.com/api/v1/auth/signup \
 ```
 
 Once these pass, set `EXPO_PUBLIC_API_URL` to your backend URL and run the EAS production build.
+
+---
+
+## Rollback and Troubleshooting
+
+### Rollback
+If a deployment causes issues, roll back to the last known-good release in your hosting platform.
+- Render: redeploy the previous service revision.
+- Railway: use `railway deploy` with the previous commit or revert the release.
+- Fly.io: run `fly deploy --rollback` or deploy an earlier image.
+
+### Troubleshooting checklist
+- `DEBUG=false` is required in production; if errors are opaque, temporarily enable debug only in a staging environment.
+- `DATABASE_URL` must use a managed PostgreSQL host, not `localhost`.
+- `JWT_SECRET_KEY` must be non-empty and strong; weak placeholders trigger a startup warning.
+- If OpenAI responses fail, verify `AI_PROVIDER=openai` and `OPENAI_API_KEY` are both set.
+- If CORS errors appear in a browser client, confirm `CORS_ORIGINS` includes the exact request origin.
+- Use `/api/v1/health` and `/api/v1/version` as the first verification endpoints after each deployment.
