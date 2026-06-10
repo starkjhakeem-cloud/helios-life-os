@@ -38,7 +38,7 @@ The app is not a prototype or a UI demo. It is a production-grade codebase with:
 **Ownership Enforcement** — Every database query that touches user data includes `WHERE user_id = current_user.id`. Optional foreign key fields (`linked_goal_id`, `task_id`, `goal_id`) are validated against the same user before being stored — preventing cross-user data linkage even when IDs are known.
 
 ### State Management
-11 Zustand stores cover every domain. Each store owns its own loading, error, and data state. A single `logout()` action in the auth store calls `reset()` on all 7 data stores before clearing credentials — no stale data survives between sessions.
+11 Zustand stores cover every domain. Each store owns its own loading, error, and data state. A single `logout()` action in the auth store calls `reset()` on all 9 data stores before clearing credentials — no stale data survives between sessions.
 
 ### API Layer
 13 service modules each wrap a single resource. A shared `apiClient` provides typed `get`, `post`, `patch`, and `del` methods with a 15-second abort controller timeout and structured error parsing for both FastAPI's string and array `detail` formats.
@@ -112,9 +112,8 @@ The backend auto-runs Alembic migrations on startup. API docs are at [http://loc
 
 ## Known Limitations (Honest)
 
-- AI responses use a mock provider — real GPT integration is prepared but not wired
+- AI responses use a mock provider by default — the OpenAI provider is fully implemented; activate with two environment variables
 - No refresh tokens — sessions expire after 60 minutes
-- No rate limiting on auth endpoints
 - AsyncStorage is unencrypted (JWT not in iOS Keychain)
 - Not yet released to TestFlight or the App Store
 

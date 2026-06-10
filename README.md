@@ -179,12 +179,16 @@ HELIOS/
 │           └── theme.ts        # Colors, spacing, radius, typography tokens
 │
 └── docs/
-    ├── deployment.md           # Production deployment guide (Render, Railway, Fly.io)
-    ├── ios-release.md          # TestFlight / App Store release checklist
-    ├── architecture-overview.md  # Deep-dive system and data architecture
-    ├── demo-plan.md            # Screenshot checklist and demo walkthrough script
-    ├── portfolio-summary.md    # Recruiter-facing project summary
-    └── post-v1-backlog.md      # Prioritized backlog and recommended next phases
+    ├── deployment.md              # Production deployment guide (Render, Railway, Fly.io)
+    ├── ios-release.md             # TestFlight / App Store release checklist
+    ├── architecture-overview.md   # Deep-dive system and data architecture
+    ├── demo-plan.md               # Screenshot checklist and demo walkthrough script
+    ├── portfolio-summary.md       # Recruiter-facing project summary
+    ├── post-v1-backlog.md         # Prioritized backlog and recommended next phases
+    ├── demo-video-script.md       # 2-min and 5-min video scripts with exact narration
+    ├── recruiter-walkthrough.md   # Non-technical presentation guide and Q&A
+    ├── screenshot-guide.md        # Step-by-step screenshot capture with data seeding
+    └── technical-talking-points.md  # Interview prep: system design, trade-offs, limitations
 ```
 
 ---
@@ -495,10 +499,8 @@ All other surfaces checked out clean: every route uses `get_current_user`, every
 | Limitation | Notes |
 |---|---|
 | No refresh tokens | Access tokens expire after 60 minutes; users must re-login |
-| No rate limiting | Auth endpoints (`/signup`, `/login`) have no brute-force protection |
 | HTTP in local dev | HTTPS is only in effect when deployed behind a TLS-terminating proxy |
 | AsyncStorage is unencrypted | JWT stored in AsyncStorage; not in iOS Keychain or Android Keystore |
-| No account deletion | Users can sign out but cannot delete their account or data |
 | No email verification | Any email format is accepted at signup |
 
 ---
@@ -591,6 +593,7 @@ In development (`__DEV__ === true`) the app always connects to `localhost:8000`.
 - [x] **Phase 40** — V1 completion audit — logout store fixes, OpenAI documentation corrected
 - [x] **Phase 41** — Post-V1 backlog — prioritized next phases, difficulty ratings, honest known gaps
 - [x] **Phase 42** — High-priority post-V1 fixes: live dashboard metrics, auth rate limiting, account deletion, AI Alerts UI removed, `openai` pinned
+- [x] **Phase 43** — Portfolio demo execution package: demo video scripts, recruiter walkthrough, screenshot guide, technical interview talking points
 
 **Planned**
 
