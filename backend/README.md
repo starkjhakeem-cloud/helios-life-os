@@ -7,6 +7,7 @@ FastAPI REST API for the HELIOS iOS application. Provides JWT authentication, Po
 ## Quick Start
 
 ```bash
+cd backend
 cp .env.example .env
 # Set JWT_SECRET_KEY to a strong random value:
 python3 -c "import secrets; print(secrets.token_hex(32))"
@@ -17,6 +18,25 @@ docker compose up --build
 - API: [http://localhost:8000](http://localhost:8000)
 - Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
 - ReDoc: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+
+`docker-compose.yml` is intended for local development only. It starts PostgreSQL in a local Docker volume, mounts the app source tree into the container, and runs Uvicorn with `--reload`.
+
+### Production Startup Notes
+
+The `backend/Dockerfile` is built for production. It runs Alembic migrations before starting Uvicorn and does not enable live reloading.
+
+```bash
+docker build -t helios-backend .
+docker run \
+  -e DATABASE_URL="postgresql://user:pass@host:5432/dbname?sslmode=require" \
+  -e JWT_SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(32))')" \
+  -e ENVIRONMENT=production \
+  -e DEBUG=false \
+  -p 8000:8000 \
+  helios-backend
+```
+
+Use your hosting platform's secret store for `JWT_SECRET_KEY`, `DATABASE_URL`, and `OPENAI_API_KEY`. Never commit secrets to source control.
 
 Database migrations run automatically on container startup via `alembic upgrade head`.
 

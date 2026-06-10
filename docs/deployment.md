@@ -143,6 +143,32 @@ fly secrets set JWT_SECRET_KEY=$(python3 -c "import secrets; print(secrets.token
 fly deploy
 ```
 
+## Backend Deployment Steps
+
+1. Provision a managed PostgreSQL service with a strong username and password.
+2. Configure platform secrets for `DATABASE_URL`, `JWT_SECRET_KEY`, and `ENVIRONMENT=production`.
+3. Set `DEBUG=false` and `CORS_ORIGINS` explicitly for your production client origins.
+4. Deploy the backend container using your chosen host.
+5. Verify connectivity with `/api/v1/health` and `/api/v1/version`.
+6. Set `EXPO_PUBLIC_API_URL` in the mobile build environment before producing a release binary.
+
+## Database Deployment Steps
+
+1. Choose a managed Postgres provider: Supabase, Neon, Railway PostgreSQL, or Render PostgreSQL.
+2. Create the database and capture the connection string.
+3. Ensure the URI includes `?sslmode=require` for secure connections.
+4. Set `DATABASE_URL` to that URI in your backend host environment.
+5. Confirm the backend can connect before building the mobile app.
+
+### Production PostgreSQL guidance
+
+- **Supabase**: good free tier and easy Postgres connection strings.
+- **Neon**: serverless Postgres with branching support.
+- **Railway PostgreSQL**: simplest when the backend is deployed on Railway.
+- **Render PostgreSQL**: a good match when the backend uses Render.
+
+Use a managed database rather than running Postgres in the backend container for production.
+
 ---
 
 ## Database Hosting Options

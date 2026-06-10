@@ -534,6 +534,7 @@ The full deployment guide is in [docs/deployment.md](docs/deployment.md). This s
 ### Production readiness
 - `DATABASE_URL` supports local Docker Compose and hosted PostgreSQL services.
 - `JWT_SECRET_KEY` must be set in the environment, never committed.
+- `ENVIRONMENT=production` should be set in production deploys.
 - `CORS_ORIGINS` is configurable through environment variables.
 - `OPENAI_API_KEY` is also environment-based and only required when `AI_PROVIDER=openai`.
 - The backend Dockerfile is production-ready; local development uses `docker-compose.yml` with `--reload`.
