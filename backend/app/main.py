@@ -1,4 +1,6 @@
 import logging
+import time
+import uuid
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,13 +8,40 @@ from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import settings
 from app.core.limiter import limiter
+from app.logging_config import configure_logging
 from app.routers import agents, ai, analytics, auth, conversations, dashboard, goals, health, reminders, tasks
 from app.routers import settings as settings_router
 
+configure_logging(settings)
 logger = logging.getLogger(__name__)
+
+X_REQUEST_ID_HEADER = "X-Request-ID"
+
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get(X_REQUEST_ID_HEADER) or str(uuid.uuid4())
+        request.state.request_id = request_id
+        start = time.monotonic()
+
+        response = await call_next(request)
+
+        duration_ms = int((time.monotonic() - start) * 1000)
+        response.headers[X_REQUEST_ID_HEADER] = request_id
+        logger.info(
+            "%s %s%s %s %sms",
+            request.method,
+            request.url.path,
+            f"?{request.url.query}" if request.url.query else "",
+            response.status_code,
+            duration_ms,
+            extra={"request_id": request_id},
+        )
+        return response
 
 # Known placeholder values that must not be used in production.
 _WEAK_JWT_SECRETS = {
@@ -48,24 +77,41 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
+app.add_middleware(RequestLoggingMiddleware)
+
 
 @app.exception_handler(SQLAlchemyError)
 async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError) -> JSONResponse:
-    logger.error("Database error on %s %s: %s", request.method, request.url.path, exc)
+    request_id = getattr(request.state, "request_id", "-")
+    logger.error(
+        "Database error on %s %s: %s",
+        request.method,
+        request.url.path,
+        exc,
+        extra={"request_id": request_id},
+    )
     return JSONResponse(
         status_code=503,
         content={"detail": "Database unavailable. Please try again."},
+        headers={X_REQUEST_ID_HEADER: request_id},
     )
 
 
 @app.exception_handler(Exception)
 async def generic_error_handler(request: Request, exc: Exception) -> JSONResponse:
-    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+    request_id = getattr(request.state, "request_id", "-")
+    logger.exception(
+        "Unhandled error on %s %s",
+        request.method,
+        request.url.path,
+        extra={"request_id": request_id},
+    )
     if settings.debug:
         raise exc
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error."},
+        headers={X_REQUEST_ID_HEADER: request_id},
     )
 
 app.include_router(
@@ -137,11 +183,28 @@ app.include_router(
 
 @app.on_event("startup")
 async def startup_checks() -> None:
+    logger.info(
+        "Starting %s version %s in %s mode.",
+        settings.app_name,
+        settings.version,
+        settings.environment,
+        extra={"request_id": "-"},
+    )
     if settings.jwt_secret_key in _WEAK_JWT_SECRETS or len(settings.jwt_secret_key) < 16:
         logger.warning(
             "JWT_SECRET_KEY is a weak placeholder value and must not be used in production. "
-            "Generate a strong secret: python3 -c \"import secrets; print(secrets.token_hex(32))\""
+            "Generate a strong secret: python3 -c \"import secrets; print(secrets.token_hex(32))\"",
+            extra={"request_id": "-"},
         )
+
+
+@app.on_event("shutdown")
+async def shutdown_event() -> None:
+    logger.info(
+        "Shutting down %s.",
+        settings.app_name,
+        extra={"request_id": "-"},
+    )
 
 
 @app.get("/", tags=["root"])

@@ -191,6 +191,12 @@ This design means the same API routes work in demo mode and real mode without co
 - Replace plain text date inputs with native pickers.
 - Capture final App Store screenshots and polish icon/splash assets.
 
+## Monitoring and Observability
+- The backend now has centralized structured logging and request tracing via `X-Request-ID`.
+- Startup/shutdown, request timing, database failures, and unhandled exceptions are logged with context.
+- A diagnostics endpoint validates service health and database connectivity at `/api/v1/health/diagnostics`.
+- The mobile client has a centralized error reporter and an `ErrorBoundary` to catch render-time failures.
+
 ---
 
 ## Closing Summary

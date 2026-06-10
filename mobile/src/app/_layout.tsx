@@ -3,6 +3,7 @@ import { View, ActivityIndicator } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { useBackendHealth } from '../hooks/useBackendHealth';
 import { useAuthStore } from '../store';
 import { colors } from '../theme/theme';
@@ -66,7 +67,9 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <Stack screenOptions={{ headerShown: false }} />
+      <ErrorBoundary>
+        <Stack screenOptions={{ headerShown: false }} />
+      </ErrorBoundary>
     </SafeAreaProvider>
   );
 }

@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     api_version: str = "v1"
     version: str = "0.1.0"
     debug: bool = False
+    environment: str = "development"
+    log_level: str | None = None
     host: str = "0.0.0.0"
     port: int = 8000
     database_url: str = "postgresql://helios:helios@localhost:5432/helios"

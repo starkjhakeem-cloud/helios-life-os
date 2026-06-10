@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { systemService } from "../services/systemService";
+import { reportError } from "../services/errorReporter";
 import { useAppStore } from "../store";
 
 export function useBackendHealth(): void {
@@ -18,7 +19,8 @@ export function useBackendHealth(): void {
         if (cancelled) return;
         setSystemStatus(health.status === "ok" ? "online" : "degraded");
         setBackendVersion(version.version);
-      } catch {
+      } catch (error) {
+        reportError(error, "Backend health probe failed");
         if (!cancelled) {
           setSystemStatus("offline");
           setBackendVersion(null);

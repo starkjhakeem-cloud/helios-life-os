@@ -1,8 +1,11 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.db.session import get_db
 
 router = APIRouter()
 
@@ -22,4 +25,18 @@ def get_version() -> dict:
         "version": settings.version,
         "api_version": settings.api_version,
         "service": settings.app_name,
+    }
+
+
+@router.get("/health/diagnostics")
+def diagnostics(db: Session = Depends(get_db)) -> dict:
+    db.execute(select(1))
+    return {
+        "status": "ok",
+        "service": settings.app_name,
+        "version": settings.version,
+        "api_version": settings.api_version,
+        "environment": settings.environment,
+        "database": {"status": "ok"},
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }

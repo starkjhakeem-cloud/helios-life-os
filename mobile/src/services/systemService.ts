@@ -13,7 +13,20 @@ export type VersionResponse = {
   service: string;
 };
 
+export type DiagnosticsResponse = {
+  status: string;
+  service: string;
+  version: string;
+  api_version: string;
+  environment: string;
+  database: {
+    status: string;
+  };
+  timestamp: string;
+};
+
 export const systemService = {
   health:  () => apiClient.get<HealthResponse>(API_ENDPOINTS.health),
   version: () => apiClient.get<VersionResponse>(API_ENDPOINTS.version),
+  diagnostics: () => apiClient.get<DiagnosticsResponse>(API_ENDPOINTS.diagnostics),
 };

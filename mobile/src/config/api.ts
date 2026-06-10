@@ -41,6 +41,7 @@ export const API_ENDPOINTS = {
   goals: {
     list: "/api/v1/goals",
   },
+  diagnostics: "/api/v1/health/diagnostics",
   tasks: {
     list: "/api/v1/tasks",
   },

@@ -1,4 +1,5 @@
 import { API_CONFIG } from "../config/api";
+import { reportError } from "./errorReporter";
 
 export class ApiError extends Error {
   constructor(
@@ -23,7 +24,11 @@ async function parseApiError(response: Response): Promise<ApiError> {
       message = `HTTP ${response.status}`;
     }
     return new ApiError(message, response.status);
-  } catch {
+  } catch (err) {
+    reportError(err, "Failed to parse API error response", {
+      status: response.status,
+      endpoint: response.url,
+    });
     return new ApiError(`HTTP ${response.status}`, response.status);
   }
 }
@@ -31,10 +36,15 @@ async function parseApiError(response: Response): Promise<ApiError> {
 function networkError(err: unknown): ApiError {
   if (err instanceof ApiError) return err;
   const name = (err as { name?: string }).name;
-  if (name === "AbortError") {
-    return new ApiError("Request timed out. Check your connection.", 0);
-  }
-  return new ApiError("Network error. Check your connection.", 0);
+  const result =
+    name === "AbortError"
+      ? new ApiError("Request timed out. Check your connection.", 0)
+      : new ApiError("Network error. Check your connection.", 0);
+
+  reportError(result, "Network request failed", {
+    originalErrorName: name,
+  });
+  return result;
 }
 
 function buildHeaders(token?: string): Record<string, string> {
