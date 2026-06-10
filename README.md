@@ -505,6 +505,28 @@ All other surfaces checked out clean: every route uses `get_current_user`, every
 
 ---
 
+## Testing
+
+### Backend
+Run backend tests from the `backend` folder with `pytest`. The backend test harness uses a temporary SQLite database so local development does not require a PostgreSQL instance.
+
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt -r requirements-test.txt
+pytest
+```
+
+### Mobile
+Run mobile unit tests from the `mobile` folder with Jest.
+
+```bash
+cd mobile
+npm install
+npm test
+```
+
 ## Deployment
 
 The full deployment guide is in [docs/deployment.md](docs/deployment.md). This section summarises the key points.

@@ -193,6 +193,18 @@ alembic upgrade head
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+## Testing
+
+Backend tests use a lightweight SQLite database and FastAPI's TestClient to validate authentication, protected routes, health checks, goal CRUD flows, and the mock AI provider.
+
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt -r requirements-test.txt
+pytest
+```
+
 ---
 
 ## Docker Compose Services

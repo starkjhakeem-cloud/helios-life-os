@@ -30,10 +30,10 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         <View style={{ flex: 1, backgroundColor: colors.background, alignItems: "center", justifyContent: "center", padding: 24 }}>
-          <Text style={{ color: colors.text, fontSize: 20, fontWeight: "700", marginBottom: 12 }}>
+          <Text style={{ color: colors.textPrimary, fontSize: 20, fontWeight: "700", marginBottom: 12 }}>
             Something went wrong.
           </Text>
-          <Text style={{ color: colors.muted, fontSize: 16, textAlign: "center", marginBottom: 24 }}>
+          <Text style={{ color: colors.textMuted, fontSize: 16, textAlign: "center", marginBottom: 24 }}>
             Restarting the screen may fix the issue. If it persists, close and reopen the app.
           </Text>
           <Pressable
