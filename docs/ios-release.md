@@ -78,6 +78,24 @@ EAS Build is a paid Expo service. The free tier allows a limited number of build
 
 ---
 
+## Build Profiles
+
+The project already includes three iOS EAS build profiles in `mobile/eas.json`:
+
+- `development` — local development builds and development client testing. This profile uses `developmentClient: true` and typically does not require Apple credentials for local debugging.
+- `preview` — internal distribution builds for QA and TestFlight internal testing. Use this to verify the app before a release candidate.
+- `production` — App Store / external TestFlight candidate builds. This profile is the release-oriented build and uses `autoIncrement: true` to keep `buildNumber` moving forward.
+
+These profiles are already exposed in `mobile/package.json` via scripts:
+
+```bash
+npm run build:ios:dev
+npm run build:ios:preview
+npm run build:ios:prod
+```
+
+---
+
 ## Step 3 — Log In to Expo
 
 ```bash
@@ -119,6 +137,8 @@ Select **iOS** → **Distribution certificate** and **Provisioning profile**. EA
 3. Create a provisioning profile linked to your certificate
 
 You will be prompted for your Apple ID and password (or an App Store Connect API key for CI/CD environments). These credentials are stored securely in EAS and never committed to the repository.
+
+> Apple credentials are only required when you build or submit an iOS binary. You can prepare the bundle identifier, App Store Connect app, and API URL first without submitting anything.
 
 ---
 
@@ -216,12 +236,19 @@ Complete this before triggering a TestFlight build:
 - [ ] `version` in `mobile/app.json` reflects the release (e.g. `"1.0.0"`)
 - [ ] `buildNumber` in `mobile/app.json` is incremented (or using `autoIncrement`)
 - [ ] `EXPO_PUBLIC_API_URL` in `eas.json` points to the live backend URL
+- [ ] `EXPO_PUBLIC_API_URL` can be overridden per build from the command line
 - [ ] EAS project linked (`eas build:configure` has been run)
-- [ ] Apple credentials provisioned (`eas credentials` has been run)
+- [ ] Apple credentials provisioned only when you are ready to build or submit
+
+### App icon / splash checklist
+- [ ] `mobile/app.json` icon path points to a valid square PNG (`assets/images/icon.png`)
+- [ ] iOS icon has no transparency and follows Apple icon guidelines
+- [ ] splash image is present and sized for high-density screens
+- [ ] `expo-splash-screen` plugin config in `app.json` is correct for iOS and Android
 
 ### App Store Connect
 - [ ] App created in App Store Connect with matching bundle identifier
-- [ ] Privacy Policy URL set (required for App Store)
+- [ ] Privacy Policy URL set (required for Apple)
 - [ ] Age rating configured
 - [ ] Export compliance answered (select "Yes" for HTTPS — standard encryption)
 
@@ -243,6 +270,14 @@ Before submitting for App Store review (not TestFlight):
 - [ ] Tested on real device (not just Simulator)
 
 ---
+
+## Troubleshooting
+
+- `eas build` fails with missing credentials: run `eas credentials` when you are ready to build, or use local `npm run ios` for simulator testing first.
+- `EXPO_PUBLIC_API_URL` is not set: the app falls back to `http://localhost:8000` in development, but a production build must override this value.
+- `bundleIdentifier` mismatch: ensure `mobile/app.json` and App Store Connect use the same identifier.
+- Splash or icon warnings: verify `mobile/app.json` paths and the image aspect ratio, and run `expo doctor` if needed.
+- `npm run ios` opens the Simulator only if Xcode is installed; otherwise use `npm run start` and test in Expo Go or a development client.
 
 ## Known Limitations and TODOs
 
