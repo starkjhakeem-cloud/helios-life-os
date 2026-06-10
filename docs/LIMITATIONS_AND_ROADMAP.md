@@ -49,8 +49,8 @@
 | Limitation | Impact | Why | Workaround |
 |---|---|---|---|
 | **Mock AI provider default** | AI responses are hardcoded | Safety + no API keys required for demo | Set `AI_PROVIDER=openai` + `OPENAI_API_KEY` to enable real AI (see [deployment.md](deployment.md)) |
-| **No rate limiting** | API can be hammered without consequence | Simplifies demo, local development doesn't need it | FastAPI has rate limiting middleware available; add in Phase 52 |
-| **No request logging** | Can't audit API usage | Reduces verbosity for demo | Python logging middleware is straightforward; Phase 53 candidate |
+| **Rate limiting on auth endpoints only** | Non-auth endpoints are unprotected | Auth routes limited (signup 5/min, login 10/min) via slowapi; data endpoints not limited | Extend rate limiting to all routes in Phase 52 |
+| **Request logging implemented** | ~~Can't audit API usage~~ Per-request logging active | `RequestLoggingMiddleware` logs method, path, status, duration, request-id | Structured log aggregation (Datadog/Loki) is Phase 52 candidate |
 | **No analytics pipeline** | Dashboard metrics computed per-request | No historical trending | Add time-series database (InfluxDB, TimescaleDB) in Phase 54 candidate |
 
 ### Data & Infrastructure

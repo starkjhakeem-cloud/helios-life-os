@@ -387,6 +387,7 @@ Interactive documentation is available at **[http://localhost:8000/docs](http://
 | `POST` | `/api/v1/auth/signup` | No | Register a new user |
 | `POST` | `/api/v1/auth/login` | No | Login, receive JWT |
 | `GET` | `/api/v1/auth/me` | Yes | Validate token, return current user |
+| `DELETE` | `/api/v1/auth/account` | Yes | Permanently delete account and all user data |
 | `GET` | `/api/v1/dashboard/summary` | Yes | Dashboard metrics and sections |
 | `GET` | `/api/v1/goals` | Yes | List goals for current user |
 | `POST` | `/api/v1/goals` | Yes | Create a goal |
