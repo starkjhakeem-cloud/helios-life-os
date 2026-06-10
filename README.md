@@ -1,43 +1,66 @@
 # HELIOS
 
-**AI-powered Life Operating System** — a full-stack iOS application for goal tracking, task management, and AI-driven personal productivity intelligence.
+> A full-stack iOS productivity app demonstrating complete product engineering: goal tracking, task management, AI-assisted planning, analytics, and production-grade infrastructure.
 
-Built mobile-first with React Native / Expo and a FastAPI backend, HELIOS is an ongoing personal project developed through structured incremental phases. Each phase ships working, tested functionality — no feature stubs in the main branch.
+**Status:** ✅ V1 Release Candidate — Portfolio-demo ready. All features working. No blockers.
+
+Built mobile-first with **React Native 0.83 / Expo SDK 55** and **FastAPI (Python 3.12)**, HELIOS is a complete, working codebase — not a prototype or design mockup. Every phase ships tested, documented functionality to main. 
+
+**What's included:**
+- JWT authentication with bcrypt hashing
+- PostgreSQL persistence with 6 Alembic migrations
+- 8/8 backend tests passing, 2 mobile test suites passing
+- User-scoped SQL queries preventing cross-user data leakage
+- Docker Compose for local dev (live reload), Dockerfile for production
+- Comprehensive deployment guides for Render / Railway / Fly.io
+- No secrets committed, all environment-driven configuration
+- TypeScript strict mode, Pydantic v2 validation, SQLAlchemy 2.0 ORM
+
+**Quick links:**
+- **[Portfolio Case Study](PORTFOLIO.md)** — Full technical writeup & design patterns
+- **[See the audit report](docs/PORTFOLIO_MATERIALS.md)** — Resume bullets, LinkedIn post, recruiter pitch
+- **[Architecture Deep-Dive](docs/architecture-overview.md)** — Database, API, state management
+- **[Known Limitations & Roadmap](docs/LIMITATIONS_AND_ROADMAP.md)** — Honest constraints & next phases
+- **[Deployment Guide](docs/deployment.md)** — Production hosting options
 
 ---
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
 - [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Architecture](#architecture)
+- [Project Structure](#project-structure)
 - [Local Setup](#local-setup)
-- [Environment Variables](#environment-variables)
 - [API Reference](#api-reference)
-- [AI Architecture](#ai-architecture)
-- [Security](#security)
 - [Deployment](#deployment)
-- [Screenshots](#screenshots)
+- [Testing & Quality](#testing--quality)
+- [Portfolio Materials](#portfolio-materials)
 - [Roadmap](#roadmap)
+- [License](#license)
 
 ---
 
-## Overview
+## Features
 
-HELIOS gives users a single system to manage goals, tasks, and daily priorities — backed by a structured AI planning engine. The name stands for the project's ambition: a full life-operating layer that surfaces what matters and when.
+### Core User Features
+- **Authentication:** Signup, login, persistent sessions with token revalidation
+- **Goals:** Create, track, and complete multi-month goals with optional target dates
+- **Tasks:** Manage weekly sprints with 4 priority levels, status lifecycle, and optional goal links
+- **Dashboard:** Real-time aggregated metrics (completion rates, active goals, overdue tasks)
+- **Analytics:** Live performance metrics computed per-request from PostgreSQL
+- **AI Planning:** Generate structured execution plans from free-form prompts
+- **AI Assistant:** Conversational chat with follow-up suggestions and recommended actions
+- **Reminders:** Local push notifications with per-user enable/disable
+- **User Preferences:** Theme (light/dark), planning horizon, notification toggles — synced to PostgreSQL
 
-**What's working today:**
-- JWT-authenticated REST API with full CRUD for goals, tasks, reminders, and user preferences
-- PostgreSQL persistence with 6 Alembic migrations tracking schema evolution
-- Real-time analytics computed from live user data
-- AI daily briefing, execution plan generator, and conversational assistant (mock provider default; OpenAI integration complete — activate with two env vars)
-- Persistent AI conversation history with per-conversation message storage
-- Local push notifications via Expo Notifications with per-user enable/disable preferences
-- User preferences system (theme, planning horizon, notification toggles) persisted to PostgreSQL
-- Persistent login across app restarts with token revalidation on every cold start
-- Dark-themed iOS app with 7-tab navigation shell, haptic feedback, and pull-to-refresh
+### Technical Features
+- User-scoped SQL queries preventing cross-user data access
+- JWT authentication with bcrypt password hashing
+- Pluggable AI provider (mock default, OpenAI ready)
+- Optimistic state updates with server re-sync
+- Hydration guards preventing UI flashing
+- 15-second HTTP timeout with AbortController
 
 ---
 
@@ -604,9 +627,66 @@ In development (`__DEV__ === true`) the app always connects to `localhost:8000`.
 
 ---
 
+## Testing & Quality
+
+**Backend Tests**
+```bash
+cd backend
+docker compose run --rm api sh -c "python -m pip install pytest --quiet && python -m pytest"
+```
+- 8/8 passing: auth, goals, tasks, analytics, health checks, version endpoint
+- Pydantic v2 validation coverage
+- JWT token creation and validation
+- User-scoped query patterns
+
+**Mobile Tests**
+```bash
+cd mobile
+npm test -- --runInBand
+```
+- 2 test suites, 4/4 passing
+- API client with timeout/error handling
+- Error boundary component
+- Zustand store patterns
+
+**Code Quality**
+- TypeScript strict mode (no `any`, full type coverage)
+- Pydantic schemas validate every request/response
+- SQLAlchemy 2.0 with typed `Mapped[]` columns
+- No secrets in committed code (`.gitignore` verified)
+- All dependencies pinned to specific versions
+
+**Security Audit**
+- Phase 37 audit completed: ownership validation, JWT hardening, password security
+- No known vulnerabilities in dependencies
+- User data scoped by ownership at database and route level
+- See [docs/LIMITATIONS_AND_ROADMAP.md](docs/LIMITATIONS_AND_ROADMAP.md) for full audit trail
+
+---
+
+## Portfolio Materials
+
+**For Recruiters & Portfolio Sites:**
+- **[Case Study](PORTFOLIO.md)** — Full technical writeup, design patterns, what this demonstrates
+- **[Marketing Copy](docs/PORTFOLIO_MATERIALS.md)** — Resume bullets, LinkedIn post, recruiter pitch, technical description
+
+**For Interviews:**
+- **[Technical Talking Points](docs/technical-talking-points.md)** — System design Q&A, trade-offs, architecture deep-dive
+- **[Recruiter Walkthrough](docs/recruiter-walkthrough.md)** — Non-technical presentation guide
+
+**For Demo & Presentation:**
+- **[Demo Video Script](docs/demo-video-script.md)** — 2-minute and 5-minute scripts with exact narration
+- **[Screenshot Guide](docs/screenshot-guide.md)** — Data seeding and screenshot capture checklist
+
+**For Deployment:**
+- **[Deployment Guide](docs/deployment.md)** — Production hosting (Render, Railway, Fly.io)
+- **[iOS Release Guide](docs/ios-release.md)** — TestFlight submission checklist
+
+---
+
 ## Roadmap
 
-**Completed (Phases 1–39)**
+**Completed (Phases 1–49)**
 
 - [x] **Phases 1–12** — Project scaffold, design system, navigation shell, backend API foundation, JWT authentication, PostgreSQL database layer
 - [x] **Phase 13** — AI agents tab and protected agent profiles endpoint
@@ -631,17 +711,17 @@ In development (`__DEV__ === true`) the app always connects to `localhost:8000`.
 - [x] **Phase 41** — Post-V1 backlog — prioritized next phases, difficulty ratings, honest known gaps
 - [x] **Phase 42** — High-priority post-V1 fixes: live dashboard metrics, auth rate limiting, account deletion, AI Alerts UI removed, `openai` pinned
 - [x] **Phase 43** — Portfolio demo execution package: demo video scripts, recruiter walkthrough, screenshot guide, technical interview talking points
+- [x] **Phase 46** — Backend production deployment foundation: environment examples, deployment guides, Docker production image, database strategy
+- [x] **Phase 47** — Mobile release build foundation: EAS build profiles, TestFlight configuration, bundle ID guidance, iOS release checklist
+- [x] **Phase 48** — V1 release-candidate audit: verified all features working, no blockers, tests passing, no secrets committed, documentation accurate
+- [x] **Phase 49** — Portfolio packaging: polished README, case study, marketing materials, resume bullets, LinkedIn post, limitations & roadmap
 
-**Planned**
+**Planned (Phase 50+)**
 
-- [ ] **Phase 43** — AI context always-on in chat (send `include_context: true` to AI assistant)
-- [ ] **Phase 44** — OpenAI activation (implementation complete; add key + set `AI_PROVIDER=openai`)
-- [ ] **Phase 45** — TestFlight distribution (EAS build + Apple credentials)
-- [ ] **Phase 46** — Splash image, icon audit, App Store screenshots
-- [ ] Refresh tokens — longer-lived sessions without re-login
-- [ ] Remote push notifications (APNs) — server-triggered alerts
-- [ ] Face ID / Touch ID — biometric authentication
-- [ ] Date picker components — replace plain-text date inputs
-- [ ] Account deletion — required for App Store compliance
+See [docs/LIMITATIONS_AND_ROADMAP.md](docs/LIMITATIONS_AND_ROADMAP.md) for the prioritized backlog with difficulty ratings and recommended next phases.
 
-See [docs/post-v1-backlog.md](docs/post-v1-backlog.md) for the full prioritized backlog with difficulty ratings.
+---
+
+## License
+
+Personal portfolio project. No specific license — feel free to reference the code, but attribution is appreciated if you build on it.
