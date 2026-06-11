@@ -20,6 +20,8 @@ class DailyBriefing(BaseModel):
     important_emails: list[str] = []          # subject + sender pairs needing action
     email_risks: list[str] = []               # communication-layer risks
     suggested_email_actions: list[str] = []   # concrete verb-first reply/archive actions
+    # V2.9 — which data sources contributed to this briefing (set by the router, not the AI).
+    context_sources: list[str] = []
     generated_at: str       # ISO 8601
 
 

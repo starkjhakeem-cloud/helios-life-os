@@ -6,7 +6,8 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.ai.context_builder import build_briefing_context, build_memory_context, build_user_context
+from app.ai.context_builder import build_memory_context
+from app.ai.context_service import ContextScope, build_context
 from app.ai.factory import get_ai_provider
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
@@ -34,13 +35,19 @@ def get_daily_briefing(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DailyBriefing:
-    # Use the extended briefing context: memory + goals + tasks + analytics + conversations.
-    user_context = build_briefing_context(user_id=current_user.id, db=db)
+    ctx = build_context(
+        ContextScope.DAILY_BRIEFING,
+        user_id=current_user.id,
+        db=db,
+        user_name=current_user.name,
+    )
     try:
-        return get_ai_provider().generate_briefing(
+        briefing = get_ai_provider().generate_briefing(
             user_name=current_user.name,
-            user_context=user_context,
+            user_context=ctx.text,
         )
+        briefing.context_sources = ctx.sources
+        return briefing
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
 
@@ -60,12 +67,22 @@ def generate_plan(
             raise HTTPException(status_code=404, detail="Goal not found.")
         goal_title = goal.title
 
+    # Planning context: goals + tasks + memories + analytics + calendar gives the
+    # AI grounded awareness of what the operator already has in flight.
+    planning_ctx = build_context(
+        ContextScope.PLANNING,
+        user_id=current_user.id,
+        db=db,
+        user_name=current_user.name,
+    )
+
     try:
         return get_ai_provider().generate_plan(
             prompt=payload.prompt,
             horizon=payload.planning_horizon_days,
             goal_title=goal_title,
             user_name=current_user.name,
+            user_context=planning_ctx.text,
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
@@ -77,11 +94,17 @@ def chat(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ChatResponse:
-    # Long-term memories are always injected — they represent who the operator
-    # is, not transient operational data. Live goals/tasks are added only when
+    # Long-term memories are always injected — they personalise replies without
+    # exposing operational data the operator hasn't explicitly opted into.
+    # Full assistant-chat context (goals + tasks + memories) is added only when
     # the client opts in via include_context.
     if payload.include_context:
-        user_context: str | None = build_user_context(user_id=current_user.id, db=db)
+        user_context: str | None = build_context(
+            ContextScope.ASSISTANT_CHAT,
+            user_id=current_user.id,
+            db=db,
+            user_name=current_user.name,
+        ).text
     else:
         user_context = build_memory_context(user_id=current_user.id, db=db)
 

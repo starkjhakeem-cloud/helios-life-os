@@ -14,6 +14,7 @@ class AIProvider(ABC):
         horizon: int,
         goal_title: str | None,
         user_name: str,
+        user_context: str | None = None,
     ) -> PlanResponse: ...
 
     @abstractmethod

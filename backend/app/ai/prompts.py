@@ -110,6 +110,7 @@ def build_plan_user_message(
     prompt: str,
     horizon: int,
     goal_title: str | None,
+    user_context: str | None = None,
 ) -> str:
     lines = [
         f"Operator: {user_name}",
@@ -118,6 +119,8 @@ def build_plan_user_message(
     ]
     if goal_title:
         lines.append(f"Linked goal: {goal_title}")
+    if user_context:
+        lines.append(f"\nOPERATOR DATA:\n{user_context}")
     return "\n".join(lines)
 
 

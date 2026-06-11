@@ -96,12 +96,14 @@ class OpenAIProvider(AIProvider):
         horizon: int,
         goal_title: str | None,
         user_name: str,
+        user_context: str | None = None,
     ) -> PlanResponse:
         user_msg = build_plan_user_message(
             user_name=user_name,
             prompt=prompt,
             horizon=horizon,
             goal_title=goal_title,
+            user_context=user_context,
         )
         try:
             data = self._call(system=PLAN_SYSTEM, user=user_msg)

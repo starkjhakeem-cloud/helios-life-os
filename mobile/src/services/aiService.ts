@@ -18,6 +18,8 @@ export type BriefingResponse = {
   important_emails: string[];
   email_risks: string[];
   suggested_email_actions: string[];
+  // V2.9 — which data sources the context engine included for this briefing.
+  context_sources: string[];
   generated_at: string;
 };
 

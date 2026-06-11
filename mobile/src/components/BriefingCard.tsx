@@ -18,6 +18,7 @@ type Props = {
   important_emails?: string[];
   email_risks?: string[];
   suggested_email_actions?: string[];
+  context_sources?: string[];
   generated_at: string;
 };
 
@@ -41,6 +42,18 @@ const AGENT_ICON: Record<string, Parameters<typeof SymbolView>[0]["name"]> = {
 
 // ── BriefingCard ──────────────────────────────────────────────────────────────
 
+// Human-readable labels for context source keys returned by the backend.
+const SOURCE_LABEL: Record<string, string> = {
+  user_profile:  "PROFILE",
+  goals:         "GOALS",
+  tasks:         "TASKS",
+  memories:      "MEMORY",
+  analytics:     "ANALYTICS",
+  calendar:      "CALENDAR",
+  email:         "EMAIL",
+  conversations: "HISTORY",
+};
+
 export default function BriefingCard({
   greeting,
   summary,
@@ -52,6 +65,7 @@ export default function BriefingCard({
   important_emails = [],
   email_risks = [],
   suggested_email_actions = [],
+  context_sources = [],
   generated_at,
 }: Props) {
   const time = new Date(generated_at).toLocaleTimeString("en-US", {
@@ -214,6 +228,22 @@ export default function BriefingCard({
           </Text>
         </View>
       </View>
+
+      {/* ── Context Sources ── */}
+      {context_sources.length > 0 ? (
+        <View style={styles.sourcesRow}>
+          <Text style={styles.sourcesLabel}>CONTEXT</Text>
+          <View style={styles.sourcesChips}>
+            {context_sources.map((src) => (
+              <View key={src} style={styles.sourceChip}>
+                <Text style={styles.sourceChipText}>
+                  {SOURCE_LABEL[src] ?? src.toUpperCase()}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -508,5 +538,45 @@ const styles = StyleSheet.create({
   agentChipText: {
     ...typography.label,
     fontSize: 9,
+  },
+
+  // Context sources strip
+  sourcesRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+    paddingTop: 0,
+  },
+
+  sourcesLabel: {
+    ...typography.label,
+    color: colors.textMuted,
+    fontSize: 8,
+    opacity: 0.6,
+  },
+
+  sourcesChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+    flex: 1,
+  },
+
+  sourceChip: {
+    borderWidth: 1,
+    borderColor: `${colors.border}`,
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    opacity: 0.7,
+  },
+
+  sourceChipText: {
+    ...typography.label,
+    fontSize: 7,
+    color: colors.textMuted,
   },
 });

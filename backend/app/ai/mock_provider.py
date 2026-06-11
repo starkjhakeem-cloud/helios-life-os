@@ -335,6 +335,7 @@ class MockAIProvider(AIProvider):
         horizon: int,
         goal_title: str | None,
         user_name: str,
+        user_context: str | None = None,
     ) -> PlanResponse:
         context = goal_title or prompt[:60]
 
