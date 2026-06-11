@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.models.calendar import CalendarEvent
 from app.models.conversation import Conversation
+from app.models.email import EmailMessage
 from app.models.goal import Goal
 from app.models.memory import AIMemory
 from app.models.task import Task
@@ -178,6 +179,10 @@ def build_briefing_context(user_id: str, db: Session) -> str:
     if upcoming:
         extras.append(upcoming)
 
+    emails = _build_important_emails_section(user_id, db)
+    if emails:
+        extras.append(emails)
+
     if extras:
         return base + "\n\n" + "\n\n".join(extras)
     return base
@@ -271,6 +276,42 @@ def _build_upcoming_events_section(user_id: str, db: Session) -> str | None:
     for r in rows:
         loc = f" @ {r.location}" if r.location else ""
         lines.append(f"  - {r.title} [{r.start_time[:16].replace('T', ' ')}]{loc}")
+    return "\n".join(lines)
+
+
+def _build_important_emails_section(user_id: str, db: Session) -> str | None:
+    """
+    Surface the top 5 unread emails sorted by importance (urgent first) for
+    the daily briefing. Fetches up to 20 unread messages then re-sorts in
+    Python so urgent/high items always lead regardless of received_at order.
+    """
+    _IMPORTANCE_ORDER: dict[str, int] = {"urgent": 0, "high": 1, "normal": 2, "low": 3}
+    rows = (
+        db.execute(
+            select(
+                EmailMessage.sender,
+                EmailMessage.subject,
+                EmailMessage.importance,
+                EmailMessage.received_at,
+            )
+            .where(
+                EmailMessage.user_id == user_id,
+                EmailMessage.status == "unread",
+            )
+            .order_by(EmailMessage.received_at.desc())
+            .limit(20)
+        )
+        .all()
+    )
+    if not rows:
+        return None
+    sorted_rows = sorted(
+        rows,
+        key=lambda r: (_IMPORTANCE_ORDER.get(r.importance, 2), r.received_at),
+    )[:5]
+    lines = [f"UNREAD MESSAGES ({len(sorted_rows)} shown):"]
+    for r in sorted_rows:
+        lines.append(f"  - [{r.importance.upper()}] {r.subject} (from: {r.sender})")
     return "\n".join(lines)
 
 

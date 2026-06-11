@@ -126,6 +126,16 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
+        name="email"
+        options={{
+          title: "Email",
+          tabBarIcon: ({ color }) => (
+            <TabIcon name="envelope" color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
         name="memory"
         options={{
           title: "Memory",

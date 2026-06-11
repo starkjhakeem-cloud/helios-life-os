@@ -52,4 +52,7 @@ export const API_ENDPOINTS = {
   calendar: {
     events: "/api/v1/calendar/events",
   },
+  email: {
+    messages: "/api/v1/email/messages",
+  },
 } as const;
