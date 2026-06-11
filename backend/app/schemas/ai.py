@@ -9,11 +9,13 @@ class BriefingPriority(BaseModel):
 
 
 class DailyBriefing(BaseModel):
+    greeting: str
     summary: str
     priorities: list[BriefingPriority]
     risks: list[str]
-    recommendation: str
-    generated_at: str  # ISO 8601 — swapped for LLM output in a future phase
+    focus_block: str        # concrete focus block suggestion for today
+    recommended_agent: str  # one of the five HELIOS agent names
+    generated_at: str       # ISO 8601
 
 
 # ── Planning ──────────────────────────────────────────────────────────────────

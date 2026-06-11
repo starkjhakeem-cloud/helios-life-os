@@ -7,10 +7,12 @@ export type BriefingPriority = {
 };
 
 export type BriefingResponse = {
+  greeting: string;
   summary: string;
   priorities: BriefingPriority[];
   risks: string[];
-  recommendation: string;
+  focus_block: string;
+  recommended_agent: string;
   generated_at: string;
 };
 

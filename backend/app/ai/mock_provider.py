@@ -267,36 +267,45 @@ _RESPONSES: dict[str, dict] = {
 
 class MockAIProvider(AIProvider):
     def generate_briefing(self, user_name: str, user_context: str | None = None) -> DailyBriefing:
+        hour = datetime.now(timezone.utc).hour
+        if hour < 12:
+            time_word = "Good morning"
+        elif hour < 17:
+            time_word = "Good afternoon"
+        else:
+            time_word = "Good evening"
+
         return DailyBriefing(
+            greeting=f"{time_word}, {user_name}. Your priority queue is loaded and systems are nominal.",
             summary=(
                 f"Operator {user_name}, all systems nominal. Goal and task tracking is active, "
                 "analytics pipeline is live, and the AI planning engine is ready for deployment. "
-                "Current productivity index is strong — focus on closing open tasks and advancing "
-                "your highest-priority goals today."
+                "Focus on closing open tasks and advancing your highest-priority goals today."
             ),
             priorities=[
                 BriefingPriority(
                     label="Close high-priority tasks",
-                    detail="Review your task list and resolve any critical or high-priority items before new work is added.",
+                    detail="Review your task list and resolve any critical or high-priority items before accepting new work.",
                 ),
                 BriefingPriority(
                     label="Advance active goals",
-                    detail="Each active goal should have at least one in-progress task attached. Gaps signal planning debt.",
+                    detail="Each active goal should have at least one in-progress task attached — gaps signal planning debt.",
                 ),
                 BriefingPriority(
-                    label="Run an AI execution plan",
-                    detail="Use the AI Planner to generate a structured sprint for your next major objective.",
+                    label="Generate an AI execution plan",
+                    detail="Use the AI Planner to produce a structured sprint for your next major objective.",
                 ),
             ],
             risks=[
                 "Overdue tasks accumulate silently — check the Analytics tab to surface any that have slipped.",
                 "Goals without linked tasks have no execution path — ensure each goal has at least one active task.",
             ],
-            recommendation=(
-                "Start with a 10-minute review of your Analytics summary to understand where momentum is strongest. "
-                "Then open the AI Planner, enter your top goal as a prompt, and generate a focused execution plan "
-                "for the next 14–30 days. Consistent daily input compounds rapidly."
+            focus_block=(
+                "Allocate the first 90 minutes to your highest-priority in-progress task — remove all "
+                "notifications, close non-essential tabs, and target a concrete deliverable you can mark done "
+                "by end of block. Then do a 10-minute review of your open task stack before context-switching."
             ),
+            recommended_agent="Strategy Agent",
             generated_at=datetime.now(timezone.utc).isoformat(),
         )
 

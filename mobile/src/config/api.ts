@@ -21,7 +21,7 @@ export const API_ENDPOINTS = {
     summary: "/api/v1/dashboard/summary",
   },
   ai: {
-    briefing: "/api/v1/ai/briefing",
+    briefing: "/api/v1/ai/briefing/daily",
     plan:     "/api/v1/ai/plan",
     chat:     "/api/v1/ai/chat",
     execute:  "/api/v1/ai/actions/execute",

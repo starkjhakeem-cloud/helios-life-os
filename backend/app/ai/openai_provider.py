@@ -71,10 +71,12 @@ class OpenAIProvider(AIProvider):
         try:
             data = self._call(system=BRIEFING_SYSTEM, user=user_msg)
             return DailyBriefing(
+                greeting=data["greeting"],
                 summary=data["summary"],
                 priorities=[BriefingPriority(**p) for p in data["priorities"]],
                 risks=data["risks"],
-                recommendation=data["recommendation"],
+                focus_block=data["focus_block"],
+                recommended_agent=data["recommended_agent"],
                 generated_at=datetime.now(timezone.utc).isoformat(),
             )
         except (KeyError, TypeError, ValueError) as exc:

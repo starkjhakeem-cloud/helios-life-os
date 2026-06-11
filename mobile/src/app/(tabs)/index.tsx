@@ -93,10 +93,17 @@ export default function HomeScreen() {
         ))}
       </View>
 
+      <View style={styles.sectionHeaderRow}>
+        <Text style={styles.sectionLabel}>DAILY COMMAND</Text>
+        {aiLoading ? (
+          <ActivityIndicator size="small" color={colors.accentCyan} />
+        ) : null}
+      </View>
+
       {aiLoading && !briefing ? (
         <View style={styles.briefingLoader}>
           <ActivityIndicator size="small" color={colors.accentCyan} />
-          <Text style={styles.briefingLoadingText}>LOADING INTELLIGENCE...</Text>
+          <Text style={styles.briefingLoadingText}>BUILDING BRIEFING...</Text>
         </View>
       ) : briefing ? (
         <BriefingCard {...briefing} />

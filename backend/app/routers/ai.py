@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.ai.context_builder import build_memory_context, build_user_context
+from app.ai.context_builder import build_briefing_context, build_memory_context, build_user_context
 from app.ai.factory import get_ai_provider
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
@@ -29,12 +29,13 @@ from app.schemas.ai import (
 router = APIRouter()
 
 
-@router.get("/briefing", response_model=DailyBriefing)
+@router.get("/briefing/daily", response_model=DailyBriefing)
 def get_daily_briefing(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DailyBriefing:
-    user_context = build_user_context(user_id=current_user.id, db=db)
+    # Use the extended briefing context: memory + goals + tasks + analytics + conversations.
+    user_context = build_briefing_context(user_id=current_user.id, db=db)
     try:
         return get_ai_provider().generate_briefing(
             user_name=current_user.name,

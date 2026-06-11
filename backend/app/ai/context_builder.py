@@ -14,9 +14,10 @@ ai_memories tables.
 
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.models.conversation import Conversation
 from app.models.goal import Goal
 from app.models.memory import AIMemory
 from app.models.task import Task
@@ -147,6 +148,95 @@ def _build_memory_section(user_id: str, db: Session) -> str | None:
     lines = [f"LONG-TERM MEMORY ({len(memories)} entries):"]
     for m in memories:
         lines.append(f"  [{m.memory_type.upper()}] {m.content}")
+    return "\n".join(lines)
+
+
+def build_briefing_context(user_id: str, db: Session) -> str:
+    """
+    Extended context for the daily briefing.
+
+    Builds on build_user_context() and appends:
+      - A compact analytics summary (goal/task completion rates, overdue count)
+      - The 3 most recent titled conversation names
+
+    This gives the briefing engine richer situational awareness than the chat
+    context, which is intentionally leaner to keep response latency low.
+    """
+    base = build_user_context(user_id=user_id, db=db)
+    extras: list[str] = []
+
+    analytics = _build_analytics_section(user_id, db)
+    if analytics:
+        extras.append(analytics)
+
+    conversations = _build_recent_conversations_section(user_id, db)
+    if conversations:
+        extras.append(conversations)
+
+    if extras:
+        return base + "\n\n" + "\n\n".join(extras)
+    return base
+
+
+def _build_analytics_section(user_id: str, db: Session) -> str | None:
+    goal_rows = db.execute(
+        select(Goal.status).where(Goal.user_id == user_id)
+    ).all()
+    task_rows = db.execute(
+        select(Task.status, Task.due_date).where(Task.user_id == user_id)
+    ).all()
+
+    if not goal_rows and not task_rows:
+        return None
+
+    today = date.today().isoformat()
+
+    total_goals = len(goal_rows)
+    active_goals = sum(1 for g in goal_rows if g.status == "active")
+    completed_goals = sum(1 for g in goal_rows if g.status == "completed")
+
+    total_tasks = len(task_rows)
+    done_tasks = sum(1 for t in task_rows if t.status == "done")
+    open_tasks = sum(1 for t in task_rows if t.status in ("todo", "in_progress"))
+    overdue_tasks = sum(
+        1 for t in task_rows
+        if t.due_date and t.status != "done" and _safe_date_lt(t.due_date, today)
+    )
+
+    lines = ["ANALYTICS SUMMARY:"]
+    if total_goals > 0:
+        goal_rate = round((completed_goals / total_goals) * 100)
+        lines.append(
+            f"  Goals: {active_goals} active, {completed_goals} completed "
+            f"({goal_rate}% completion rate, {total_goals} total)"
+        )
+    if total_tasks > 0:
+        task_rate = round((done_tasks / total_tasks) * 100)
+        lines.append(
+            f"  Tasks: {open_tasks} open, {done_tasks} done "
+            f"({task_rate}% completion rate, {total_tasks} total)"
+        )
+    if overdue_tasks > 0:
+        lines.append(f"  Overdue tasks: {overdue_tasks} (require immediate attention)")
+    return "\n".join(lines)
+
+
+def _build_recent_conversations_section(user_id: str, db: Session) -> str | None:
+    rows = (
+        db.execute(
+            select(Conversation.title)
+            .where(Conversation.user_id == user_id)
+            .order_by(Conversation.updated_at.desc())
+            .limit(3)
+        )
+        .all()
+    )
+    titled = [r.title for r in rows if r.title and r.title != "New Conversation"]
+    if not titled:
+        return None
+    lines = [f"RECENT AI CONVERSATIONS ({len(titled)}):"]
+    for t in titled:
+        lines.append(f"  - {t}")
     return "\n".join(lines)
 
 
