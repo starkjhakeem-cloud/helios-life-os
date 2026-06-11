@@ -14,7 +14,9 @@ class IntegrationOut(BaseModel):
     status: str
     connected_at: str | None
     last_sync_at: str | None
+    token_expires_at: str | None  # UTC ISO-8601; null until real OAuth tokens are stored
     scopes: list[str]
+    # NOTE: access_token_encrypted and refresh_token_encrypted are never exposed via API
 
 
 class IntegrationListResponse(BaseModel):

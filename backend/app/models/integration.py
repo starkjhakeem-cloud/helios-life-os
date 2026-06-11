@@ -24,6 +24,14 @@ class UserIntegration(Base):
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # JSON-encoded list of OAuth scope strings. Ready for real token scopes without a migration.
     scopes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # ── OAuth token storage (populated when real OAuth is implemented) ─────────
+    # Tokens are encrypted at rest via app.services.token_encryption (Fernet).
+    # Neither field is ever serialised into API responses.
+    access_token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    refresh_token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # UTC timestamp when the access token expires. Exposed via API so the
+    # frontend can warn before a background sync encounters a 401.
+    token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

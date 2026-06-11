@@ -30,5 +30,21 @@ class Settings(BaseSettings):
     # Example: CORS_ORIGINS=https://app.helios.io,https://www.helios.io
     cors_origins: str = "*"
 
+    # ── Google OAuth credentials ───────────────────────────────────────────────
+    # Obtain from https://console.cloud.google.com/apis/credentials
+    # Leave unset in development — mock connect works without these.
+    # Required when the real Google OAuth flow is implemented.
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    # Deep-link URI registered in Google Cloud Console for the mobile app.
+    google_redirect_uri: str = "helios://oauth/callback/google"
+
+    # ── Token encryption ──────────────────────────────────────────────────────
+    # Fernet symmetric key used to encrypt/decrypt OAuth tokens at rest.
+    # Generate: python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # Leave unset in development — mock connect does not store real tokens.
+    # REQUIRED before any real OAuth tokens are written to the database.
+    token_encryption_key: str | None = None
+
 
 settings = Settings()

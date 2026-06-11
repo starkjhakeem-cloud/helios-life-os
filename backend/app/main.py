@@ -220,6 +220,13 @@ async def startup_checks() -> None:
             "Generate a strong secret: python3 -c \"import secrets; print(secrets.token_hex(32))\"",
             extra={"request_id": "-"},
         )
+    if settings.token_encryption_key is None:
+        logger.info(
+            "TOKEN_ENCRYPTION_KEY is not set — mock integrations work without it. "
+            "Generate and set one before enabling real OAuth token storage. "
+            "Generate: python3 -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\"",
+            extra={"request_id": "-"},
+        )
 
 
 @app.on_event("shutdown")

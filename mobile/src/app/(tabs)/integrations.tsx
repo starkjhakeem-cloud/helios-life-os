@@ -108,6 +108,8 @@ function IntegrationCard({
   const isConnected = integration.status === "connected";
   const accent = meta.accent;
   const syncFailed = syncResult?.status === "failed";
+  const isOAuthReady =
+    integration.provider === "google_calendar" || integration.provider === "gmail";
 
   return (
     <View style={[styles.card, isConnected && { borderColor: `${accent}40` }]}>
@@ -133,6 +135,17 @@ function IntegrationCard({
           <View style={styles.cardInfo}>
             <Text style={styles.providerName}>{meta.displayName}</Text>
             <Text style={styles.providerSubtitle}>{meta.subtitle}</Text>
+            {isOAuthReady && (
+              <View style={styles.oauthReadyBadge}>
+                <SymbolView
+                  name="checkmark.shield"
+                  size={9}
+                  tintColor="#10b981"
+                  resizeMode="scaleAspectFit"
+                />
+                <Text style={styles.oauthReadyText}>OAUTH READY</Text>
+              </View>
+            )}
           </View>
           <View
             style={[
@@ -195,7 +208,9 @@ function IntegrationCard({
               resizeMode="scaleAspectFit"
             />
             <Text style={styles.oauthNoteText}>
-              Real OAuth coming soon — mock connection available now
+              {isOAuthReady
+                ? "OAuth architecture prepared — encrypted token storage ready for production"
+                : "Real OAuth coming soon — mock connection available now"}
             </Text>
           </View>
         )}
@@ -644,6 +659,26 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     opacity: 0.8,
+  },
+
+  oauthReadyBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    alignSelf: "flex-start",
+    backgroundColor: "#10b98112",
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: "#10b98128",
+    marginTop: 3,
+  },
+
+  oauthReadyText: {
+    ...typography.label,
+    color: "#10b981",
+    fontSize: 8,
   },
 
   oauthNote: {

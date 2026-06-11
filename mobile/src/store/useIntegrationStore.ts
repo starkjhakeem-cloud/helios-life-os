@@ -75,7 +75,7 @@ export const useIntegrationStore = create<IntegrationState>()((set, get) => ({
           syncResults: remainingResults,
           integrations: s.integrations.map((i) =>
             i.id === integrationId
-              ? { ...i, id: null, status: "disconnected", connected_at: null, scopes: [] }
+              ? { ...i, id: null, status: "disconnected", connected_at: null, token_expires_at: null, scopes: [] }
               : i,
           ),
         };

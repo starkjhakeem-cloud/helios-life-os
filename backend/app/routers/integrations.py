@@ -63,6 +63,7 @@ def _to_out(row: UserIntegration) -> IntegrationOut:
         status=row.status,
         connected_at=row.connected_at.isoformat() if row.connected_at else None,
         last_sync_at=row.last_sync_at.isoformat() if row.last_sync_at else None,
+        token_expires_at=row.token_expires_at.isoformat() if row.token_expires_at else None,
         scopes=_decode_scopes(row.scopes),
     )
 
@@ -75,6 +76,7 @@ def _stub(provider: str) -> IntegrationOut:
         status="disconnected",
         connected_at=None,
         last_sync_at=None,
+        token_expires_at=None,
         scopes=[],
     )
 

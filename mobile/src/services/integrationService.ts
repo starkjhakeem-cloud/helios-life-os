@@ -17,6 +17,7 @@ export type Integration = {
   status: IntegrationStatus;
   connected_at: string | null;
   last_sync_at: string | null;
+  token_expires_at: string | null;  // null until real OAuth tokens are stored
   scopes: string[];
 };
 
