@@ -32,10 +32,36 @@ export type AgentDetail = AgentProfile & {
   context_summary: AgentContextSummary;
 };
 
+// ── V2.3: Agent Context Engine ────────────────────────────────────────────────
+
+export type AgentContextSection = {
+  category: "memory" | "goals" | "tasks" | "analytics" | "conversations";
+  label: string;
+  description: string;
+  is_active: boolean;
+  item_count: number;
+  items: string[];
+};
+
+export type AgentContextPackage = {
+  agent_id: string;
+  agent_name: string;
+  sections: AgentContextSection[];
+  generated_at: string;
+};
+
+// ── Service ───────────────────────────────────────────────────────────────────
+
 export const agentsService = {
   listAgents: (token: string) =>
     apiClient.get<AgentsResponse>(API_ENDPOINTS.agents.list, token),
 
   getAgent: (token: string, agentId: string) =>
     apiClient.get<AgentDetail>(`${API_ENDPOINTS.agents.list}/${agentId}`, token),
+
+  getAgentContext: (token: string, agentId: string) =>
+    apiClient.get<AgentContextPackage>(
+      `${API_ENDPOINTS.agents.list}/${agentId}/context`,
+      token,
+    ),
 };

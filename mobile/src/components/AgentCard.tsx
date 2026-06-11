@@ -1,15 +1,10 @@
 import { useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-} from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { SymbolView } from "expo-symbols";
 
 import { colors, spacing, radius, typography } from "../theme/theme";
-import type { AgentDetail, AgentProfile } from "../services/agentsService";
+import type { AgentContextPackage, AgentProfile } from "../services/agentsService";
+import AgentContextPreview from "./AgentContextPreview";
 
 // ── Static lookups ────────────────────────────────────────────────────────────
 
@@ -39,25 +34,14 @@ const AGENT_ACCENT: Record<string, string> = {
 
 type Props = {
   agent: AgentProfile;
-  detail?: AgentDetail | null;
-  isDetailLoading?: boolean;
+  agentContext?: AgentContextPackage | null;
+  isContextLoading?: boolean;
   onExpand?: (agentId: string) => void;
 };
 
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-type CapabilityPillProps = { label: string };
-function CapabilityPill({ label }: CapabilityPillProps) {
-  return (
-    <View style={styles.pill}>
-      <Text style={styles.pillText}>{label}</Text>
-    </View>
-  );
-}
-
 // ── AgentCard ─────────────────────────────────────────────────────────────────
 
-export default function AgentCard({ agent, detail, isDetailLoading, onExpand }: Props) {
+export default function AgentCard({ agent, agentContext, isContextLoading, onExpand }: Props) {
   const { id, name, role, status, description, priority, capabilities, memory_context_enabled } =
     agent;
 
@@ -74,8 +58,6 @@ export default function AgentCard({ agent, detail, isDetailLoading, onExpand }: 
       onExpand(id);
     }
   }
-
-  const contextSummary = detail?.context_summary ?? null;
 
   return (
     <View style={[styles.card, expanded && styles.cardExpanded]}>
@@ -181,50 +163,12 @@ export default function AgentCard({ agent, detail, isDetailLoading, onExpand }: 
             </View>
           </View>
 
-          {/* User context summary */}
-          {isDetailLoading ? (
-            <View style={styles.contextLoadingRow}>
-              <ActivityIndicator size="small" color={colors.accentCyan} />
-              <Text style={styles.contextLoadingText}>Loading context...</Text>
-            </View>
-          ) : contextSummary ? (
-            <View style={styles.contextSummaryRow}>
-              <View style={styles.contextCell}>
-                <Text style={[styles.contextValue, { color: accentColor }]}>
-                  {contextSummary.total_memories}
-                </Text>
-                <Text style={styles.contextKey}>MEMORIES</Text>
-              </View>
-              <View style={styles.contextDivider} />
-              <View style={styles.contextCell}>
-                <Text style={[styles.contextValue, { color: accentColor }]}>
-                  {contextSummary.active_goal_count}
-                </Text>
-                <Text style={styles.contextKey}>ACTIVE GOALS</Text>
-              </View>
-              <View style={styles.contextDivider} />
-              <View style={styles.contextCell}>
-                <View
-                  style={[
-                    styles.contextReadyDot,
-                    {
-                      backgroundColor: contextSummary.has_context
-                        ? colors.accentCyan
-                        : colors.textMuted,
-                    },
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.contextKey,
-                    { color: contextSummary.has_context ? colors.accentCyan : colors.textMuted },
-                  ]}
-                >
-                  {contextSummary.has_context ? "CONTEXT READY" : "NO CONTEXT"}
-                </Text>
-              </View>
-            </View>
-          ) : null}
+          {/* Agent context preview */}
+          <AgentContextPreview
+            contextPackage={agentContext}
+            isLoading={!!isContextLoading}
+            accentColor={accentColor}
+          />
 
           {/* Capabilities */}
           {capabilities.length > 0 ? (
@@ -384,61 +328,6 @@ const styles = StyleSheet.create({
     fontSize: 8,
   },
 
-  // Context summary strip
-  contextSummaryRow: {
-    flexDirection: "row",
-    backgroundColor: colors.surfaceDark,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.borderDark,
-    overflow: "hidden",
-  },
-
-  contextCell: {
-    flex: 1,
-    alignItems: "center",
-    paddingVertical: spacing.md,
-    gap: 4,
-  },
-
-  contextValue: {
-    fontSize: 20,
-    fontWeight: "800" as const,
-    letterSpacing: -0.5,
-  },
-
-  contextKey: {
-    ...typography.label,
-    fontSize: 7,
-    color: colors.textMuted,
-    textAlign: "center",
-  },
-
-  contextDivider: {
-    width: 1,
-    backgroundColor: colors.border,
-    marginVertical: spacing.sm,
-  },
-
-  contextReadyDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-
-  contextLoadingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingVertical: spacing.sm,
-  },
-
-  contextLoadingText: {
-    ...typography.caption,
-    color: colors.textMuted,
-    fontSize: 12,
-  },
-
   // Capabilities
   capabilitiesLabel: {
     ...typography.label,
@@ -483,19 +372,4 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  // Unused (kept for compatibility if pill style needed elsewhere)
-  pill: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceDark,
-  },
-
-  pillText: {
-    ...typography.label,
-    fontSize: 9,
-    color: colors.textMuted,
-  },
 });

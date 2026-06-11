@@ -1,16 +1,24 @@
 import { create } from "zustand";
 
 import { ApiError } from "../services/apiClient";
-import { type AgentDetail, type AgentProfile, agentsService } from "../services/agentsService";
+import {
+  type AgentContextPackage,
+  type AgentDetail,
+  type AgentProfile,
+  agentsService,
+} from "../services/agentsService";
 
 type AgentsState = {
   agents: AgentProfile[];
   selectedAgent: AgentDetail | null;
+  agentContextMap: Record<string, AgentContextPackage>;
   isLoading: boolean;
   isDetailLoading: boolean;
+  isContextLoading: boolean;
   error: string | null;
   fetchAgents: (token: string) => Promise<void>;
   fetchAgentDetail: (token: string, agentId: string) => Promise<void>;
+  fetchAgentContext: (token: string, agentId: string) => Promise<void>;
   clearSelectedAgent: () => void;
   reset: () => void;
 };
@@ -22,8 +30,10 @@ function extractMessage(err: unknown): string {
 export const useAgentsStore = create<AgentsState>()((set) => ({
   agents: [],
   selectedAgent: null,
+  agentContextMap: {},
   isLoading: false,
   isDetailLoading: false,
+  isContextLoading: false,
   error: null,
 
   fetchAgents: async (token) => {
@@ -46,8 +56,29 @@ export const useAgentsStore = create<AgentsState>()((set) => ({
     }
   },
 
+  fetchAgentContext: async (token, agentId) => {
+    set({ isContextLoading: true, error: null });
+    try {
+      const data = await agentsService.getAgentContext(token, agentId);
+      set((s) => ({
+        agentContextMap: { ...s.agentContextMap, [agentId]: data },
+        isContextLoading: false,
+      }));
+    } catch (err) {
+      set({ error: extractMessage(err), isContextLoading: false });
+    }
+  },
+
   clearSelectedAgent: () => set({ selectedAgent: null }),
 
   reset: () =>
-    set({ agents: [], selectedAgent: null, isLoading: false, isDetailLoading: false, error: null }),
+    set({
+      agents: [],
+      selectedAgent: null,
+      agentContextMap: {},
+      isLoading: false,
+      isDetailLoading: false,
+      isContextLoading: false,
+      error: null,
+    }),
 }));

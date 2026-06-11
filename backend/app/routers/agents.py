@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.ai.agent_context import build_agent_context
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.goal import Goal
@@ -9,6 +10,7 @@ from app.models.memory import AIMemory
 from app.models.user import User
 from app.schemas.agents import (
     AgentCapability,
+    AgentContextPackage,
     AgentContextSummary,
     AgentDetail,
     AgentProfile,
@@ -258,3 +260,27 @@ def get_agent(
     )
 
     return AgentDetail(**agent.model_dump(), context_summary=context_summary)
+
+
+@router.get("/{agent_id}/context", response_model=AgentContextPackage)
+def get_agent_context(
+    agent_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AgentContextPackage:
+    """
+    Return a full context package for the given agent scoped to the current user.
+    Shows what data each source category has available and which categories this
+    agent is configured to read. All item previews are safe for display.
+    """
+    agent = _AGENTS_BY_ID.get(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found.")
+
+    return build_agent_context(
+        agent_id=agent.id,
+        agent_name=agent.name,
+        memory_context_enabled=agent.memory_context_enabled,
+        user_id=current_user.id,
+        db=db,
+    )

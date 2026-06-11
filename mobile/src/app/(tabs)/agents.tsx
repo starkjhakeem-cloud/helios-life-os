@@ -29,12 +29,12 @@ export default function AgentsScreen() {
 
   const {
     agents,
-    selectedAgent,
+    agentContextMap,
     isLoading: agentsLoading,
-    isDetailLoading,
+    isContextLoading,
     error: agentsError,
     fetchAgents,
-    fetchAgentDetail,
+    fetchAgentContext,
   } = useAgentsStore();
 
   const { plan, isPlanLoading, planError, generatePlan, clearPlan } = useAIStore();
@@ -55,12 +55,10 @@ export default function AgentsScreen() {
   }, [load]);
 
   function handleExpand(agentId: string) {
-    // Only fetch detail if this is a newly expanded agent
-    if (expandedAgentId !== agentId && accessToken) {
-      setExpandedAgentId(agentId);
-      fetchAgentDetail(accessToken, agentId);
-    } else {
-      setExpandedAgentId(agentId);
+    setExpandedAgentId(agentId);
+    // Fetch context only on first expand (cache hit skips re-fetch in store)
+    if (expandedAgentId !== agentId && accessToken && !agentContextMap[agentId]) {
+      fetchAgentContext(accessToken, agentId);
     }
   }
 
@@ -126,8 +124,8 @@ export default function AgentsScreen() {
         <AgentCard
           key={agent.id}
           agent={agent}
-          detail={selectedAgent?.id === agent.id ? selectedAgent : null}
-          isDetailLoading={isDetailLoading && expandedAgentId === agent.id}
+          agentContext={agentContextMap[agent.id] ?? null}
+          isContextLoading={isContextLoading && expandedAgentId === agent.id}
           onExpand={handleExpand}
         />
       ))}
@@ -142,8 +140,8 @@ export default function AgentsScreen() {
             <AgentCard
               key={agent.id}
               agent={agent}
-              detail={selectedAgent?.id === agent.id ? selectedAgent : null}
-              isDetailLoading={isDetailLoading && expandedAgentId === agent.id}
+              agentContext={agentContextMap[agent.id] ?? null}
+              isContextLoading={isContextLoading && expandedAgentId === agent.id}
               onExpand={handleExpand}
             />
           ))}
