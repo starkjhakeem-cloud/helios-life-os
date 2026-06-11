@@ -154,6 +154,15 @@ export default function TabsLayout() {
           ),
         }}
       />
+
+      {/* Hidden from tab bar — navigated to from Profile screen */}
+      <Tabs.Screen
+        name="integrations"
+        options={{
+          href: null,
+          title: "Integrations",
+        }}
+      />
     </Tabs>
   );
 }

@@ -1,0 +1,536 @@
+import { useCallback, useEffect } from "react";
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  StyleSheet,
+  Alert,
+  RefreshControl,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SymbolView } from "expo-symbols";
+import type { SFSymbol } from "sf-symbols-typescript";
+
+import { useAuthStore, useIntegrationStore } from "../../store";
+import { colors, spacing, radius, typography } from "../../theme/theme";
+import type { Integration, IntegrationProvider } from "../../services/integrationService";
+
+// ── Provider metadata ─────────────────────────────────────────────────────────
+
+type ProviderMeta = {
+  displayName: string;
+  subtitle: string;
+  icon: SFSymbol;
+  accent: string;
+};
+
+const PROVIDER_META: Record<IntegrationProvider, ProviderMeta> = {
+  google_calendar: {
+    displayName: "Google Calendar",
+    subtitle: "Sync events and scheduled commitments",
+    icon: "calendar.circle",
+    accent: "#4285f4",
+  },
+  gmail: {
+    displayName: "Gmail",
+    subtitle: "Surface important emails in briefings",
+    icon: "envelope.circle",
+    accent: "#ea4335",
+  },
+  outlook_calendar: {
+    displayName: "Outlook Calendar",
+    subtitle: "Sync Microsoft calendar events",
+    icon: "calendar.badge.clock",
+    accent: "#0078d4",
+  },
+  outlook_mail: {
+    displayName: "Outlook Mail",
+    subtitle: "Surface Outlook emails in briefings",
+    icon: "envelope.badge",
+    accent: "#0078d4",
+  },
+};
+
+// ── Integration card ──────────────────────────────────────────────────────────
+
+type CardProps = {
+  integration: Integration;
+  isMutating: boolean;
+  onConnect: (provider: IntegrationProvider) => void;
+  onDisconnect: (id: string, displayName: string) => void;
+};
+
+function IntegrationCard({ integration, isMutating, onConnect, onDisconnect }: CardProps) {
+  const meta = PROVIDER_META[integration.provider as IntegrationProvider];
+  if (!meta) return null;
+
+  const isConnected = integration.status === "connected";
+  const accent = meta.accent;
+
+  function formatDate(iso: string | null): string {
+    if (!iso) return "—";
+    return new Date(iso).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
+
+  return (
+    <View style={[styles.card, isConnected && { borderColor: `${accent}40` }]}>
+      {/* Left accent strip for connected state */}
+      {isConnected && <View style={[styles.cardAccentBar, { backgroundColor: accent }]} />}
+
+      <View style={styles.cardBody}>
+        {/* Header row */}
+        <View style={styles.cardHeader}>
+          <View style={[styles.iconWrap, { backgroundColor: `${accent}18`, borderColor: `${accent}35` }]}>
+            <SymbolView
+              name={meta.icon}
+              size={22}
+              tintColor={accent}
+              resizeMode="scaleAspectFit"
+            />
+          </View>
+          <View style={styles.cardInfo}>
+            <Text style={styles.providerName}>{meta.displayName}</Text>
+            <Text style={styles.providerSubtitle}>{meta.subtitle}</Text>
+          </View>
+          <View style={[styles.statusBadge, isConnected ? styles.statusConnected : styles.statusDisconnected]}>
+            <View style={[styles.statusDot, { backgroundColor: isConnected ? "#10b981" : colors.textMuted }]} />
+            <Text style={[styles.statusText, { color: isConnected ? "#10b981" : colors.textMuted }]}>
+              {isConnected ? "CONNECTED" : "DISCONNECTED"}
+            </Text>
+          </View>
+        </View>
+
+        {/* Connected-at row */}
+        {isConnected && (
+          <View style={styles.metaRow}>
+            <Text style={styles.metaLabel}>Connected</Text>
+            <Text style={styles.metaValue}>{formatDate(integration.connected_at)}</Text>
+          </View>
+        )}
+
+        {/* Scopes */}
+        {isConnected && integration.scopes.length > 0 && (
+          <View style={styles.scopesRow}>
+            <Text style={styles.metaLabel}>Scopes</Text>
+            <Text style={styles.scopeText} numberOfLines={2}>
+              {integration.scopes.join("  ·  ")}
+            </Text>
+          </View>
+        )}
+
+        {/* OAuth note for future */}
+        {!isConnected && (
+          <View style={styles.oauthNote}>
+            <SymbolView
+              name="lock.shield"
+              size={11}
+              tintColor={colors.textMuted}
+              resizeMode="scaleAspectFit"
+            />
+            <Text style={styles.oauthNoteText}>
+              Real OAuth coming soon — mock connection available now
+            </Text>
+          </View>
+        )}
+
+        {/* Action button */}
+        <TouchableOpacity
+          style={[
+            styles.actionButton,
+            isConnected ? styles.disconnectButton : { backgroundColor: accent },
+            isMutating && styles.actionButtonDisabled,
+          ]}
+          onPress={() =>
+            isConnected && integration.id
+              ? onDisconnect(integration.id, meta.displayName)
+              : onConnect(integration.provider as IntegrationProvider)
+          }
+          disabled={isMutating}
+          activeOpacity={0.8}
+        >
+          {isMutating ? (
+            <ActivityIndicator size="small" color={isConnected ? colors.textMuted : colors.background} />
+          ) : (
+            <Text style={[styles.actionButtonText, isConnected && styles.disconnectButtonText]}>
+              {isConnected ? "DISCONNECT" : "MOCK CONNECT"}
+            </Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+// ── Screen ────────────────────────────────────────────────────────────────────
+
+export default function IntegrationsScreen() {
+  const insets = useSafeAreaInsets();
+  const accessToken = useAuthStore((s) => s.accessToken);
+
+  const {
+    integrations,
+    isLoading,
+    isMutating,
+    error,
+    fetchIntegrations,
+    mockConnect,
+    disconnect,
+  } = useIntegrationStore();
+
+  const load = useCallback(() => {
+    if (accessToken) fetchIntegrations(accessToken);
+  }, [accessToken, fetchIntegrations]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  function handleConnect(provider: IntegrationProvider) {
+    if (!accessToken) return;
+    mockConnect(accessToken, provider);
+  }
+
+  function handleDisconnect(id: string, displayName: string) {
+    Alert.alert(
+      `Disconnect ${displayName}`,
+      `Remove the ${displayName} integration? You can reconnect at any time.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Disconnect",
+          style: "destructive",
+          onPress: () => {
+            if (accessToken) disconnect(accessToken, id);
+          },
+        },
+      ],
+    );
+  }
+
+  const connectedCount = integrations.filter((i) => i.status === "connected").length;
+
+  return (
+    <ScrollView
+      style={{ backgroundColor: colors.background }}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}
+      refreshControl={
+        <RefreshControl refreshing={isLoading} onRefresh={load} tintColor={colors.accentCyan} />
+      }
+    >
+      {/* Hero */}
+      <View style={styles.heroCard}>
+        <Text style={styles.heroLabel}>EXTERNAL INTEGRATIONS</Text>
+        <Text style={styles.heroTitle}>Connect Your World</Text>
+        <Text style={styles.heroSubtitle}>
+          {connectedCount > 0
+            ? `${connectedCount} of ${integrations.length} providers connected · HELIOS will use live data in briefings once OAuth is enabled`
+            : "Link external services to give HELIOS access to your calendar and email data."}
+        </Text>
+      </View>
+
+      {/* OAuth readiness banner */}
+      <View style={styles.readinessBanner}>
+        <SymbolView
+          name="antenna.radiowaves.left.and.right"
+          size={13}
+          tintColor={colors.accentCyan}
+          resizeMode="scaleAspectFit"
+        />
+        <Text style={styles.readinessText}>
+          Architecture ready for real OAuth. Mock connections populate scopes and connection state for testing.
+        </Text>
+      </View>
+
+      {/* Section */}
+      <View style={styles.sectionHeaderRow}>
+        <Text style={styles.sectionLabel}>AVAILABLE INTEGRATIONS</Text>
+        {isLoading ? (
+          <ActivityIndicator size="small" color={colors.accentCyan} />
+        ) : null}
+      </View>
+
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+      {integrations.map((integration) => (
+        <IntegrationCard
+          key={integration.provider}
+          integration={integration}
+          isMutating={isMutating}
+          onConnect={handleConnect}
+          onDisconnect={handleDisconnect}
+        />
+      ))}
+
+      {/* Footer note */}
+      <View style={styles.footer}>
+        <SymbolView
+          name="info.circle"
+          size={12}
+          tintColor={colors.textMuted}
+          resizeMode="scaleAspectFit"
+        />
+        <Text style={styles.footerText}>
+          OAuth authorization and live data sync will be available in a future release. No real credentials are stored.
+        </Text>
+      </View>
+    </ScrollView>
+  );
+}
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+  container: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xxl * 2,
+  },
+
+  heroCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.lg,
+  },
+
+  heroLabel: {
+    ...typography.label,
+    color: colors.accentCyan,
+    marginBottom: spacing.md,
+  },
+
+  heroTitle: {
+    ...typography.displaySmall,
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
+  },
+
+  heroSubtitle: {
+    ...typography.body,
+    color: colors.textMuted,
+    lineHeight: 22,
+  },
+
+  readinessBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+    backgroundColor: `${colors.accentCyan}0d`,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: `${colors.accentCyan}25`,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+
+  readinessText: {
+    ...typography.caption,
+    color: colors.accentCyan,
+    flex: 1,
+    lineHeight: 18,
+    opacity: 0.85,
+  },
+
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.sm,
+  },
+
+  sectionLabel: {
+    ...typography.label,
+    color: colors.textMuted,
+  },
+
+  errorText: {
+    ...typography.caption,
+    color: "#ef4444",
+    marginBottom: spacing.sm,
+  },
+
+  // Integration card
+  card: {
+    flexDirection: "row",
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.md,
+    overflow: "hidden",
+  },
+
+  cardAccentBar: {
+    width: 3,
+    flexShrink: 0,
+  },
+
+  cardBody: {
+    flex: 1,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+
+  iconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+
+  cardInfo: {
+    flex: 1,
+    gap: 3,
+  },
+
+  providerName: {
+    fontSize: 15,
+    fontWeight: "700" as const,
+    color: colors.textPrimary,
+  },
+
+  providerSubtitle: {
+    ...typography.caption,
+    color: colors.textMuted,
+    lineHeight: 17,
+  },
+
+  statusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    flexShrink: 0,
+  },
+
+  statusConnected: {
+    backgroundColor: "#10b98115",
+    borderWidth: 1,
+    borderColor: "#10b98130",
+  },
+
+  statusDisconnected: {
+    backgroundColor: `${colors.surfaceDark}`,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+
+  statusDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+  },
+
+  statusText: {
+    ...typography.label,
+    fontSize: 8,
+  },
+
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  metaLabel: {
+    ...typography.label,
+    color: colors.textMuted,
+    fontSize: 9,
+  },
+
+  metaValue: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontSize: 12,
+  },
+
+  scopesRow: {
+    gap: 4,
+  },
+
+  scopeText: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+    opacity: 0.8,
+  },
+
+  oauthNote: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  oauthNoteText: {
+    ...typography.caption,
+    color: colors.textMuted,
+    flex: 1,
+    fontSize: 11,
+    lineHeight: 16,
+    opacity: 0.75,
+  },
+
+  actionButton: {
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 36,
+  },
+
+  actionButtonDisabled: {
+    opacity: 0.55,
+  },
+
+  disconnectButton: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "transparent",
+  },
+
+  actionButtonText: {
+    ...typography.label,
+    color: colors.background,
+    fontSize: 11,
+  },
+
+  disconnectButtonText: {
+    color: colors.textMuted,
+  },
+
+  footer: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+    paddingTop: spacing.md,
+  },
+
+  footerText: {
+    ...typography.caption,
+    color: colors.textMuted,
+    flex: 1,
+    lineHeight: 18,
+    opacity: 0.7,
+    fontSize: 11,
+  },
+});

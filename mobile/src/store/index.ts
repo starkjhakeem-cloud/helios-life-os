@@ -23,3 +23,5 @@ export { useEmailStore } from "./useEmailStore";
 export type { EmailMessage, EmailMessageCreate, EmailMessageUpdate, MessageImportance, MessageStatus, MessageSource } from "../services/emailService";
 export { useOrchestrationStore } from "./useOrchestrationStore";
 export type { AgentAssessment, OrchestrationRequest, OrchestrationResponse } from "../services/orchestrationService";
+export { useIntegrationStore } from "./useIntegrationStore";
+export type { Integration, IntegrationProvider, IntegrationStatus, IntegrationListResponse } from "../services/integrationService";

@@ -15,6 +15,8 @@ import {
   Keyboard,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
+import { SymbolView } from "expo-symbols";
 
 import { systemService, type VersionResponse } from "../../services/systemService";
 import { requestPermissions } from "../../services/notificationService";
@@ -216,6 +218,7 @@ function NewReminderModal({ visible, onClose, onSubmit, isMutating }: NewReminde
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const accessToken = useAuthStore((s) => s.accessToken);
   const logout = useAuthStore((s) => s.logout);
@@ -545,6 +548,29 @@ export default function ProfileScreen() {
           </View>
 
         </View>
+
+        {/* Integrations */}
+        <TouchableOpacity
+          style={styles.integrationsButton}
+          onPress={() => router.push("/(tabs)/integrations")}
+          activeOpacity={0.8}
+        >
+          <View style={styles.integrationsButtonLeft}>
+            <SymbolView
+              name="link.circle"
+              size={16}
+              tintColor={colors.accentCyan}
+              resizeMode="scaleAspectFit"
+            />
+            <Text style={styles.integrationsButtonText}>INTEGRATIONS</Text>
+          </View>
+          <SymbolView
+            name="chevron.right"
+            size={12}
+            tintColor={colors.textMuted}
+            resizeMode="scaleAspectFit"
+          />
+        </TouchableOpacity>
 
         {/* Logout */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
@@ -920,6 +946,33 @@ const styles = StyleSheet.create({
   toggleText: {
     ...typography.label,
     fontSize: 9,
+  },
+
+  // Integrations nav
+  integrationsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: `${colors.accentCyan}30`,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+
+  integrationsButtonLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+
+  integrationsButtonText: {
+    ...typography.label,
+    color: colors.accentCyan,
+    fontSize: 12,
   },
 
   // Logout

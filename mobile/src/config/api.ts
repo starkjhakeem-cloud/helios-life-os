@@ -56,4 +56,9 @@ export const API_ENDPOINTS = {
   email: {
     messages: "/api/v1/email/messages",
   },
+  integrations: {
+    base: "/api/v1/integrations",
+    mockConnect: "/api/v1/integrations/mock-connect",
+    disconnect: (id: string) => `/api/v1/integrations/${id}`,
+  },
 } as const;
