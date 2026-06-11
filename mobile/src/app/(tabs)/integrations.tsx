@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -15,7 +15,9 @@ import type { SFSymbol } from "sf-symbols-typescript";
 
 import { useAuthStore, useIntegrationStore } from "../../store";
 import { colors, spacing, radius, typography } from "../../theme/theme";
+import { integrationService } from "../../services/integrationService";
 import type {
+  ConnectUrlResponse,
   Integration,
   IntegrationProvider,
   SyncJobOut,
@@ -87,20 +89,24 @@ type CardProps = {
   integration: Integration;
   isMutating: boolean;
   isSyncing: boolean;
+  isConnecting: boolean;
   syncResult: SyncJobOut | null;
   onConnect: (provider: IntegrationProvider) => void;
   onDisconnect: (id: string, displayName: string) => void;
   onSync: (id: string) => void;
+  onGoogleConnect: (provider: IntegrationProvider) => void;
 };
 
 function IntegrationCard({
   integration,
   isMutating,
   isSyncing,
+  isConnecting,
   syncResult,
   onConnect,
   onDisconnect,
   onSync,
+  onGoogleConnect,
 }: CardProps) {
   const meta = PROVIDER_META[integration.provider as IntegrationProvider];
   if (!meta) return null;
@@ -304,7 +310,55 @@ function IntegrationCard({
               )}
             </TouchableOpacity>
           </View>
+        ) : isOAuthReady ? (
+          // Google providers: real OAuth skeleton + mock fallback
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                styles.connectButton,
+                { backgroundColor: accent },
+                (isConnecting || isMutating) && styles.actionButtonDisabled,
+              ]}
+              onPress={() => onGoogleConnect(integration.provider as IntegrationProvider)}
+              disabled={isConnecting || isMutating}
+              activeOpacity={0.8}
+            >
+              {isConnecting ? (
+                <ActivityIndicator size="small" color={colors.background} />
+              ) : (
+                <>
+                  <SymbolView
+                    name="lock.shield"
+                    size={11}
+                    tintColor={colors.background}
+                    resizeMode="scaleAspectFit"
+                  />
+                  <Text style={styles.actionButtonText}>CONNECT GOOGLE</Text>
+                </>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                styles.mockConnectSecondary,
+                (isMutating || isConnecting) && styles.actionButtonDisabled,
+              ]}
+              onPress={() => onConnect(integration.provider as IntegrationProvider)}
+              disabled={isMutating || isConnecting}
+              activeOpacity={0.8}
+            >
+              {isMutating ? (
+                <ActivityIndicator size="small" color={colors.textMuted} />
+              ) : (
+                <Text style={[styles.actionButtonText, { color: colors.textMuted }]}>
+                  MOCK
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
         ) : (
+          // Non-Google providers: mock connect only
           <TouchableOpacity
             style={[
               styles.actionButton,
@@ -387,6 +441,29 @@ export default function IntegrationsScreen() {
     triggerSync(accessToken, id);
   }
 
+  const [connectingProvider, setConnectingProvider] = useState<IntegrationProvider | null>(null);
+
+  async function handleGoogleConnect(provider: IntegrationProvider) {
+    if (!accessToken) return;
+    setConnectingProvider(provider);
+    try {
+      const data = await integrationService.getConnectUrl(accessToken);
+      const urlPreview = data.url.length > 120 ? `${data.url.substring(0, 120)}…` : data.url;
+      Alert.alert(
+        "Google OAuth — Skeleton",
+        `${data.configured ? "✓ Real URL generated (GOOGLE_CLIENT_ID configured)" : "⚠ Placeholder URL (GOOGLE_CLIENT_ID not set)"}\n\n${data.note}\n\nURL:\n${urlPreview}`,
+        [{ text: "OK" }],
+      );
+    } catch (err) {
+      Alert.alert(
+        "Connection Error",
+        err instanceof Error ? err.message : "Failed to generate authorization URL.",
+      );
+    } finally {
+      setConnectingProvider(null);
+    }
+  }
+
   const connectedCount = integrations.filter((i) => i.status === "connected").length;
 
   return (
@@ -446,10 +523,12 @@ export default function IntegrationsScreen() {
           integration={integration}
           isMutating={isMutating}
           isSyncing={syncingId === integration.id}
+          isConnecting={connectingProvider === integration.provider}
           syncResult={integration.id ? (syncResults[integration.id] ?? null) : null}
           onConnect={handleConnect}
           onDisconnect={handleDisconnect}
           onSync={handleSync}
+          onGoogleConnect={handleGoogleConnect}
         />
       ))}
 
@@ -776,6 +855,13 @@ const styles = StyleSheet.create({
 
   disconnectButton: {
     flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "transparent",
+  },
+
+  mockConnectSecondary: {
+    flex: 0.45,   // narrower than primary — MOCK label is short
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: "transparent",

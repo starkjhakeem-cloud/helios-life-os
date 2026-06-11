@@ -42,6 +42,13 @@ export type SyncStatusResponse = {
   jobs: SyncJobOut[];
 };
 
+export type ConnectUrlResponse = {
+  url: string;       // Full authorization URL or placeholder
+  state: string;     // CSRF state token (not yet persisted in V2.15)
+  configured: boolean; // true when GOOGLE_CLIENT_ID is set in backend config
+  note: string;      // Developer note about skeleton limitations
+};
+
 // ── Service ───────────────────────────────────────────────────────────────────
 
 export const integrationService = {
@@ -67,4 +74,7 @@ export const integrationService = {
       {},
       token,
     ),
+
+  getConnectUrl: (token: string) =>
+    apiClient.get<ConnectUrlResponse>(API_ENDPOINTS.integrations.googleConnectUrl, token),
 };

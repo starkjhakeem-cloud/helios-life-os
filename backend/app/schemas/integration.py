@@ -42,3 +42,19 @@ class SyncJobOut(BaseModel):
 
 class SyncStatusResponse(BaseModel):
     jobs: list[SyncJobOut]
+
+
+class ConnectUrlResponse(BaseModel):
+    """Returned by GET /integrations/google/connect-url."""
+    url: str         # Full authorization URL; placeholder when GOOGLE_CLIENT_ID is unset
+    state: str       # CSRF state token — not yet persisted in V2.15
+    configured: bool # True when GOOGLE_CLIENT_ID is present in config
+    note: str        # Developer note explaining current skeleton limitations
+
+
+class CallbackResponse(BaseModel):
+    """Returned by GET /integrations/google/callback (skeleton)."""
+    success: bool
+    provider: str
+    code_received: bool
+    note: str

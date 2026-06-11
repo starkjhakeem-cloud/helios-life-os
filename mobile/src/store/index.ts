@@ -24,4 +24,4 @@ export type { EmailMessage, EmailMessageCreate, EmailMessageUpdate, MessageImpor
 export { useOrchestrationStore } from "./useOrchestrationStore";
 export type { AgentAssessment, OrchestrationRequest, OrchestrationResponse } from "../services/orchestrationService";
 export { useIntegrationStore } from "./useIntegrationStore";
-export type { Integration, IntegrationProvider, IntegrationStatus, IntegrationListResponse, SyncJobOut, SyncStatusResponse } from "../services/integrationService";
+export type { ConnectUrlResponse, Integration, IntegrationProvider, IntegrationStatus, IntegrationListResponse, SyncJobOut, SyncStatusResponse } from "../services/integrationService";

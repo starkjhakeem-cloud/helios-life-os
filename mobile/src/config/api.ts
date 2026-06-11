@@ -60,6 +60,7 @@ export const API_ENDPOINTS = {
     base: "/api/v1/integrations",
     mockConnect: "/api/v1/integrations/mock-connect",
     syncStatus: "/api/v1/integrations/sync/status",
+    googleConnectUrl: "/api/v1/integrations/google/connect-url",
     disconnect: (id: string) => `/api/v1/integrations/${id}`,
     triggerSync: (id: string) => `/api/v1/integrations/${id}/sync`,
   },

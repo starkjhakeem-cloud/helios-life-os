@@ -1,7 +1,7 @@
 # OAuth and Secure Token Architecture
 
-**Status:** Architecture prepared. Mock integrations active. Real OAuth not yet enabled.
-**Added in:** V2.14
+**Status:** OAuth skeleton active. Authorization URL generation working. Token exchange not yet implemented.
+**Added in:** V2.14 (architecture), V2.15 (skeleton flow)
 **Applies to:** Google Calendar, Gmail (Outlook planned separately)
 
 ---
@@ -21,8 +21,12 @@ HELIOS V2.14 completes the infrastructure layer required to support real Google 
 | Config env vars | ✅ Placeholders defined |
 | Mock connect / disconnect | ✅ Fully functional |
 | Sync simulation | ✅ Writes real calendar/email records |
-| Real Google OAuth flow | ⏳ Not yet implemented |
-| Real token exchange | ⏳ Not yet implemented |
+| `GET /integrations/google/connect-url` | ✅ Generates real URL (or placeholder) |
+| `GET /integrations/google/callback` | ✅ Skeleton — accepts code, no exchange yet |
+| Frontend CONNECT GOOGLE button | ✅ Calls endpoint, shows URL in alert |
+| State token persistence (CSRF) | ⏳ Not yet implemented |
+| Real token exchange | ⏳ Not yet implemented (V2.16) |
+| Deep-link intercept + exchange | ⏳ Not yet implemented (V2.16) |
 
 ---
 
@@ -171,11 +175,13 @@ If `TOKEN_ENCRYPTION_KEY` must be rotated (e.g., suspected compromise):
 
 ## Current Limitations
 
-- **No real OAuth flow** — all integrations use mock connect. `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `TOKEN_ENCRYPTION_KEY` are defined in config but unused.
-- **No real token storage** — `access_token_encrypted` and `refresh_token_encrypted` are always `NULL` for mock connections.
-- **No token refresh** — sync simulation (`app.services.sync_simulator`) generates deterministic fake records; it does not call any Google API.
-- **Outlook OAuth** — Microsoft OAuth (MSAL) is a separate flow and is not planned in the current roadmap. The architecture supports it via the same encrypted columns and a different provider-specific exchange handler.
-- **No PKCE** — the planned flow above uses client credentials. For a fully public mobile app, PKCE (`code_challenge` + `code_verifier`) should be added before the `helios://` deep-link callback is considered safe against code-interception attacks.
+- **No real token exchange** — `GET /integrations/google/callback` accepts the authorization code but does not exchange it for tokens yet.
+- **No state persistence** — The `state` CSRF token returned by `connect-url` is generated but not stored. The callback does not verify it. A production implementation must store state (e.g., Redis TTL or DB row) and reject callbacks with mismatched state.
+- **No real token storage** — `access_token_encrypted` and `refresh_token_encrypted` are always `NULL`. Token storage will be wired in V2.16.
+- **No real browser flow** — The frontend CONNECT GOOGLE button calls `connect-url` and shows the URL in an alert. Real OAuth requires `expo-auth-session` or `expo-web-browser` to open the authorization URL and intercept the deep link callback.
+- **No token refresh** — Sync simulation uses deterministic fake records; it does not call any Google API.
+- **Outlook OAuth** — Microsoft OAuth (MSAL) is a separate flow and is not in the current roadmap. The architecture supports it via the same encrypted columns.
+- **No PKCE** — For a fully public mobile app, PKCE (`code_challenge` + `code_verifier`) should be added before the `helios://` deep-link callback is considered safe against code-interception attacks.
 
 ---
 
@@ -195,3 +201,15 @@ If `TOKEN_ENCRYPTION_KEY` must be rotated (e.g., suspected compromise):
 | `mobile/src/services/integrationService.ts` | Added `token_expires_at` to `Integration` type |
 | `mobile/src/store/useIntegrationStore.ts` | Clears `token_expires_at` on optimistic disconnect |
 | `mobile/src/app/(tabs)/integrations.tsx` | OAUTH READY badge and updated note for Google providers |
+
+## Files Changed in V2.15
+
+| File | Change |
+|------|--------|
+| `backend/app/schemas/integration.py` | Added `ConnectUrlResponse`, `CallbackResponse` schemas |
+| `backend/app/routers/integrations.py` | Added `GET /google/connect-url` and `GET /google/callback` skeleton routes |
+| `mobile/src/config/api.ts` | Added `googleConnectUrl` endpoint constant |
+| `mobile/src/services/integrationService.ts` | Added `ConnectUrlResponse` type and `getConnectUrl` service method |
+| `mobile/src/store/index.ts` | Exported `ConnectUrlResponse` type |
+| `mobile/src/app/(tabs)/integrations.tsx` | CONNECT GOOGLE button (+ MOCK secondary) for Google providers; skeleton alert on press |
+| `docs/oauth-token-architecture.md` | Updated status table and limitations for V2.15 skeleton |

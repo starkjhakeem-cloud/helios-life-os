@@ -1,17 +1,22 @@
 import json
+import secrets
 import uuid
 from datetime import datetime, timezone
+from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.integration import UserIntegration
 from app.models.sync_job import SyncJob
 from app.models.user import User
 from app.schemas.integration import (
+    CallbackResponse,
+    ConnectUrlResponse,
     IntegrationListResponse,
     IntegrationOut,
     MockConnectRequest,
@@ -185,6 +190,135 @@ def get_sync_status(
             jobs.append(_job_to_out(job))
 
     return SyncStatusResponse(jobs=jobs)
+
+
+_GOOGLE_SCOPES = " ".join([
+    "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/calendar.events",
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
+])
+
+_GOOGLE_AUTH_BASE = "https://accounts.google.com/o/oauth2/v2/auth"
+
+
+@router.get("/google/connect-url", response_model=ConnectUrlResponse)
+def google_connect_url(
+    current_user: User = Depends(get_current_user),
+) -> ConnectUrlResponse:
+    """
+    Generate (or return a placeholder) Google OAuth 2.0 authorization URL.
+
+    When GOOGLE_CLIENT_ID is configured, produces a real URL that — once a
+    callback handler and token exchange are implemented — will complete the
+    OAuth flow.
+
+    When GOOGLE_CLIENT_ID is not configured, returns a clearly-labelled
+    placeholder URL so the frontend skeleton can display/log the URL shape
+    without requiring real credentials.
+
+    IMPORTANT — V2.15 skeleton:
+    - The `state` token is generated but NOT persisted.
+    - No browser redirect happens from this endpoint.
+    - No token exchange is implemented yet.
+    - The callback endpoint (GET /google/callback) also does not exchange tokens.
+    """
+    state = secrets.token_urlsafe(32)
+
+    if not settings.google_client_id:
+        placeholder_params = {
+            "client_id": "YOUR_GOOGLE_CLIENT_ID",
+            "redirect_uri": settings.google_redirect_uri,
+            "response_type": "code",
+            "scope": _GOOGLE_SCOPES,
+            "access_type": "offline",
+            "prompt": "consent",
+            "state": state,
+        }
+        return ConnectUrlResponse(
+            url=f"{_GOOGLE_AUTH_BASE}?{urlencode(placeholder_params)}",
+            state=state,
+            configured=False,
+            note=(
+                "GOOGLE_CLIENT_ID is not set. "
+                "Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and TOKEN_ENCRYPTION_KEY "
+                "in .env to generate a real authorization URL."
+            ),
+        )
+
+    params = {
+        "client_id": settings.google_client_id,
+        "redirect_uri": settings.google_redirect_uri,
+        "response_type": "code",
+        "scope": _GOOGLE_SCOPES,
+        "access_type": "offline",
+        "prompt": "consent",
+        "state": state,
+    }
+    return ConnectUrlResponse(
+        url=f"{_GOOGLE_AUTH_BASE}?{urlencode(params)}",
+        state=state,
+        configured=True,
+        note=(
+            "Real authorization URL generated. "
+            "State token not yet persisted — store and verify state before "
+            "redirecting in production. Token exchange not yet implemented (V2.15 skeleton)."
+        ),
+    )
+
+
+@router.get("/google/callback", response_model=CallbackResponse)
+def google_oauth_callback(
+    code: str | None = Query(default=None),
+    state: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+    error_description: str | None = Query(default=None),
+) -> CallbackResponse:
+    """
+    Google OAuth 2.0 callback skeleton — accepts the redirect from Google
+    (or from the mobile app after it intercepts the deep link).
+
+    V2.15 skeleton:
+    - Does NOT verify the state parameter (would require persisted state lookup).
+    - Does NOT exchange the authorization code for tokens.
+    - Does NOT call any Google API.
+    - Returns a structured JSON response describing what was received.
+
+    Production implementation (V2.16+) will:
+    1. Verify state matches the value stored for this user (CSRF protection).
+    2. POST to https://oauth2.googleapis.com/token to exchange `code` for
+       access_token and refresh_token.
+    3. Encrypt tokens via app.services.token_encryption and persist to
+       user_integrations.
+    4. Redirect the mobile app via the helios:// deep link.
+    """
+    if error:
+        return CallbackResponse(
+            success=False,
+            provider="google",
+            code_received=False,
+            note=f"Google returned an error: {error}. {error_description or ''}".strip(". ") + ".",
+        )
+
+    if not code:
+        return CallbackResponse(
+            success=False,
+            provider="google",
+            code_received=False,
+            note="No authorization code received. The request may have been cancelled.",
+        )
+
+    # Real implementation: verify state, exchange code, encrypt tokens.
+    return CallbackResponse(
+        success=False,
+        provider="google",
+        code_received=True,
+        note=(
+            "Authorization code received. "
+            "Token exchange not yet implemented — this is the V2.15 skeleton. "
+            "Implement state verification and token exchange in V2.16."
+        ),
+    )
 
 
 @router.post("/{integration_id}/sync", response_model=SyncJobOut, status_code=201)
