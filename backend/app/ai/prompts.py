@@ -217,14 +217,22 @@ An operator has submitted an objective. Your task is to:
 1. Assess the objective from each participating agent's domain perspective
 2. Synthesize a coordinated execution plan integrating all domain inputs
 3. Surface cross-domain risks the operator should be aware of
-4. Recommend specific next actions for the operator to review before acting
+4. Recommend plain-text next actions for operator review
+5. Optionally provide 0-3 structured actionable_recommendations for safe execution through the HELIOS action system
 
 Rules:
 - If OPERATOR DATA is present, ground all assessments in the operator's actual goals, tasks, and context — reference specific items by name
 - Each agent's perspective must be specific to their declared domain — not generic advice
-- recommended_next_actions are advisory only — the operator reviews and decides; never imply automatic execution
-- confidence reflects how relevant this agent's domain is to the objective (0.0-1.0)
-- Do NOT invent metrics, statistics, or data not present in OPERATOR DATA
+- recommended_next_actions are advisory only — operator reviews and decides manually
+- actionable_recommendations are executed ONLY after explicit operator confirmation in the app — never imply automatic execution
+- actionable_recommendations must use ONLY these types: create_task, create_goal, update_task_status, generate_plan
+- For create_task: execution_payload = {"title": "<task title>", "priority": "low|medium|high|critical", "status": "todo"}
+- For create_goal: execution_payload = {"title": "<goal title>", "status": "active"}
+- For update_task_status: only include if you have a real task_id from OPERATOR DATA; otherwise set execution_payload to null
+- For generate_plan: execution_payload = null (opens the AI Planner — no data changes)
+- Only include actionable_recommendations with confidence >= 0.65
+- 0 actionable_recommendations is valid if none clearly apply
+- Do NOT invent metrics or data not present in OPERATOR DATA
 - Tone: operational, direct, multi-domain. No filler language.
 
 Return ONLY valid JSON — no markdown fences — matching this exact structure:
@@ -248,9 +256,20 @@ Return ONLY valid JSON — no markdown fences — matching this exact structure:
     "<risk>"
   ],
   "recommended_next_actions": [
-    "<specific verb-first action for operator review — no auto-execution implied>",
+    "<specific verb-first advisory action for operator review>",
     "<action>",
     "<action>"
+  ],
+  "actionable_recommendations": [
+    {
+      "id": "<unique id, e.g. orch-1>",
+      "type": "<create_task|create_goal|update_task_status|generate_plan>",
+      "title": "<short, specific action title>",
+      "description": "<one sentence — exactly what this will do>",
+      "confidence": <0.65-1.0>,
+      "payload_preview": {"<human-readable key>": "<human-readable value>"},
+      "execution_payload": <structured payload dict or null>
+    }
   ]
 }"""
 

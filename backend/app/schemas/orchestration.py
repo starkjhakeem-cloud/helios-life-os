@@ -1,6 +1,8 @@
 from pydantic import BaseModel, Field
 from typing import Literal
 
+from app.schemas.ai import RecommendedAction
+
 OrchestrationContextScope = Literal["daily_briefing", "assistant_chat", "planning"]
 
 
@@ -26,7 +28,12 @@ class OrchestrationResponse(BaseModel):
     agent_assessments: list[AgentAssessment]
     coordinated_plan: str                    # synthesized multi-agent plan
     risks: list[str]                         # cross-domain risks
-    # Advisory only — operator must review before taking any action.
+    # Plain-text advisory actions — operator reviews manually, no execution.
     recommended_next_actions: list[str]
+    # Structured actions that bridge to the existing AI action review system.
+    # Only safe, non-destructive types: create_task, create_goal,
+    # update_task_status, generate_plan.
+    # Operator must explicitly confirm before any action is executed.
+    actionable_recommendations: list[RecommendedAction] = []
     context_scope: str
     generated_at: str

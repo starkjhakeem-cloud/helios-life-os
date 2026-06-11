@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import ActionReviewModal from "../../components/ActionReviewModal";
 import AgentCard from "../../components/AgentCard";
 import OrchestrationResultCard from "../../components/OrchestrationResultCard";
 import PlanCard from "../../components/PlanCard";
@@ -21,6 +22,7 @@ import {
   useAuthStore,
   useGoalsStore,
   useOrchestrationStore,
+  type RecommendedAction,
 } from "../../store";
 
 const HORIZONS: { label: string; days: number }[] = [
@@ -70,6 +72,8 @@ export default function AgentsScreen() {
   const [orchObjective, setOrchObjective] = useState("");
   const [orchSelectedIds, setOrchSelectedIds] = useState<string[] | null>(null);
   const [orchObjectiveError, setOrchObjectiveError] = useState<string | null>(null);
+  const [reviewingAction, setReviewingAction] = useState<RecommendedAction | null>(null);
+  const [orchAcknowledgedIds, setOrchAcknowledgedIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(() => {
     if (accessToken) fetchAgents(accessToken);
@@ -131,13 +135,27 @@ export default function AgentsScreen() {
     });
   }
 
+  function handleOrchReview(action: RecommendedAction) {
+    setReviewingAction(action);
+  }
+
+  function handleOrchAcknowledge(id: string) {
+    setOrchAcknowledgedIds((prev) => new Set([...prev, id]));
+    setReviewingAction(null);
+  }
+
+  function handleCancelReview() {
+    setReviewingAction(null);
+  }
+
   const activeAgents = agents.filter((a) => a.status === "active");
   const standbyAgents = agents.filter((a) => a.status !== "active");
   const activeGoals = goals.filter((g) => g.status === "active");
 
   return (
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
     <ScrollView
-      style={{ backgroundColor: colors.background }}
+      style={{ flex: 1 }}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={[
         styles.container,
@@ -408,13 +426,23 @@ export default function AgentsScreen() {
 
       {orchResult ? (
         <>
-          <OrchestrationResultCard result={orchResult} />
+          <OrchestrationResultCard
+            result={orchResult}
+            onReview={handleOrchReview}
+            acknowledgedIds={orchAcknowledgedIds}
+          />
           <TouchableOpacity style={styles.clearButton} onPress={clearOrchResult}>
             <Text style={styles.clearButtonText}>CLEAR RESULT</Text>
           </TouchableOpacity>
         </>
       ) : null}
     </ScrollView>
+    <ActionReviewModal
+      action={reviewingAction}
+      onConfirm={handleOrchAcknowledge}
+      onCancel={handleCancelReview}
+    />
+    </View>
   );
 }
 

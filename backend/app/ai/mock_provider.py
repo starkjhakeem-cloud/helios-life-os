@@ -462,6 +462,8 @@ class MockAIProvider(AIProvider):
             for a in agents
         ]
 
+        short_title = objective[:50].rstrip()
+
         return OrchestrationResponse(
             objective=objective,
             participating_agents=[a["name"] for a in agents],
@@ -483,6 +485,34 @@ class MockAIProvider(AIProvider):
                 "Open the AI Planner to generate a detailed execution plan for the primary phase",
                 "Check your Goals and Tasks tabs to ensure this objective has at least one active task",
                 "Schedule a review checkpoint in 7 days to assess early progress across all domains",
+            ],
+            actionable_recommendations=[
+                RecommendedAction(
+                    id=f"orch-{uuid.uuid4().hex[:8]}",
+                    type="create_task",
+                    title="Create First Milestone Task",
+                    description=f"Add a high-priority task to start execution of: {short_title}",
+                    confidence=0.82,
+                    payload_preview={
+                        "title":    f"Begin: {short_title}",
+                        "priority": "high",
+                        "status":   "todo",
+                    },
+                    execution_payload={
+                        "title":    f"Begin: {short_title}",
+                        "priority": "high",
+                        "status":   "todo",
+                    },
+                ),
+                RecommendedAction(
+                    id=f"orch-{uuid.uuid4().hex[:8]}",
+                    type="generate_plan",
+                    title="Generate Execution Plan",
+                    description="Open the AI Planner to create a phased execution plan for this objective.",
+                    confidence=0.90,
+                    payload_preview={"action": "Navigate to Agents tab → AI Planner"},
+                    execution_payload=None,
+                ),
             ],
             context_scope="mock",
             generated_at=datetime.now(timezone.utc).isoformat(),

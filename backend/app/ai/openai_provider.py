@@ -185,6 +185,15 @@ class OpenAIProvider(AIProvider):
                 AgentAssessment(**item)
                 for item in (data.get("agent_assessments") or [])
             ]
+            # Parse structured actionable_recommendations defensively — a
+            # malformed individual item is dropped rather than failing the
+            # whole response, since the core assessment is still valuable.
+            actionable: list[RecommendedAction] = []
+            for item in (data.get("actionable_recommendations") or []):
+                try:
+                    actionable.append(RecommendedAction(**item))
+                except Exception:
+                    pass
             return OrchestrationResponse(
                 objective=objective,
                 participating_agents=[a["name"] for a in agents],
@@ -192,6 +201,7 @@ class OpenAIProvider(AIProvider):
                 coordinated_plan=data["coordinated_plan"],
                 risks=data.get("risks") or [],
                 recommended_next_actions=data.get("recommended_next_actions") or [],
+                actionable_recommendations=actionable,
                 context_scope="openai",
                 generated_at=datetime.now(timezone.utc).isoformat(),
             )

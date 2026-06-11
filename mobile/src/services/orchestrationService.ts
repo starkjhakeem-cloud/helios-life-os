@@ -1,5 +1,6 @@
 import { apiClient } from "./apiClient";
 import { API_ENDPOINTS } from "../config/api";
+import type { RecommendedAction } from "./aiService";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -24,7 +25,10 @@ export type OrchestrationResponse = {
   agent_assessments: AgentAssessment[];
   coordinated_plan: string;
   risks: string[];
-  recommended_next_actions: string[];       // advisory — not auto-executed
+  recommended_next_actions: string[];       // advisory plain-text — not auto-executed
+  // Structured actions that can flow into the existing AI action review system.
+  // Requires explicit operator confirmation before execution.
+  actionable_recommendations: RecommendedAction[];
   context_scope: string;
   generated_at: string;
 };

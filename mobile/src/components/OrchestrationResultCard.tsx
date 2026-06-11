@@ -1,8 +1,11 @@
-import { View, Text, StyleSheet } from "react-native";
+import { useState } from "react";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { SymbolView } from "expo-symbols";
 
 import { colors, spacing, radius, typography } from "../theme/theme";
 import type { OrchestrationResponse } from "../services/orchestrationService";
+import type { RecommendedAction } from "../store";
+import { ACTION_TYPE_LABELS } from "./ActionReviewModal";
 
 // ── Agent accent colours (keyed by agent id) ─────────────────────────────────
 
@@ -18,9 +21,14 @@ const AGENT_ACCENT: Record<string, string> = {
 
 export default function OrchestrationResultCard({
   result,
+  onReview,
+  acknowledgedIds,
 }: {
   result: OrchestrationResponse;
+  onReview: (action: RecommendedAction) => void;
+  acknowledgedIds: Set<string>;
 }) {
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const time = new Date(result.generated_at).toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
@@ -146,6 +154,58 @@ export default function OrchestrationResultCard({
               <Text style={styles.nextActionText}>{action}</Text>
             </View>
           ))}
+        </View>
+      ) : null}
+
+      {/* ── Actionable Recommendations ── */}
+      {result.actionable_recommendations.filter((a) => !dismissedIds.has(a.id)).length > 0 ? (
+        <View style={styles.execBox}>
+          <View style={styles.actionsHeader}>
+            <Text style={styles.execLabel}>ACTIONABLE RECOMMENDATIONS</Text>
+            <View style={styles.execBadge}>
+              <Text style={styles.execBadgeText}>CONFIRM TO EXECUTE</Text>
+            </View>
+          </View>
+          {result.actionable_recommendations
+            .filter((a) => !dismissedIds.has(a.id))
+            .map((action) => {
+              const isAck = acknowledgedIds.has(action.id);
+              const confPct = Math.round(action.confidence * 100);
+              return (
+                <View key={action.id} style={styles.execActionCard}>
+                  <View style={styles.execActionHeader}>
+                    <Text style={styles.execActionType}>
+                      {ACTION_TYPE_LABELS[action.type] ?? action.type}
+                    </Text>
+                    <Text style={styles.execConfText}>{confPct}%</Text>
+                  </View>
+                  <Text style={styles.execActionTitle}>{action.title}</Text>
+                  <Text style={styles.execActionDesc}>{action.description}</Text>
+                  {isAck ? (
+                    <View style={styles.execAckBadge}>
+                      <Text style={styles.execAckText}>✓ Confirmed</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.execButtons}>
+                      <TouchableOpacity
+                        style={styles.execReviewBtn}
+                        onPress={() => onReview(action)}
+                      >
+                        <Text style={styles.execReviewBtnText}>REVIEW</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.execNotNowBtn}
+                        onPress={() =>
+                          setDismissedIds((prev) => new Set([...prev, action.id]))
+                        }
+                      >
+                        <Text style={styles.execNotNowBtnText}>NOT NOW</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
         </View>
       ) : null}
     </View>
@@ -396,5 +456,127 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     flex: 1,
     lineHeight: 18,
+  },
+
+  // Actionable recommendations — structured actions that flow into ActionReviewModal
+  execBox: {
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: `${colors.accent}30`,
+    backgroundColor: `${colors.accent}08`,
+    padding: spacing.md,
+    margin: spacing.lg,
+    marginTop: spacing.sm,
+    gap: spacing.sm,
+  },
+
+  execLabel: {
+    ...typography.label,
+    color: colors.accent,
+    fontSize: 9,
+  },
+
+  execBadge: {
+    backgroundColor: `${colors.accent}20`,
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+
+  execBadgeText: {
+    ...typography.label,
+    color: colors.accent,
+    fontSize: 8,
+  },
+
+  execActionCard: {
+    backgroundColor: colors.surfaceDark,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    gap: 4,
+  },
+
+  execActionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 2,
+  },
+
+  execActionType: {
+    ...typography.label,
+    color: colors.textMuted,
+    fontSize: 9,
+  },
+
+  execConfText: {
+    ...typography.label,
+    color: colors.accent,
+    fontSize: 9,
+  },
+
+  execActionTitle: {
+    fontSize: 13,
+    fontWeight: "600" as const,
+    color: colors.textPrimary,
+    lineHeight: 18,
+  },
+
+  execActionDesc: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    lineHeight: 17,
+  },
+
+  execAckBadge: {
+    alignSelf: "flex-start" as const,
+    backgroundColor: "#10b98120",
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "#10b98140",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    marginTop: spacing.xs,
+  },
+
+  execAckText: {
+    ...typography.label,
+    color: "#10b981",
+    fontSize: 10,
+  },
+
+  execButtons: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+
+  execReviewBtn: {
+    flex: 1,
+    backgroundColor: colors.accent,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm,
+    alignItems: "center",
+  },
+
+  execReviewBtnText: {
+    ...typography.label,
+    color: colors.background,
+    fontSize: 11,
+  },
+
+  execNotNowBtn: {
+    flex: 1,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.sm,
+    alignItems: "center",
+  },
+
+  execNotNowBtnText: {
+    ...typography.label,
+    color: colors.textMuted,
+    fontSize: 11,
   },
 });
