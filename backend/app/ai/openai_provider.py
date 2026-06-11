@@ -77,6 +77,12 @@ class OpenAIProvider(AIProvider):
                 risks=data["risks"],
                 focus_block=data["focus_block"],
                 recommended_agent=data["recommended_agent"],
+                # Email fields — defensive .get() so older responses without these
+                # fields degrade gracefully instead of raising KeyError.
+                email_summary=data.get("email_summary"),
+                important_emails=data.get("important_emails") or [],
+                email_risks=data.get("email_risks") or [],
+                suggested_email_actions=data.get("suggested_email_actions") or [],
                 generated_at=datetime.now(timezone.utc).isoformat(),
             )
         except (KeyError, TypeError, ValueError) as exc:

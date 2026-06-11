@@ -14,6 +14,10 @@ type Props = {
   risks: string[];
   focus_block: string;
   recommended_agent: string;
+  email_summary?: string | null;
+  important_emails?: string[];
+  email_risks?: string[];
+  suggested_email_actions?: string[];
   generated_at: string;
 };
 
@@ -44,6 +48,10 @@ export default function BriefingCard({
   risks,
   focus_block,
   recommended_agent,
+  email_summary,
+  important_emails = [],
+  email_risks = [],
+  suggested_email_actions = [],
   generated_at,
 }: Props) {
   const time = new Date(generated_at).toLocaleTimeString("en-US", {
@@ -53,6 +61,10 @@ export default function BriefingCard({
 
   const agentAccent = AGENT_ACCENT[recommended_agent] ?? colors.textMuted;
   const agentIcon = AGENT_ICON[recommended_agent] ?? "cpu";
+
+  const hasEmailData = !!email_summary || important_emails.length > 0;
+  const topEmail = important_emails[0] ?? null;
+  const topEmailAction = suggested_email_actions[0] ?? null;
 
   return (
     <View style={styles.card}>
@@ -107,6 +119,70 @@ export default function BriefingCard({
             </View>
           ))}
         </>
+      ) : null}
+
+      {/* ── Inbox Status ── */}
+      {hasEmailData ? (
+        <View style={styles.inboxBox}>
+          {/* Header row */}
+          <View style={styles.inboxHeader}>
+            <View style={styles.inboxHeaderLeft}>
+              <SymbolView
+                name="envelope.fill"
+                size={12}
+                tintColor="#f59e0b"
+                resizeMode="scaleAspectFit"
+              />
+              <Text style={styles.inboxLabel}>INBOX STATUS</Text>
+            </View>
+            {important_emails.length > 0 ? (
+              <View style={styles.inboxBadge}>
+                <Text style={styles.inboxBadgeText}>
+                  {important_emails.length} FLAGGED
+                </Text>
+              </View>
+            ) : null}
+          </View>
+
+          {/* Summary */}
+          {email_summary ? (
+            <Text style={styles.inboxSummary}>{email_summary}</Text>
+          ) : null}
+
+          {/* Top important email */}
+          {topEmail ? (
+            <View style={styles.inboxEmailRow}>
+              <View style={styles.inboxDot} />
+              <Text style={styles.inboxEmailText} numberOfLines={2}>{topEmail}</Text>
+            </View>
+          ) : null}
+
+          {/* Email risks */}
+          {email_risks.map((risk, i) => (
+            <View key={i} style={styles.inboxRiskRow}>
+              <SymbolView
+                name="exclamationmark.triangle.fill"
+                size={10}
+                tintColor="#f59e0b"
+                resizeMode="scaleAspectFit"
+              />
+              <Text style={styles.inboxRiskText}>{risk}</Text>
+            </View>
+          ))}
+
+          {/* Suggested action */}
+          {topEmailAction ? (
+            <View style={styles.inboxActionRow}>
+              <SymbolView
+                name="arrow.right.circle.fill"
+                size={11}
+                tintColor="#f59e0b"
+                resizeMode="scaleAspectFit"
+              />
+              <Text style={styles.inboxActionText}>{topEmailAction}</Text>
+            </View>
+          ) : null}
+        </View>
       ) : null}
 
       {/* ── Focus Block ── */}
@@ -267,6 +343,111 @@ const styles = StyleSheet.create({
     color: "#f59e0b",
     flex: 1,
     lineHeight: 18,
+  },
+
+  // Inbox status box
+  inboxBox: {
+    backgroundColor: `${"#f59e0b"}10`,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: `${"#f59e0b"}30`,
+    padding: spacing.md,
+    margin: spacing.lg,
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
+    gap: 6,
+  },
+
+  inboxHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  inboxHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+
+  inboxLabel: {
+    ...typography.label,
+    color: "#f59e0b",
+    fontSize: 9,
+  },
+
+  inboxBadge: {
+    backgroundColor: `${"#f59e0b"}25`,
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+
+  inboxBadgeText: {
+    ...typography.label,
+    color: "#f59e0b",
+    fontSize: 8,
+  },
+
+  inboxSummary: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+
+  inboxEmailRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+  },
+
+  inboxDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "#f59e0b",
+    marginTop: 5,
+    flexShrink: 0,
+  },
+
+  inboxEmailText: {
+    ...typography.caption,
+    color: colors.textPrimary,
+    fontSize: 12,
+    fontWeight: "600" as const,
+    flex: 1,
+    lineHeight: 17,
+  },
+
+  inboxRiskRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 5,
+  },
+
+  inboxRiskText: {
+    ...typography.caption,
+    color: "#f59e0b",
+    fontSize: 11,
+    flex: 1,
+    lineHeight: 16,
+  },
+
+  inboxActionRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 5,
+    marginTop: 2,
+  },
+
+  inboxActionText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontSize: 12,
+    flex: 1,
+    lineHeight: 17,
+    fontStyle: "italic" as const,
   },
 
   // Focus block box

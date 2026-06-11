@@ -275,6 +275,9 @@ class MockAIProvider(AIProvider):
         else:
             time_word = "Good evening"
 
+        # Populate email fields only when the context builder surfaced email data.
+        has_emails = bool(user_context and "UNREAD MESSAGES" in user_context)
+
         return DailyBriefing(
             greeting=f"{time_word}, {user_name}. Your priority queue is loaded and systems are nominal.",
             summary=(
@@ -306,6 +309,23 @@ class MockAIProvider(AIProvider):
                 "by end of block. Then do a 10-minute review of your open task stack before context-switching."
             ),
             recommended_agent="Strategy Agent",
+            email_summary=(
+                "Your inbox has unread messages that may require attention before end of day. "
+                "High-priority items are flagged below."
+                if has_emails else None
+            ),
+            important_emails=(
+                ["Review unread high-priority messages in the Email tab (from: multiple senders)"]
+                if has_emails else []
+            ),
+            email_risks=(
+                ["Unread messages may contain time-sensitive requests — inbox review is overdue"]
+                if has_emails else []
+            ),
+            suggested_email_actions=(
+                ["Open the Email tab, filter by IMPORTANT, and action urgent messages before noon"]
+                if has_emails else []
+            ),
             generated_at=datetime.now(timezone.utc).isoformat(),
         )
 

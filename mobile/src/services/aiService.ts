@@ -13,6 +13,11 @@ export type BriefingResponse = {
   risks: string[];
   focus_block: string;
   recommended_agent: string;
+  // Email-aware fields — present when UNREAD MESSAGES context was available.
+  email_summary: string | null;
+  important_emails: string[];
+  email_risks: string[];
+  suggested_email_actions: string[];
   generated_at: string;
 };
 

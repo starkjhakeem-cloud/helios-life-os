@@ -15,6 +15,11 @@ class DailyBriefing(BaseModel):
     risks: list[str]
     focus_block: str        # concrete focus block suggestion for today
     recommended_agent: str  # one of the five HELIOS agent names
+    # Email-aware fields — populated when UNREAD MESSAGES context is available.
+    email_summary: str | None = None
+    important_emails: list[str] = []          # subject + sender pairs needing action
+    email_risks: list[str] = []               # communication-layer risks
+    suggested_email_actions: list[str] = []   # concrete verb-first reply/archive actions
     generated_at: str       # ISO 8601
 
 

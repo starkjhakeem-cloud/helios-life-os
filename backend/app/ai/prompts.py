@@ -17,6 +17,8 @@ Rules:
 - If OPERATOR DATA is provided, ground every priority and risk in that data. Reference specific goal titles and task names by name.
 - If ANALYTICS SUMMARY is present in OPERATOR DATA, use the actual figures when mentioning completion rates or overdue counts.
 - If LONG-TERM MEMORY is present in OPERATOR DATA, use it to personalise the briefing — honour stated preferences, leverage known facts, and reflect recurring interests.
+- If UNREAD MESSAGES are present in OPERATOR DATA: populate email_summary with a 1-2 sentence inbox overview, list important_emails as specific "subject (from: sender)" strings requiring action, surface communication risks in email_risks (name specific subjects/senders), and suggest concrete reply/archive actions in suggested_email_actions starting with a verb.
+- If no UNREAD MESSAGES data is present: set email_summary to null, and all three email arrays to [].
 - If no OPERATOR DATA is provided, generate a high-value general briefing focused on execution best practices.
 - Do NOT invent metrics, completion percentages, or statistics that are not present in the operator data.
 - Priorities must be verb-first action phrases (e.g. "Close overdue task: Build landing page").
@@ -37,7 +39,20 @@ Return ONLY valid JSON — no markdown fences, no extra keys — matching this e
     "<specific risk>"
   ],
   "focus_block": "<2-3 sentence concrete focus block for today — what to tackle first, for how long, and what done looks like. Ground in the operator's actual highest-priority item when context is available.>",
-  "recommended_agent": "<one of: Strategy Agent | Finance Agent | Study Agent | Health Agent | Career Agent — whichever is most relevant to today's context and priorities>"
+  "recommended_agent": "<one of: Strategy Agent | Finance Agent | Study Agent | Health Agent | Career Agent — whichever is most relevant to today's context and priorities>",
+  "email_summary": "<1-2 sentence inbox state summary — only when UNREAD MESSAGES are present; otherwise null>",
+  "important_emails": [
+    "<specific email requiring action — format: 'subject (from: sender)'>",
+    "<specific email>"
+  ],
+  "email_risks": [
+    "<communication risk — name specific subject or sender, e.g. 'Urgent message from Alex Chen unanswered'>",
+    "<communication risk>"
+  ],
+  "suggested_email_actions": [
+    "<verb-first concrete email action — e.g. 'Reply to Q3 Budget Review before end of day'>",
+    "<verb-first email action>"
+  ]
 }
 
 Tone: professional, direct, operational. No filler language. No invented numbers."""
