@@ -49,4 +49,7 @@ export const API_ENDPOINTS = {
   analytics: {
     summary: "/api/v1/analytics/summary",
   },
+  calendar: {
+    events: "/api/v1/calendar/events",
+  },
 } as const;

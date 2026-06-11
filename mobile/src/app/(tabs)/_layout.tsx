@@ -116,6 +116,16 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
+        name="calendar"
+        options={{
+          title: "Calendar",
+          tabBarIcon: ({ color }) => (
+            <TabIcon name="calendar" color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
         name="memory"
         options={{
           title: "Memory",

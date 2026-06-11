@@ -17,3 +17,5 @@ export { useSettingsStore } from "./useSettingsStore";
 export type { ThemePreference, PreferencesOut } from "../services/settingsService";
 export { useMemoryStore } from "./useMemoryStore";
 export type { Memory, MemoryType } from "../services/memoryService";
+export { useCalendarStore } from "./useCalendarStore";
+export type { CalendarEvent, CalendarEventCreate, CalendarEventUpdate, EventSource } from "../services/calendarService";

@@ -12,11 +12,12 @@ No schema changes: all data comes from the existing goals, tasks, and
 ai_memories tables.
 """
 
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.models.calendar import CalendarEvent
 from app.models.conversation import Conversation
 from app.models.goal import Goal
 from app.models.memory import AIMemory
@@ -173,6 +174,10 @@ def build_briefing_context(user_id: str, db: Session) -> str:
     if conversations:
         extras.append(conversations)
 
+    upcoming = _build_upcoming_events_section(user_id, db)
+    if upcoming:
+        extras.append(upcoming)
+
     if extras:
         return base + "\n\n" + "\n\n".join(extras)
     return base
@@ -237,6 +242,35 @@ def _build_recent_conversations_section(user_id: str, db: Session) -> str | None
     lines = [f"RECENT AI CONVERSATIONS ({len(titled)}):"]
     for t in titled:
         lines.append(f"  - {t}")
+    return "\n".join(lines)
+
+
+def _build_upcoming_events_section(user_id: str, db: Session) -> str | None:
+    """
+    Return the next 5 calendar events starting from now, formatted for the
+    daily briefing context. Uses ISO 8601 string comparison (lexicographic),
+    which is correct for zero-padded UTC timestamps.
+    """
+    from datetime import timezone
+    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    rows = (
+        db.execute(
+            select(CalendarEvent.title, CalendarEvent.start_time, CalendarEvent.location)
+            .where(
+                CalendarEvent.user_id == user_id,
+                CalendarEvent.start_time >= now_iso,
+            )
+            .order_by(CalendarEvent.start_time)
+            .limit(5)
+        )
+        .all()
+    )
+    if not rows:
+        return None
+    lines = [f"UPCOMING CALENDAR EVENTS ({len(rows)}):"]
+    for r in rows:
+        loc = f" @ {r.location}" if r.location else ""
+        lines.append(f"  - {r.title} [{r.start_time[:16].replace('T', ' ')}]{loc}")
     return "\n".join(lines)
 
 
