@@ -12,9 +12,16 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AgentCard from "../../components/AgentCard";
+import OrchestrationResultCard from "../../components/OrchestrationResultCard";
 import PlanCard from "../../components/PlanCard";
 import { colors, spacing, radius, typography } from "../../theme/theme";
-import { useAgentsStore, useAIStore, useAuthStore, useGoalsStore } from "../../store";
+import {
+  useAgentsStore,
+  useAIStore,
+  useAuthStore,
+  useGoalsStore,
+  useOrchestrationStore,
+} from "../../store";
 
 const HORIZONS: { label: string; days: number }[] = [
   { label: "7D",  days: 7  },
@@ -22,6 +29,14 @@ const HORIZONS: { label: string; days: number }[] = [
   { label: "30D", days: 30 },
   { label: "90D", days: 90 },
 ];
+
+const ORCH_ACCENT: Record<string, string> = {
+  strategy: "#7c3aed",
+  finance:  "#10b981",
+  study:    "#22d3ee",
+  health:   "#ef4444",
+  career:   "#f59e0b",
+};
 
 export default function AgentsScreen() {
   const insets = useSafeAreaInsets();
@@ -39,12 +54,22 @@ export default function AgentsScreen() {
 
   const { plan, isPlanLoading, planError, generatePlan, clearPlan } = useAIStore();
   const { goals } = useGoalsStore();
+  const {
+    result: orchResult,
+    isLoading: isOrchLoading,
+    error: orchError,
+    orchestrate,
+    clearResult: clearOrchResult,
+  } = useOrchestrationStore();
 
   const [prompt, setPrompt] = useState("");
   const [horizonDays, setHorizonDays] = useState(30);
   const [linkedGoalId, setLinkedGoalId] = useState<string | null>(null);
   const [promptError, setPromptError] = useState<string | null>(null);
   const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
+  const [orchObjective, setOrchObjective] = useState("");
+  const [orchSelectedIds, setOrchSelectedIds] = useState<string[] | null>(null);
+  const [orchObjectiveError, setOrchObjectiveError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     if (accessToken) fetchAgents(accessToken);
@@ -73,6 +98,36 @@ export default function AgentsScreen() {
       prompt: prompt.trim(),
       planning_horizon_days: horizonDays,
       goal_id: linkedGoalId ?? undefined,
+    });
+  }
+
+  function toggleAgentSelection(agentId: string) {
+    if (orchSelectedIds === null) {
+      // All currently selected — deselect this one
+      const next = agents.map((a) => a.id).filter((id) => id !== agentId);
+      setOrchSelectedIds(next);
+    } else if (orchSelectedIds.includes(agentId)) {
+      if (orchSelectedIds.length === 1) return; // always keep at least one
+      const next = orchSelectedIds.filter((id) => id !== agentId);
+      // Normalise back to null (all) if every agent is now included
+      setOrchSelectedIds(next.length === agents.length ? null : next);
+    } else {
+      const next = [...orchSelectedIds, agentId];
+      setOrchSelectedIds(next.length === agents.length ? null : next);
+    }
+  }
+
+  async function handleOrchestrate() {
+    if (!accessToken) return;
+    if (!orchObjective.trim()) {
+      setOrchObjectiveError("Describe the objective for orchestration.");
+      return;
+    }
+    setOrchObjectiveError(null);
+    await orchestrate(accessToken, {
+      objective: orchObjective.trim(),
+      selected_agent_ids: orchSelectedIds ?? undefined,
+      context_scope: "daily_briefing",
     });
   }
 
@@ -249,6 +304,113 @@ export default function AgentsScreen() {
           <PlanCard {...plan} />
           <TouchableOpacity style={styles.clearButton} onPress={clearPlan}>
             <Text style={styles.clearButtonText}>CLEAR PLAN</Text>
+          </TouchableOpacity>
+        </>
+      ) : null}
+
+      {/* ── Divider ── */}
+      <View style={styles.divider} />
+
+      {/* ── Agent Orchestration ── */}
+      <View style={styles.sectionHeaderRow}>
+        <Text style={styles.sectionLabel}>AGENT ORCHESTRATION</Text>
+        {isOrchLoading ? (
+          <ActivityIndicator size="small" color={colors.accent} />
+        ) : null}
+      </View>
+
+      <View style={styles.plannerCard}>
+        <Text style={styles.plannerHint}>
+          Coordinate all agents around a shared objective for a multi-domain
+          assessment. No actions are executed automatically.
+        </Text>
+
+        <Text style={styles.fieldLabel}>OBJECTIVE</Text>
+        <TextInput
+          style={[
+            styles.promptInput,
+            orchObjectiveError ? styles.promptInputError : null,
+          ]}
+          placeholder="e.g. Launch a freelance consulting practice in 60 days"
+          placeholderTextColor={colors.textMuted}
+          value={orchObjective}
+          onChangeText={(t) => {
+            setOrchObjective(t);
+            setOrchObjectiveError(null);
+          }}
+          multiline
+          numberOfLines={3}
+          textAlignVertical="top"
+        />
+        {orchObjectiveError ? (
+          <Text style={styles.fieldError}>{orchObjectiveError}</Text>
+        ) : null}
+
+        {agents.length > 0 ? (
+          <>
+            <Text style={styles.fieldLabel}>PARTICIPATING AGENTS</Text>
+            <View style={styles.orchAgentRow}>
+              {agents.map((agent) => {
+                const isSelected =
+                  orchSelectedIds === null ||
+                  orchSelectedIds.includes(agent.id);
+                const accent = ORCH_ACCENT[agent.id] ?? colors.textMuted;
+                return (
+                  <TouchableOpacity
+                    key={agent.id}
+                    style={[
+                      styles.orchAgentChip,
+                      isSelected && {
+                        borderColor: `${accent}80`,
+                        backgroundColor: `${accent}18`,
+                      },
+                    ]}
+                    onPress={() => toggleAgentSelection(agent.id)}
+                  >
+                    <Text
+                      style={[
+                        styles.orchAgentChipText,
+                        isSelected && { color: accent },
+                      ]}
+                    >
+                      {agent.name.replace(" Agent", "")}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
+        ) : null}
+
+        <TouchableOpacity
+          style={[
+            styles.generateButton,
+            styles.orchButton,
+            isOrchLoading && styles.generateButtonDisabled,
+          ]}
+          onPress={handleOrchestrate}
+          disabled={isOrchLoading}
+        >
+          {isOrchLoading ? (
+            <ActivityIndicator size="small" color={colors.textPrimary} />
+          ) : null}
+          <Text style={styles.generateButtonText}>
+            {isOrchLoading ? "ORCHESTRATING..." : "ORCHESTRATE"}
+          </Text>
+        </TouchableOpacity>
+
+        {orchError ? (
+          <Text style={[styles.fieldError, { marginTop: spacing.sm }]}>
+            {orchError}
+          </Text>
+        ) : null}
+      </View>
+
+      {orchResult ? (
+        <>
+          <OrchestrationResultCard result={orchResult} />
+          <TouchableOpacity style={styles.clearButton} onPress={clearOrchResult}>
+            <Text style={styles.clearButtonText}>CLEAR RESULT</Text>
           </TouchableOpacity>
         </>
       ) : null}
@@ -450,5 +612,33 @@ const styles = StyleSheet.create({
   clearButtonText: {
     ...typography.label,
     color: colors.textMuted,
+  },
+
+  // Orchestration
+  orchButton: {
+    backgroundColor: colors.accent,
+    marginTop: spacing.sm,
+  },
+
+  orchAgentRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+
+  orchAgentChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceDark,
+  },
+
+  orchAgentChipText: {
+    ...typography.label,
+    color: colors.textMuted,
+    fontSize: 11,
   },
 });

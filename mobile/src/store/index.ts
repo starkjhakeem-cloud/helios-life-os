@@ -21,3 +21,5 @@ export { useCalendarStore } from "./useCalendarStore";
 export type { CalendarEvent, CalendarEventCreate, CalendarEventUpdate, EventSource } from "../services/calendarService";
 export { useEmailStore } from "./useEmailStore";
 export type { EmailMessage, EmailMessageCreate, EmailMessageUpdate, MessageImportance, MessageStatus, MessageSource } from "../services/emailService";
+export { useOrchestrationStore } from "./useOrchestrationStore";
+export type { AgentAssessment, OrchestrationRequest, OrchestrationResponse } from "../services/orchestrationService";

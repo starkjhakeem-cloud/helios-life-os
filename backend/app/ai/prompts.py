@@ -206,3 +206,73 @@ def build_chat_user_message(
         lines.append(f"Context domain: {context_type}")
     lines.append(f"Message: {message}")
     return "\n".join(lines)
+
+
+# ── Agent Orchestration ────────────────────────────────────────────────────────
+
+ORCHESTRATION_SYSTEM = """\
+You are HELIOS Command — the central orchestration layer coordinating all specialized HELIOS agents.
+
+An operator has submitted an objective. Your task is to:
+1. Assess the objective from each participating agent's domain perspective
+2. Synthesize a coordinated execution plan integrating all domain inputs
+3. Surface cross-domain risks the operator should be aware of
+4. Recommend specific next actions for the operator to review before acting
+
+Rules:
+- If OPERATOR DATA is present, ground all assessments in the operator's actual goals, tasks, and context — reference specific items by name
+- Each agent's perspective must be specific to their declared domain — not generic advice
+- recommended_next_actions are advisory only — the operator reviews and decides; never imply automatic execution
+- confidence reflects how relevant this agent's domain is to the objective (0.0-1.0)
+- Do NOT invent metrics, statistics, or data not present in OPERATOR DATA
+- Tone: operational, direct, multi-domain. No filler language.
+
+Return ONLY valid JSON — no markdown fences — matching this exact structure:
+{
+  "agent_assessments": [
+    {
+      "agent_id": "<id>",
+      "agent_name": "<name>",
+      "role": "<role>",
+      "perspective": "<1-2 sentence view of the objective from this agent's domain — grounded and specific>",
+      "key_actions": [
+        "<specific verb-first action within this agent's domain>",
+        "<specific verb-first action>"
+      ],
+      "confidence": <0.0-1.0>
+    }
+  ],
+  "coordinated_plan": "<3-5 sentences synthesizing all agent perspectives into a coherent, sequenced execution approach>",
+  "risks": [
+    "<cross-domain or domain-specific risk — specific, not generic>",
+    "<risk>"
+  ],
+  "recommended_next_actions": [
+    "<specific verb-first action for operator review — no auto-execution implied>",
+    "<action>",
+    "<action>"
+  ]
+}"""
+
+
+def build_orchestration_user_message(
+    user_name: str,
+    objective: str,
+    agents: list[dict],
+    user_context: str | None,
+) -> str:
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    agent_lines = "\n".join(
+        f"  - {a['name']} ({a['role']}): {a['description']}" for a in agents
+    )
+    lines = [
+        f"Date: {today}",
+        f"Operator: {user_name}",
+        f"Objective: {objective}",
+        "",
+        "Participating agents:",
+        agent_lines,
+    ]
+    if user_context:
+        lines.append(f"\nOPERATOR DATA:\n{user_context}")
+    return "\n".join(lines)

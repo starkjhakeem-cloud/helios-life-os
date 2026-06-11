@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
 from app.schemas.ai import ChatResponse, DailyBriefing, PlanResponse
+from app.schemas.orchestration import OrchestrationResponse
 
 
 class AIProvider(ABC):
@@ -25,3 +26,12 @@ class AIProvider(ABC):
         context_type: str | None,
         user_context: str | None = None,
     ) -> ChatResponse: ...
+
+    @abstractmethod
+    def orchestrate_agents(
+        self,
+        objective: str,
+        agents: list[dict],   # [{id, name, role, description}]
+        user_context: str | None,
+        user_name: str,
+    ) -> OrchestrationResponse: ...

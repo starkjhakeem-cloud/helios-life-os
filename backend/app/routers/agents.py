@@ -16,6 +16,7 @@ from app.schemas.agents import (
     AgentProfile,
     AgentsResponse,
 )
+from app.schemas.orchestration import OrchestrationRequest, OrchestrationResponse
 
 router = APIRouter()
 
@@ -260,6 +261,39 @@ def get_agent(
     )
 
     return AgentDetail(**agent.model_dump(), context_summary=context_summary)
+
+
+@router.post("/orchestrate", response_model=OrchestrationResponse)
+def orchestrate(
+    payload: OrchestrationRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> OrchestrationResponse:
+    """
+    Coordinate selected agents around a shared objective.
+    Builds unified operator context, then returns a multi-domain advisory
+    assessment. No tasks, goals, or records are created or modified.
+    """
+    from app.ai.orchestrator import run_orchestration
+
+    if payload.selected_agent_ids is not None:
+        participating = [a for a in _AGENTS if a.id in payload.selected_agent_ids]
+        if not participating:
+            raise HTTPException(
+                status_code=422,
+                detail="No valid agent IDs in selected_agent_ids.",
+            )
+    else:
+        participating = list(_AGENTS)
+
+    return run_orchestration(
+        objective=payload.objective,
+        agents=participating,
+        context_scope=payload.context_scope,
+        user_id=current_user.id,
+        user_name=current_user.name,
+        db=db,
+    )
 
 
 @router.get("/{agent_id}/context", response_model=AgentContextPackage)

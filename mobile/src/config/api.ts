@@ -37,7 +37,8 @@ export const API_ENDPOINTS = {
     preferences: "/api/v1/settings/preferences",
   },
   agents: {
-    list: "/api/v1/agents",
+    list:        "/api/v1/agents",
+    orchestrate: "/api/v1/agents/orchestrate",
   },
   goals: {
     list: "/api/v1/goals",

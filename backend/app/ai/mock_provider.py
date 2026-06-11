@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from app.ai.base import AIProvider
 from app.schemas.ai import BriefingPriority, ChatResponse, DailyBriefing, PlanResponse, PlanStep, RecommendedAction
+from app.schemas.orchestration import AgentAssessment, OrchestrationResponse
 
 # ── Intent detection ──────────────────────────────────────────────────────────
 
@@ -405,6 +406,85 @@ class MockAIProvider(AIProvider):
                 f"even 30–45 minutes daily compounds significantly over {horizon} days. "
                 "Review this plan at the midpoint and adjust steps if the context has shifted."
             ),
+            generated_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+    def orchestrate_agents(
+        self,
+        objective: str,
+        agents: list[dict],
+        user_context: str | None,
+        user_name: str,
+    ) -> OrchestrationResponse:
+        _DOMAIN_ACTIONS: dict[str, list[str]] = {
+            "strategy": [
+                "Map the objective against your active goals and flag misalignments",
+                "Break the objective into quarterly milestones with measurable checkpoints",
+                "Identify the single highest-leverage first action to take within 7 days",
+            ],
+            "finance": [
+                "Estimate the resource investment required and check against current budget headroom",
+                "Define a financial success metric and set a spend threshold before committing",
+                "Identify financial risks and surface any runway concerns tied to this objective",
+            ],
+            "study": [
+                "Identify the skill gaps relevant to this objective and source learning materials",
+                "Schedule dedicated study blocks in the next 14 days to address knowledge gaps",
+                "Summarise existing knowledge that directly supports this objective",
+            ],
+            "health": [
+                "Assess whether current energy and recovery levels support the effort required",
+                "Schedule recovery protocols to prevent burnout during the execution window",
+                "Flag lifestyle adjustments needed to sustain focus over the objective timeline",
+            ],
+            "career": [
+                "Evaluate how this objective advances or detracts from your declared career trajectory",
+                "Identify network contacts or mentors who can accelerate progress on this objective",
+                "Align the objective with your 6–18 month career roadmap",
+            ],
+        }
+
+        assessments = [
+            AgentAssessment(
+                agent_id=a["id"],
+                agent_name=a["name"],
+                role=a["role"],
+                perspective=(
+                    f"From a {a['role'].lower()} perspective, this objective requires "
+                    "domain-specific analysis and structured execution to deliver measurable results."
+                ),
+                key_actions=_DOMAIN_ACTIONS.get(a["id"], [
+                    f"Assess the objective from the {a['role'].lower()} domain",
+                    f"Identify {a['role'].lower()} risks and surface blockers",
+                ])[:3],
+                confidence=0.78,
+            )
+            for a in agents
+        ]
+
+        return OrchestrationResponse(
+            objective=objective,
+            participating_agents=[a["name"] for a in agents],
+            agent_assessments=assessments,
+            coordinated_plan=(
+                "A coordinated multi-agent approach is recommended for this objective. "
+                "Begin with strategic alignment to ensure it maps to your active goals, "
+                "then assess resource and skill requirements before committing to a timeline. "
+                "Schedule weekly cross-domain reviews to keep all agents synchronized. "
+                "[Context mode active — enable the OpenAI provider for data-driven orchestration.]"
+            ),
+            risks=[
+                "Scope creep — without clear boundaries, multi-domain objectives can expand beyond manageable size",
+                "Resource conflict — multiple domains may compete for the same time and energy allocation",
+                "Misaligned priorities — verify this objective does not crowd out higher-priority active goals",
+            ],
+            recommended_next_actions=[
+                "Review the coordinated plan above and confirm the objective is correctly scoped",
+                "Open the AI Planner to generate a detailed execution plan for the primary phase",
+                "Check your Goals and Tasks tabs to ensure this objective has at least one active task",
+                "Schedule a review checkpoint in 7 days to assess early progress across all domains",
+            ],
+            context_scope="mock",
             generated_at=datetime.now(timezone.utc).isoformat(),
         )
 

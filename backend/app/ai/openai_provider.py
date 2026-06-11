@@ -4,13 +4,16 @@ from datetime import datetime, timezone
 from app.ai.base import AIProvider
 from app.ai.prompts import (
     BRIEFING_SYSTEM,
+    ORCHESTRATION_SYSTEM,
     PLAN_SYSTEM,
     build_briefing_user_message,
     build_chat_system,
     build_chat_user_message,
+    build_orchestration_user_message,
     build_plan_user_message,
 )
 from app.schemas.ai import BriefingPriority, ChatResponse, DailyBriefing, PlanResponse, PlanStep, RecommendedAction
+from app.schemas.orchestration import AgentAssessment, OrchestrationResponse
 
 
 class OpenAIProvider(AIProvider):
@@ -30,7 +33,7 @@ class OpenAIProvider(AIProvider):
             ) from exc
         self._model = model
 
-    def _call(self, system: str, user: str) -> dict:
+    def _call(self, system: str, user: str, max_tokens: int = 1500) -> dict:
         """Send a chat completion request and return the parsed JSON response dict."""
         import openai
 
@@ -43,7 +46,7 @@ class OpenAIProvider(AIProvider):
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.7,
-                max_tokens=1500,
+                max_tokens=max_tokens,
             )
             content = response.choices[0].message.content or ""
             return json.loads(content)
@@ -157,4 +160,42 @@ class OpenAIProvider(AIProvider):
         except (KeyError, TypeError, ValueError) as exc:
             raise RuntimeError(
                 f"OpenAI chat response did not match expected schema: {exc}"
+            ) from exc
+
+    def orchestrate_agents(
+        self,
+        objective: str,
+        agents: list[dict],
+        user_context: str | None,
+        user_name: str,
+    ) -> OrchestrationResponse:
+        user_msg = build_orchestration_user_message(
+            user_name=user_name,
+            objective=objective,
+            agents=agents,
+            user_context=user_context,
+        )
+        try:
+            data = self._call(
+                system=ORCHESTRATION_SYSTEM,
+                user=user_msg,
+                max_tokens=2000,
+            )
+            assessments = [
+                AgentAssessment(**item)
+                for item in (data.get("agent_assessments") or [])
+            ]
+            return OrchestrationResponse(
+                objective=objective,
+                participating_agents=[a["name"] for a in agents],
+                agent_assessments=assessments,
+                coordinated_plan=data["coordinated_plan"],
+                risks=data.get("risks") or [],
+                recommended_next_actions=data.get("recommended_next_actions") or [],
+                context_scope="openai",
+                generated_at=datetime.now(timezone.utc).isoformat(),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RuntimeError(
+                f"OpenAI orchestration response did not match expected schema: {exc}"
             ) from exc
