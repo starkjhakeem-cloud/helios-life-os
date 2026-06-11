@@ -25,6 +25,7 @@ export const API_ENDPOINTS = {
     plan:     "/api/v1/ai/plan",
     chat:     "/api/v1/ai/chat",
     execute:  "/api/v1/ai/actions/execute",
+    memory:   "/api/v1/ai/memory",
   },
   conversations: {
     base: "/api/v1/ai/conversations",

@@ -15,6 +15,7 @@ Generate a daily operational briefing tailored to the operator's current state.
 
 Rules:
 - If OPERATOR DATA is provided, ground every priority and risk in that data. Reference specific goal titles and task names by name.
+- If LONG-TERM MEMORY is present in OPERATOR DATA, use it to personalise the briefing — honour stated preferences, leverage known facts, and reflect recurring interests.
 - If no OPERATOR DATA is provided, generate a high-value general briefing focused on execution best practices.
 - Do NOT invent metrics, completion percentages, or statistics that are not present in the operator data.
 - Priorities must be verb-first action phrases (e.g. "Close overdue task: Build landing page").
@@ -152,6 +153,7 @@ recommended_actions rules:
 reply rules:
 - 2-5 sentences; direct and specific
 - If OPERATOR DATA is present, reference specific goal or task names — do not give generic advice
+- If LONG-TERM MEMORY is present in OPERATOR DATA, use it to personalise the reply — honour stated preferences, leverage known facts about the operator, and reference their interests when relevant
 - No filler phrases: no "Great question!", "Certainly!", or "Of course!"
 
 Other rules:

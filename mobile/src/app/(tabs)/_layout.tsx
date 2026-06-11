@@ -116,6 +116,16 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
+        name="memory"
+        options={{
+          title: "Memory",
+          tabBarIcon: ({ color }) => (
+            <TabIcon name="brain.head.profile" color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",

@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.ai.context_builder import build_user_context
+from app.ai.context_builder import build_memory_context, build_user_context
 from app.ai.factory import get_ai_provider
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
@@ -76,11 +76,13 @@ def chat(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ChatResponse:
-    # Build live user context only when the client opts in.
-    # All queries inside build_user_context are scoped to current_user.id.
-    user_context: str | None = None
+    # Long-term memories are always injected — they represent who the operator
+    # is, not transient operational data. Live goals/tasks are added only when
+    # the client opts in via include_context.
     if payload.include_context:
-        user_context = build_user_context(user_id=current_user.id, db=db)
+        user_context: str | None = build_user_context(user_id=current_user.id, db=db)
+    else:
+        user_context = build_memory_context(user_id=current_user.id, db=db)
 
     try:
         return get_ai_provider().generate_chat_reply(

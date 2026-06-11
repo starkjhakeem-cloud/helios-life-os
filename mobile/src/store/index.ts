@@ -15,3 +15,5 @@ export { useRemindersStore } from "./useRemindersStore";
 export type { ReminderOut } from "../services/reminderService";
 export { useSettingsStore } from "./useSettingsStore";
 export type { ThemePreference, PreferencesOut } from "../services/settingsService";
+export { useMemoryStore } from "./useMemoryStore";
+export type { Memory, MemoryType } from "../services/memoryService";

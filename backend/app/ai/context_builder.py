@@ -1,5 +1,6 @@
 """
-Build a plain-text context summary of a user's active goals and open tasks.
+Build a plain-text context summary of a user's active goals, open tasks, and
+long-term AI memories.
 
 This summary is injected into AI prompts when the user enables context mode —
 it lets the AI give grounded, specific advice rather than generic guidance.
@@ -7,7 +8,8 @@ it lets the AI give grounded, specific advice rather than generic guidance.
 Security: every query is scoped with WHERE user_id = <current_user.id>.
           Cross-user data leakage is structurally impossible.
 
-No schema changes: all data comes from the existing goals and tasks tables.
+No schema changes: all data comes from the existing goals, tasks, and
+ai_memories tables.
 """
 
 from datetime import date
@@ -16,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.goal import Goal
+from app.models.memory import AIMemory
 from app.models.task import Task
 
 _GOAL_LIMIT = 10
@@ -23,13 +26,14 @@ _TASK_FETCH_LIMIT = 60   # generous fetch; we filter + cap in Python
 _IN_PROGRESS_CAP = 10
 _HIGH_PRIORITY_CAP = 5
 _OVERDUE_CAP = 5
+_MEMORY_LIMIT = 10       # most recent memories injected per request
 
 
 def build_user_context(user_id: str, db: Session) -> str:
     """
-    Return a concise, human-readable summary of the user's current
-    goals and tasks suitable for inclusion in an AI system prompt.
-    Never includes data belonging to another user.
+    Return a concise, human-readable summary of the user's current goals,
+    tasks, and long-term memories suitable for inclusion in an AI system
+    prompt. Never includes data belonging to another user.
     """
     today = date.today().isoformat()
 
@@ -111,7 +115,39 @@ def build_user_context(user_id: str, db: Session) -> str:
             lines.append(f"  - {t.title} (was due: {t.due_date})")
         parts.append("\n".join(lines))
 
+    memory_section = _build_memory_section(user_id, db)
+    if memory_section:
+        parts.append(memory_section)
+
     return "\n\n".join(parts) if parts else "No active goals or open tasks found."
+
+
+def build_memory_context(user_id: str, db: Session) -> str | None:
+    """
+    Return only the long-term memory section. Used by the chat endpoint when
+    the operator has opted out of live goals/tasks context but memories should
+    still personalise the response.
+    """
+    return _build_memory_section(user_id, db)
+
+
+def _build_memory_section(user_id: str, db: Session) -> str | None:
+    memories = (
+        db.execute(
+            select(AIMemory)
+            .where(AIMemory.user_id == user_id)
+            .order_by(AIMemory.created_at.desc())
+            .limit(_MEMORY_LIMIT)
+        )
+        .scalars()
+        .all()
+    )
+    if not memories:
+        return None
+    lines = [f"LONG-TERM MEMORY ({len(memories)} entries):"]
+    for m in memories:
+        lines.append(f"  [{m.memory_type.upper()}] {m.content}")
+    return "\n".join(lines)
 
 
 def _safe_date_lt(date_str: str, compare: str) -> bool:

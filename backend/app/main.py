@@ -13,7 +13,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.config import settings
 from app.core.limiter import limiter
 from app.logging_config import configure_logging
-from app.routers import agents, ai, analytics, auth, conversations, dashboard, goals, health, reminders, tasks
+from app.routers import agents, ai, analytics, auth, conversations, dashboard, goals, health, memory, reminders, tasks
 from app.routers import settings as settings_router
 
 configure_logging(settings)
@@ -178,6 +178,12 @@ app.include_router(
     settings_router.router,
     prefix=f"/api/{settings.api_version}/settings",
     tags=["settings"],
+)
+
+app.include_router(
+    memory.router,
+    prefix=f"/api/{settings.api_version}/ai/memory",
+    tags=["ai-memory"],
 )
 
 

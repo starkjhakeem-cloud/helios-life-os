@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from app.config import settings  # noqa: E402
 from app.db.base import Base  # noqa: E402
 from app.models import user  # noqa: E402, F401 — registers User with Base.metadata
-from app.models import goal, task, conversation, reminder, user_preferences  # noqa: E402, F401 — registers all models
+from app.models import goal, task, conversation, reminder, user_preferences, memory  # noqa: E402, F401 — registers all models
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)
