@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
   ActivityIndicator,
   StyleSheet,
   ScrollView,
+  RefreshControl,
   TouchableOpacity,
   TextInput,
 } from "react-native";
@@ -26,7 +27,16 @@ export default function AgentsScreen() {
   const insets = useSafeAreaInsets();
   const accessToken = useAuthStore((s) => s.accessToken);
 
-  const { agents, isLoading: agentsLoading, error: agentsError, fetchAgents } = useAgentsStore();
+  const {
+    agents,
+    selectedAgent,
+    isLoading: agentsLoading,
+    isDetailLoading,
+    error: agentsError,
+    fetchAgents,
+    fetchAgentDetail,
+  } = useAgentsStore();
+
   const { plan, isPlanLoading, planError, generatePlan, clearPlan } = useAIStore();
   const { goals } = useGoalsStore();
 
@@ -34,12 +44,25 @@ export default function AgentsScreen() {
   const [horizonDays, setHorizonDays] = useState(30);
   const [linkedGoalId, setLinkedGoalId] = useState<string | null>(null);
   const [promptError, setPromptError] = useState<string | null>(null);
+  const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    if (accessToken) fetchAgents(accessToken);
+  }, [accessToken, fetchAgents]);
 
   useEffect(() => {
-    if (accessToken) {
-      fetchAgents(accessToken);
+    load();
+  }, [load]);
+
+  function handleExpand(agentId: string) {
+    // Only fetch detail if this is a newly expanded agent
+    if (expandedAgentId !== agentId && accessToken) {
+      setExpandedAgentId(agentId);
+      fetchAgentDetail(accessToken, agentId);
+    } else {
+      setExpandedAgentId(agentId);
     }
-  }, [accessToken, fetchAgents]);
+  }
 
   async function handleGenerate() {
     if (!accessToken) return;
@@ -55,6 +78,8 @@ export default function AgentsScreen() {
     });
   }
 
+  const activeAgents = agents.filter((a) => a.status === "active");
+  const standbyAgents = agents.filter((a) => a.status !== "active");
   const activeGoals = goals.filter((g) => g.status === "active");
 
   return (
@@ -66,19 +91,28 @@ export default function AgentsScreen() {
         { paddingTop: insets.top + spacing.md },
       ]}
       keyboardShouldPersistTaps="handled"
+      refreshControl={
+        <RefreshControl
+          refreshing={agentsLoading}
+          onRefresh={load}
+          tintColor={colors.accentCyan}
+        />
+      }
     >
-      {/* Hero */}
+      {/* ── Hero ── */}
       <View style={styles.heroCard}>
         <Text style={styles.heroLabel}>HELIOS AGENTS</Text>
         <Text style={styles.heroTitle}>Specialized Intelligence</Text>
         <Text style={styles.heroSubtitle}>
-          Five autonomous agents monitoring your life systems in real time.
+          {agents.length > 0
+            ? `${activeAgents.length} active · ${standbyAgents.length} on standby · tap an agent to inspect capabilities`
+            : "Intelligent agents monitoring your life systems."}
         </Text>
       </View>
 
-      {/* Agent Roster */}
+      {/* ── Active agents ── */}
       <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionLabel}>AGENT ROSTER</Text>
+        <Text style={styles.sectionLabel}>ACTIVE AGENTS</Text>
         {agentsLoading ? (
           <ActivityIndicator size="small" color={colors.accentCyan} />
         ) : null}
@@ -88,14 +122,38 @@ export default function AgentsScreen() {
         <Text style={styles.errorText}>{agentsError}</Text>
       ) : null}
 
-      {agents.map((agent) => (
-        <AgentCard key={agent.id} {...agent} />
+      {activeAgents.map((agent) => (
+        <AgentCard
+          key={agent.id}
+          agent={agent}
+          detail={selectedAgent?.id === agent.id ? selectedAgent : null}
+          isDetailLoading={isDetailLoading && expandedAgentId === agent.id}
+          onExpand={handleExpand}
+        />
       ))}
 
-      {/* Divider */}
+      {/* ── Standby agents ── */}
+      {standbyAgents.length > 0 ? (
+        <>
+          <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>
+            STANDBY AGENTS
+          </Text>
+          {standbyAgents.map((agent) => (
+            <AgentCard
+              key={agent.id}
+              agent={agent}
+              detail={selectedAgent?.id === agent.id ? selectedAgent : null}
+              isDetailLoading={isDetailLoading && expandedAgentId === agent.id}
+              onExpand={handleExpand}
+            />
+          ))}
+        </>
+      ) : null}
+
+      {/* ── Divider ── */}
       <View style={styles.divider} />
 
-      {/* AI Planner */}
+      {/* ── AI Planner ── */}
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionLabel}>AI PLANNER</Text>
       </View>
@@ -105,7 +163,6 @@ export default function AgentsScreen() {
           Describe an objective and HELIOS will generate a structured execution plan.
         </Text>
 
-        {/* Prompt input */}
         <Text style={styles.fieldLabel}>OBJECTIVE</Text>
         <TextInput
           style={[styles.promptInput, promptError ? styles.promptInputError : null]}
@@ -121,7 +178,6 @@ export default function AgentsScreen() {
           <Text style={styles.fieldError}>{promptError}</Text>
         ) : null}
 
-        {/* Horizon selector */}
         <Text style={styles.fieldLabel}>PLANNING HORIZON</Text>
         <View style={styles.horizonRow}>
           {HORIZONS.map(({ label, days }) => (
@@ -137,7 +193,6 @@ export default function AgentsScreen() {
           ))}
         </View>
 
-        {/* Goal picker (only when active goals exist in store) */}
         {activeGoals.length > 0 ? (
           <>
             <Text style={styles.fieldLabel}>LINK TO GOAL</Text>
@@ -173,7 +228,6 @@ export default function AgentsScreen() {
           </>
         ) : null}
 
-        {/* Generate button */}
         <TouchableOpacity
           style={[styles.generateButton, isPlanLoading && styles.generateButtonDisabled]}
           onPress={handleGenerate}
@@ -192,7 +246,6 @@ export default function AgentsScreen() {
         ) : null}
       </View>
 
-      {/* Generated plan */}
       {plan ? (
         <>
           <PlanCard {...plan} />
@@ -247,6 +300,11 @@ const styles = StyleSheet.create({
   sectionLabel: {
     ...typography.label,
     color: colors.textMuted,
+  },
+
+  sectionLabelSpaced: {
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
   },
 
   errorText: {
