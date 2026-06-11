@@ -9,8 +9,16 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.integration import UserIntegration
+from app.models.sync_job import SyncJob
 from app.models.user import User
-from app.schemas.integration import IntegrationListResponse, IntegrationOut, MockConnectRequest
+from app.schemas.integration import (
+    IntegrationListResponse,
+    IntegrationOut,
+    MockConnectRequest,
+    SyncJobOut,
+    SyncStatusResponse,
+)
+from app.services.sync_simulator import run_mock_sync
 
 router = APIRouter()
 
@@ -130,6 +138,120 @@ def mock_connect(
     db.commit()
     db.refresh(row)
     return _to_out(row)
+
+
+def _job_to_out(job: SyncJob) -> SyncJobOut:
+    return SyncJobOut(
+        id=job.id,
+        integration_id=job.integration_id,
+        provider=job.provider,
+        status=job.status,
+        started_at=job.started_at.isoformat(),
+        completed_at=job.completed_at.isoformat() if job.completed_at else None,
+        records_processed=job.records_processed,
+        records_created=job.records_created,
+        records_updated=job.records_updated,
+        errors=json.loads(job.errors) if job.errors else [],
+    )
+
+
+@router.get("/sync/status", response_model=SyncStatusResponse)
+def get_sync_status(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> SyncStatusResponse:
+    """Return the most recent sync job for each of the user's connected integrations."""
+    connected = db.execute(
+        select(UserIntegration).where(
+            UserIntegration.user_id == current_user.id,
+            UserIntegration.status == "connected",
+        )
+    ).scalars().all()
+
+    jobs: list[SyncJobOut] = []
+    for integration in connected:
+        job = db.execute(
+            select(SyncJob)
+            .where(
+                SyncJob.integration_id == integration.id,
+                SyncJob.user_id == current_user.id,
+            )
+            .order_by(SyncJob.started_at.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if job:
+            jobs.append(_job_to_out(job))
+
+    return SyncStatusResponse(jobs=jobs)
+
+
+@router.post("/{integration_id}/sync", response_model=SyncJobOut, status_code=201)
+def trigger_sync(
+    integration_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> SyncJobOut:
+    """
+    Run a mock sync for the given connected integration.
+    Upserts simulated records into calendar_events or email_messages, then
+    updates integration.last_sync_at. Real sync workers will replace the
+    simulation while keeping the same SyncJob row lifecycle.
+    """
+    integration = db.execute(
+        select(UserIntegration).where(
+            UserIntegration.id == integration_id,
+            UserIntegration.user_id == current_user.id,
+        )
+    ).scalar_one_or_none()
+    if not integration:
+        raise HTTPException(status_code=404, detail="Integration not found.")
+    if integration.status != "connected":
+        raise HTTPException(
+            status_code=422,
+            detail="Integration is not connected. Connect it before syncing.",
+        )
+
+    now = datetime.now(timezone.utc)
+    job = SyncJob(
+        id=str(uuid.uuid4()),
+        user_id=current_user.id,
+        integration_id=integration_id,
+        provider=integration.provider,
+        status="running",
+        started_at=now,
+        completed_at=None,
+        records_processed=0,
+        records_created=0,
+        records_updated=0,
+        errors=None,
+    )
+    db.add(job)
+    db.commit()
+
+    try:
+        created, updated, errors = run_mock_sync(integration.provider, current_user.id, db)
+
+        job.status = "completed"
+        job.completed_at = datetime.now(timezone.utc)
+        job.records_created = created
+        job.records_updated = updated
+        job.records_processed = created + updated
+        job.errors = json.dumps(errors) if errors else None
+
+        integration.last_sync_at = datetime.now(timezone.utc)
+        integration.updated_at = datetime.now(timezone.utc)
+
+        db.commit()
+        db.refresh(job)
+        return _job_to_out(job)
+
+    except Exception as exc:
+        job.status = "failed"
+        job.completed_at = datetime.now(timezone.utc)
+        job.errors = json.dumps([str(exc)])
+        db.commit()
+        db.refresh(job)
+        return _job_to_out(job)
 
 
 @router.delete("/{integration_id}", status_code=204)

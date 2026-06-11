@@ -24,6 +24,23 @@ export type IntegrationListResponse = {
   integrations: Integration[];
 };
 
+export type SyncJobOut = {
+  id: string;
+  integration_id: string;
+  provider: string;
+  status: "running" | "completed" | "failed";
+  started_at: string;
+  completed_at: string | null;
+  records_processed: number;
+  records_created: number;
+  records_updated: number;
+  errors: string[];
+};
+
+export type SyncStatusResponse = {
+  jobs: SyncJobOut[];
+};
+
 // ── Service ───────────────────────────────────────────────────────────────────
 
 export const integrationService = {
@@ -39,4 +56,14 @@ export const integrationService = {
 
   disconnect: (token: string, integrationId: string) =>
     apiClient.del(API_ENDPOINTS.integrations.disconnect(integrationId), token),
+
+  syncStatus: (token: string) =>
+    apiClient.get<SyncStatusResponse>(API_ENDPOINTS.integrations.syncStatus, token),
+
+  triggerSync: (token: string, integrationId: string) =>
+    apiClient.post<SyncJobOut>(
+      API_ENDPOINTS.integrations.triggerSync(integrationId),
+      {},
+      token,
+    ),
 };

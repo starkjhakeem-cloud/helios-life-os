@@ -59,6 +59,8 @@ export const API_ENDPOINTS = {
   integrations: {
     base: "/api/v1/integrations",
     mockConnect: "/api/v1/integrations/mock-connect",
+    syncStatus: "/api/v1/integrations/sync/status",
     disconnect: (id: string) => `/api/v1/integrations/${id}`,
+    triggerSync: (id: string) => `/api/v1/integrations/${id}/sync`,
   },
 } as const;

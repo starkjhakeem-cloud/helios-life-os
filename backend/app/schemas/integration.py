@@ -23,3 +23,20 @@ class IntegrationListResponse(BaseModel):
 
 class MockConnectRequest(BaseModel):
     provider: IntegrationProvider
+
+
+class SyncJobOut(BaseModel):
+    id: str
+    integration_id: str
+    provider: str
+    status: str             # "running" | "completed" | "failed"
+    started_at: str
+    completed_at: str | None
+    records_processed: int
+    records_created: int
+    records_updated: int
+    errors: list[str]
+
+
+class SyncStatusResponse(BaseModel):
+    jobs: list[SyncJobOut]

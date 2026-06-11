@@ -15,7 +15,11 @@ import type { SFSymbol } from "sf-symbols-typescript";
 
 import { useAuthStore, useIntegrationStore } from "../../store";
 import { colors, spacing, radius, typography } from "../../theme/theme";
-import type { Integration, IntegrationProvider } from "../../services/integrationService";
+import type {
+  Integration,
+  IntegrationProvider,
+  SyncJobOut,
+} from "../../services/integrationService";
 
 // ── Provider metadata ─────────────────────────────────────────────────────────
 
@@ -53,30 +57,57 @@ const PROVIDER_META: Record<IntegrationProvider, ProviderMeta> = {
   },
 };
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatTime(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `${diffH}h ago`;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 // ── Integration card ──────────────────────────────────────────────────────────
 
 type CardProps = {
   integration: Integration;
   isMutating: boolean;
+  isSyncing: boolean;
+  syncResult: SyncJobOut | null;
   onConnect: (provider: IntegrationProvider) => void;
   onDisconnect: (id: string, displayName: string) => void;
+  onSync: (id: string) => void;
 };
 
-function IntegrationCard({ integration, isMutating, onConnect, onDisconnect }: CardProps) {
+function IntegrationCard({
+  integration,
+  isMutating,
+  isSyncing,
+  syncResult,
+  onConnect,
+  onDisconnect,
+  onSync,
+}: CardProps) {
   const meta = PROVIDER_META[integration.provider as IntegrationProvider];
   if (!meta) return null;
 
   const isConnected = integration.status === "connected";
   const accent = meta.accent;
-
-  function formatDate(iso: string | null): string {
-    if (!iso) return "—";
-    return new Date(iso).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  }
+  const syncFailed = syncResult?.status === "failed";
 
   return (
     <View style={[styles.card, isConnected && { borderColor: `${accent}40` }]}>
@@ -86,7 +117,12 @@ function IntegrationCard({ integration, isMutating, onConnect, onDisconnect }: C
       <View style={styles.cardBody}>
         {/* Header row */}
         <View style={styles.cardHeader}>
-          <View style={[styles.iconWrap, { backgroundColor: `${accent}18`, borderColor: `${accent}35` }]}>
+          <View
+            style={[
+              styles.iconWrap,
+              { backgroundColor: `${accent}18`, borderColor: `${accent}35` },
+            ]}
+          >
             <SymbolView
               name={meta.icon}
               size={22}
@@ -98,9 +134,24 @@ function IntegrationCard({ integration, isMutating, onConnect, onDisconnect }: C
             <Text style={styles.providerName}>{meta.displayName}</Text>
             <Text style={styles.providerSubtitle}>{meta.subtitle}</Text>
           </View>
-          <View style={[styles.statusBadge, isConnected ? styles.statusConnected : styles.statusDisconnected]}>
-            <View style={[styles.statusDot, { backgroundColor: isConnected ? "#10b981" : colors.textMuted }]} />
-            <Text style={[styles.statusText, { color: isConnected ? "#10b981" : colors.textMuted }]}>
+          <View
+            style={[
+              styles.statusBadge,
+              isConnected ? styles.statusConnected : styles.statusDisconnected,
+            ]}
+          >
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: isConnected ? "#10b981" : colors.textMuted },
+              ]}
+            />
+            <Text
+              style={[
+                styles.statusText,
+                { color: isConnected ? "#10b981" : colors.textMuted },
+              ]}
+            >
               {isConnected ? "CONNECTED" : "DISCONNECTED"}
             </Text>
           </View>
@@ -114,6 +165,16 @@ function IntegrationCard({ integration, isMutating, onConnect, onDisconnect }: C
           </View>
         )}
 
+        {/* Last synced row */}
+        {isConnected && (
+          <View style={styles.metaRow}>
+            <Text style={styles.metaLabel}>Last synced</Text>
+            <Text style={styles.metaValue}>
+              {integration.last_sync_at ? formatTime(integration.last_sync_at) : "Never"}
+            </Text>
+          </View>
+        )}
+
         {/* Scopes */}
         {isConnected && integration.scopes.length > 0 && (
           <View style={styles.scopesRow}>
@@ -124,7 +185,7 @@ function IntegrationCard({ integration, isMutating, onConnect, onDisconnect }: C
           </View>
         )}
 
-        {/* OAuth note for future */}
+        {/* OAuth note for disconnected state */}
         {!isConnected && (
           <View style={styles.oauthNote}>
             <SymbolView
@@ -139,29 +200,114 @@ function IntegrationCard({ integration, isMutating, onConnect, onDisconnect }: C
           </View>
         )}
 
-        {/* Action button */}
-        <TouchableOpacity
-          style={[
-            styles.actionButton,
-            isConnected ? styles.disconnectButton : { backgroundColor: accent },
-            isMutating && styles.actionButtonDisabled,
-          ]}
-          onPress={() =>
-            isConnected && integration.id
-              ? onDisconnect(integration.id, meta.displayName)
-              : onConnect(integration.provider as IntegrationProvider)
-          }
-          disabled={isMutating}
-          activeOpacity={0.8}
-        >
-          {isMutating ? (
-            <ActivityIndicator size="small" color={isConnected ? colors.textMuted : colors.background} />
-          ) : (
-            <Text style={[styles.actionButtonText, isConnected && styles.disconnectButtonText]}>
-              {isConnected ? "DISCONNECT" : "MOCK CONNECT"}
+        {/* Sync result stats */}
+        {syncResult && syncResult.status === "completed" && (
+          <View style={styles.syncStats}>
+            <View style={styles.syncStat}>
+              <Text style={styles.syncStatNum}>{syncResult.records_created}</Text>
+              <Text style={styles.syncStatLabel}>CREATED</Text>
+            </View>
+            <View style={styles.syncStatDivider} />
+            <View style={styles.syncStat}>
+              <Text style={styles.syncStatNum}>{syncResult.records_updated}</Text>
+              <Text style={styles.syncStatLabel}>UPDATED</Text>
+            </View>
+            <View style={styles.syncStatDivider} />
+            <View style={styles.syncStat}>
+              <Text style={styles.syncStatNum}>{syncResult.records_processed}</Text>
+              <Text style={styles.syncStatLabel}>PROCESSED</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Sync error */}
+        {syncFailed && syncResult.errors.length > 0 && (
+          <View style={styles.syncErrorRow}>
+            <SymbolView
+              name="exclamationmark.circle"
+              size={11}
+              tintColor="#ef4444"
+              resizeMode="scaleAspectFit"
+            />
+            <Text style={styles.syncErrorText} numberOfLines={2}>
+              {syncResult.errors[0]}
             </Text>
-          )}
-        </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Action buttons */}
+        {isConnected ? (
+          <View style={styles.actionRow}>
+            {/* SYNC NOW */}
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                styles.syncButton,
+                { borderColor: `${accent}60`, backgroundColor: `${accent}15` },
+                isSyncing && styles.actionButtonDisabled,
+              ]}
+              onPress={() => integration.id && onSync(integration.id)}
+              disabled={isSyncing || isMutating}
+              activeOpacity={0.8}
+            >
+              {isSyncing ? (
+                <ActivityIndicator size="small" color={accent} />
+              ) : (
+                <>
+                  <SymbolView
+                    name="arrow.clockwise"
+                    size={11}
+                    tintColor={accent}
+                    resizeMode="scaleAspectFit"
+                  />
+                  <Text style={[styles.actionButtonText, { color: accent }]}>
+                    SYNC NOW
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            {/* DISCONNECT */}
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                styles.disconnectButton,
+                isMutating && styles.actionButtonDisabled,
+              ]}
+              onPress={() =>
+                integration.id && onDisconnect(integration.id, meta.displayName)
+              }
+              disabled={isMutating || isSyncing}
+              activeOpacity={0.8}
+            >
+              {isMutating ? (
+                <ActivityIndicator size="small" color={colors.textMuted} />
+              ) : (
+                <Text style={[styles.actionButtonText, styles.disconnectButtonText]}>
+                  DISCONNECT
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={[
+              styles.actionButton,
+              styles.connectButton,
+              { backgroundColor: accent },
+              isMutating && styles.actionButtonDisabled,
+            ]}
+            onPress={() => onConnect(integration.provider as IntegrationProvider)}
+            disabled={isMutating}
+            activeOpacity={0.8}
+          >
+            {isMutating ? (
+              <ActivityIndicator size="small" color={colors.background} />
+            ) : (
+              <Text style={styles.actionButtonText}>MOCK CONNECT</Text>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -178,14 +324,22 @@ export default function IntegrationsScreen() {
     isLoading,
     isMutating,
     error,
+    syncResults,
+    syncingId,
+    syncError,
     fetchIntegrations,
+    fetchSyncStatus,
     mockConnect,
     disconnect,
+    triggerSync,
   } = useIntegrationStore();
 
   const load = useCallback(() => {
-    if (accessToken) fetchIntegrations(accessToken);
-  }, [accessToken, fetchIntegrations]);
+    if (accessToken) {
+      fetchIntegrations(accessToken);
+      fetchSyncStatus(accessToken);
+    }
+  }, [accessToken, fetchIntegrations, fetchSyncStatus]);
 
   useEffect(() => {
     load();
@@ -213,15 +367,27 @@ export default function IntegrationsScreen() {
     );
   }
 
+  function handleSync(id: string) {
+    if (!accessToken) return;
+    triggerSync(accessToken, id);
+  }
+
   const connectedCount = integrations.filter((i) => i.status === "connected").length;
 
   return (
     <ScrollView
       style={{ backgroundColor: colors.background }}
       showsVerticalScrollIndicator={false}
-      contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}
+      contentContainerStyle={[
+        styles.container,
+        { paddingTop: insets.top + spacing.md },
+      ]}
       refreshControl={
-        <RefreshControl refreshing={isLoading} onRefresh={load} tintColor={colors.accentCyan} />
+        <RefreshControl
+          refreshing={isLoading}
+          onRefresh={load}
+          tintColor={colors.accentCyan}
+        />
       }
     >
       {/* Hero */}
@@ -230,12 +396,12 @@ export default function IntegrationsScreen() {
         <Text style={styles.heroTitle}>Connect Your World</Text>
         <Text style={styles.heroSubtitle}>
           {connectedCount > 0
-            ? `${connectedCount} of ${integrations.length} providers connected · HELIOS will use live data in briefings once OAuth is enabled`
+            ? `${connectedCount} of ${integrations.length} providers connected · sync to populate calendar and email data`
             : "Link external services to give HELIOS access to your calendar and email data."}
         </Text>
       </View>
 
-      {/* OAuth readiness banner */}
+      {/* Sync engine banner */}
       <View style={styles.readinessBanner}>
         <SymbolView
           name="antenna.radiowaves.left.and.right"
@@ -244,11 +410,11 @@ export default function IntegrationsScreen() {
           resizeMode="scaleAspectFit"
         />
         <Text style={styles.readinessText}>
-          Architecture ready for real OAuth. Mock connections populate scopes and connection state for testing.
+          Sync simulation active. Mock syncs populate real calendar and email records — the same architecture used by live provider sync workers.
         </Text>
       </View>
 
-      {/* Section */}
+      {/* Section header */}
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionLabel}>AVAILABLE INTEGRATIONS</Text>
         {isLoading ? (
@@ -257,14 +423,18 @@ export default function IntegrationsScreen() {
       </View>
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {syncError ? <Text style={styles.errorText}>{syncError}</Text> : null}
 
       {integrations.map((integration) => (
         <IntegrationCard
           key={integration.provider}
           integration={integration}
           isMutating={isMutating}
+          isSyncing={syncingId === integration.id}
+          syncResult={integration.id ? (syncResults[integration.id] ?? null) : null}
           onConnect={handleConnect}
           onDisconnect={handleDisconnect}
+          onSync={handleSync}
         />
       ))}
 
@@ -277,7 +447,7 @@ export default function IntegrationsScreen() {
           resizeMode="scaleAspectFit"
         />
         <Text style={styles.footerText}>
-          OAuth authorization and live data sync will be available in a future release. No real credentials are stored.
+          Mock syncs write stable fake records with upsert logic — re-syncing updates existing records rather than duplicating them. No real credentials are stored.
         </Text>
       </View>
     </ScrollView>
@@ -357,7 +527,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
 
-  // Integration card
+  // ── Integration card ───────────────────────────────────────────────────────
+
   card: {
     flexDirection: "row",
     backgroundColor: colors.surface,
@@ -429,7 +600,7 @@ const styles = StyleSheet.create({
   },
 
   statusDisconnected: {
-    backgroundColor: `${colors.surfaceDark}`,
+    backgroundColor: colors.surfaceDark,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -490,11 +661,68 @@ const styles = StyleSheet.create({
     opacity: 0.75,
   },
 
+  // Sync stats row
+  syncStats: {
+    flexDirection: "row",
+    backgroundColor: colors.surfaceDark,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
+  },
+
+  syncStat: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: spacing.sm,
+    gap: 2,
+  },
+
+  syncStatNum: {
+    fontSize: 18,
+    fontWeight: "800" as const,
+    color: colors.textPrimary,
+    letterSpacing: -0.5,
+  },
+
+  syncStatLabel: {
+    ...typography.label,
+    color: colors.textMuted,
+    fontSize: 8,
+  },
+
+  syncStatDivider: {
+    width: 1,
+    backgroundColor: colors.border,
+  },
+
+  syncErrorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  syncErrorText: {
+    ...typography.caption,
+    color: "#ef4444",
+    flex: 1,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+
+  // Action buttons
+  actionRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+
   actionButton: {
     borderRadius: radius.sm,
     paddingVertical: spacing.sm,
     alignItems: "center",
     justifyContent: "center",
+    flexDirection: "row",
+    gap: 5,
     minHeight: 36,
   },
 
@@ -502,7 +730,17 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
 
+  syncButton: {
+    flex: 1,
+    borderWidth: 1,
+  },
+
+  connectButton: {
+    flex: 1,
+  },
+
   disconnectButton: {
+    flex: 1,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: "transparent",
