@@ -1,5 +1,7 @@
+import logging
 import uuid
 from datetime import date, datetime, timezone
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import ValidationError
@@ -10,12 +12,14 @@ from app.ai.context_service import ContextScope, build_context
 from app.ai.factory import get_ai_provider
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
-from app.models.autonomy import AutonomyQueueItem, AutonomyRule as AutonomyRuleModel
+from app.models.autonomy import AutonomyAuditLog, AutonomyQueueItem, AutonomyRule as AutonomyRuleModel
 from app.models.goal import Goal
 from app.models.task import Task
 from app.models.user import User
 from app.schemas.ai import CreateGoalPayload, CreateTaskPayload, UpdateTaskStatusPayload
 from app.schemas.autonomy import (
+    AutonomyAuditLogListResponse,
+    AutonomyAuditLogOut,
     AutonomyExecuteResult,
     AutonomyQueueItemCreate,
     AutonomyQueueItemOut,
@@ -32,10 +36,14 @@ from app.schemas.autonomy import (
     _SAFE_AUTONOMY_ACTIONS,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 _VALID_STATUSES = {"pending", "approved", "rejected", "completed"}
 
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _rule_to_out(rule: AutonomyRuleModel) -> AutonomyRuleOut:
     return AutonomyRuleOut(
@@ -65,6 +73,57 @@ def _to_out(item: AutonomyQueueItem) -> AutonomyQueueItemOut:
         created_at=item.created_at.isoformat(),
         updated_at=item.updated_at.isoformat(),
     )
+
+
+def _audit_to_out(entry: AutonomyAuditLog) -> AutonomyAuditLogOut:
+    return AutonomyAuditLogOut(
+        id=entry.id,
+        user_id=entry.user_id,
+        event_type=entry.event_type,
+        source=entry.source,
+        related_queue_item_id=entry.related_queue_item_id,
+        action_type=entry.action_type,
+        risk_level=entry.risk_level,
+        message=entry.message,
+        metadata=entry.audit_metadata,
+        created_at=entry.created_at.isoformat(),
+    )
+
+
+def _record_audit(
+    db: Session,
+    user_id: str,
+    event_type: str,
+    message: str,
+    *,
+    source: str = "helios",
+    related_queue_item_id: str | None = None,
+    action_type: str | None = None,
+    risk_level: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    """Write an audit log entry. Silently swallows errors so the main request is never affected."""
+    try:
+        entry = AutonomyAuditLog(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            event_type=event_type,
+            source=source,
+            related_queue_item_id=related_queue_item_id,
+            action_type=action_type,
+            risk_level=risk_level,
+            message=message,
+            audit_metadata=metadata or {},
+            created_at=datetime.now(timezone.utc),
+        )
+        db.add(entry)
+        db.commit()
+    except Exception:
+        logger.exception("Failed to write autonomy audit log entry (event=%s, user=%s)", event_type, user_id)
+        try:
+            db.rollback()
+        except Exception:
+            pass
 
 
 # ── Proactive suggestions ─────────────────────────────────────────────────────
@@ -97,6 +156,15 @@ def get_suggestions(
 
     now = datetime.now(timezone.utc).isoformat()
     trimmed = suggestions[:limit]
+
+    _record_audit(
+        db,
+        current_user.id,
+        "suggestion_created",
+        f"{len(trimmed)} suggestion(s) generated.",
+        metadata={"count": len(trimmed)},
+    )
+
     return SuggestionsResponse(
         suggestions=trimmed,
         total=len(trimmed),
@@ -305,6 +373,18 @@ def create_queue_item(
     db.add(item)
     db.commit()
     db.refresh(item)
+
+    _record_audit(
+        db,
+        current_user.id,
+        "queue_item_created",
+        f'Queue item "{item.title}" added for review.',
+        related_queue_item_id=item.id,
+        action_type=item.proposed_action_type,
+        risk_level=item.risk_level,
+        metadata={"source_agent": item.source_agent, "title": item.title},
+    )
+
     return _to_out(item)
 
 
@@ -329,6 +409,30 @@ def update_queue_item_status(
     item.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(item)
+
+    if payload.status == "approved":
+        _record_audit(
+            db,
+            current_user.id,
+            "queue_item_approved",
+            f'Queue item "{item.title}" approved.',
+            related_queue_item_id=item.id,
+            action_type=item.proposed_action_type,
+            risk_level=item.risk_level,
+            metadata={"title": item.title},
+        )
+    elif payload.status == "rejected":
+        _record_audit(
+            db,
+            current_user.id,
+            "queue_item_rejected",
+            f'Queue item "{item.title}" rejected.',
+            related_queue_item_id=item.id,
+            action_type=item.proposed_action_type,
+            risk_level=item.risk_level,
+            metadata={"title": item.title},
+        )
+
     return _to_out(item)
 
 
@@ -413,18 +517,27 @@ def execute_queue_item(
     ).scalar_one_or_none()
 
     if blocking_rule:
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                blocking_rule.notes
-                or (
-                    f"Execution blocked by approval rule for "
-                    f"'{item.proposed_action_type}' "
-                    f"({'any risk level' if blocking_rule.risk_level is None else blocking_rule.risk_level + ' risk'}). "
-                    "Update or remove the rule to allow execution."
-                )
-            ),
+        detail = blocking_rule.notes or (
+            f"Execution blocked by approval rule for "
+            f"'{item.proposed_action_type}' "
+            f"({'any risk level' if blocking_rule.risk_level is None else blocking_rule.risk_level + ' risk'}). "
+            "Update or remove the rule to allow execution."
         )
+        _record_audit(
+            db,
+            current_user.id,
+            "execution_blocked_by_rule",
+            f'Execution of "{item.title}" blocked by approval rule.',
+            related_queue_item_id=item.id,
+            action_type=item.proposed_action_type,
+            risk_level=item.risk_level,
+            metadata={
+                "rule_id": blocking_rule.id,
+                "rule_risk_level": blocking_rule.risk_level,
+                "title": item.title,
+            },
+        )
+        raise HTTPException(status_code=403, detail=detail)
 
     now = datetime.now(timezone.utc)
 
@@ -433,6 +546,16 @@ def execute_queue_item(
         try:
             task_data = CreateTaskPayload.model_validate(item.payload_preview)
         except ValidationError as exc:
+            _record_audit(
+                db,
+                current_user.id,
+                "execution_failed",
+                f'Execution of "{item.title}" failed: payload validation error.',
+                related_queue_item_id=item.id,
+                action_type=item.proposed_action_type,
+                risk_level=item.risk_level,
+                metadata={"error": "payload_validation_error", "title": item.title},
+            )
             raise HTTPException(status_code=422, detail=exc.errors())
 
         if task_data.linked_goal_id:
@@ -462,6 +585,17 @@ def execute_queue_item(
         item.updated_at = now
         db.commit()
 
+        _record_audit(
+            db,
+            current_user.id,
+            "queue_item_executed",
+            f'Task "{task.title}" created via autonomy execution.',
+            related_queue_item_id=item_id,
+            action_type="create_task",
+            risk_level=item.risk_level,
+            metadata={"created_id": task.id, "title": task.title},
+        )
+
         return AutonomyExecuteResult(
             success=True,
             action_type="create_task",
@@ -476,6 +610,16 @@ def execute_queue_item(
         try:
             goal_data = CreateGoalPayload.model_validate(item.payload_preview)
         except ValidationError as exc:
+            _record_audit(
+                db,
+                current_user.id,
+                "execution_failed",
+                f'Execution of "{item.title}" failed: payload validation error.',
+                related_queue_item_id=item.id,
+                action_type=item.proposed_action_type,
+                risk_level=item.risk_level,
+                metadata={"error": "payload_validation_error", "title": item.title},
+            )
             raise HTTPException(status_code=422, detail=exc.errors())
 
         goal = Goal(
@@ -493,6 +637,17 @@ def execute_queue_item(
         item.updated_at = now
         db.commit()
 
+        _record_audit(
+            db,
+            current_user.id,
+            "queue_item_executed",
+            f'Goal "{goal.title}" created via autonomy execution.',
+            related_queue_item_id=item_id,
+            action_type="create_goal",
+            risk_level=item.risk_level,
+            metadata={"created_id": goal.id, "title": goal.title},
+        )
+
         return AutonomyExecuteResult(
             success=True,
             action_type="create_goal",
@@ -507,6 +662,16 @@ def execute_queue_item(
         try:
             update_data = UpdateTaskStatusPayload.model_validate(item.payload_preview)
         except ValidationError as exc:
+            _record_audit(
+                db,
+                current_user.id,
+                "execution_failed",
+                f'Execution of "{item.title}" failed: payload validation error.',
+                related_queue_item_id=item.id,
+                action_type=item.proposed_action_type,
+                risk_level=item.risk_level,
+                metadata={"error": "payload_validation_error", "title": item.title},
+            )
             raise HTTPException(status_code=422, detail=exc.errors())
 
         task = db.execute(
@@ -524,6 +689,17 @@ def execute_queue_item(
         item.updated_at = now
         db.commit()
 
+        _record_audit(
+            db,
+            current_user.id,
+            "queue_item_executed",
+            f'Task "{task.title}" status updated to "{update_data.status}" via autonomy execution.',
+            related_queue_item_id=item_id,
+            action_type="update_task_status",
+            risk_level=item.risk_level,
+            metadata={"updated_id": task.id, "new_status": update_data.status, "title": task.title},
+        )
+
         return AutonomyExecuteResult(
             success=True,
             action_type="update_task_status",
@@ -538,6 +714,16 @@ def execute_queue_item(
         try:
             plan_data = GeneratePlanPayload.model_validate(item.payload_preview)
         except ValidationError as exc:
+            _record_audit(
+                db,
+                current_user.id,
+                "execution_failed",
+                f'Execution of "{item.title}" failed: payload validation error.',
+                related_queue_item_id=item.id,
+                action_type=item.proposed_action_type,
+                risk_level=item.risk_level,
+                metadata={"error": "payload_validation_error", "title": item.title},
+            )
             raise HTTPException(status_code=422, detail=exc.errors())
 
         goal_title: str | None = None
@@ -568,11 +754,32 @@ def execute_queue_item(
                 user_context=planning_ctx.text,
             )
         except RuntimeError as exc:
+            _record_audit(
+                db,
+                current_user.id,
+                "execution_failed",
+                f'Execution of "{item.title}" failed: AI provider error.',
+                related_queue_item_id=item.id,
+                action_type=item.proposed_action_type,
+                risk_level=item.risk_level,
+                metadata={"error": "ai_provider_error", "title": item.title},
+            )
             raise HTTPException(status_code=502, detail=str(exc))
 
         item.status = "completed"
         item.updated_at = now
         db.commit()
+
+        _record_audit(
+            db,
+            current_user.id,
+            "queue_item_executed",
+            f'Plan "{plan.plan_title}" generated via autonomy execution.',
+            related_queue_item_id=item_id,
+            action_type="generate_plan",
+            risk_level=item.risk_level,
+            metadata={"plan_title": plan.plan_title, "title": item.title},
+        )
 
         return AutonomyExecuteResult(
             success=True,
@@ -585,3 +792,27 @@ def execute_queue_item(
 
     # Unreachable — _SAFE_AUTONOMY_ACTIONS check above guards this path.
     raise HTTPException(status_code=400, detail="Unsupported action type.")
+
+
+# ── Audit log ─────────────────────────────────────────────────────────────────
+
+@router.get("/audit-log", response_model=AutonomyAuditLogListResponse)
+def get_audit_log(
+    limit: int = Query(default=50, ge=1, le=200, description="Number of entries to return"),
+    offset: int = Query(default=0, ge=0, description="Pagination offset"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AutonomyAuditLogListResponse:
+    """Return recent autonomy audit log entries for the authenticated operator."""
+    rows = db.execute(
+        select(AutonomyAuditLog)
+        .where(AutonomyAuditLog.user_id == current_user.id)
+        .order_by(AutonomyAuditLog.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    ).scalars().all()
+
+    return AutonomyAuditLogListResponse(
+        entries=[_audit_to_out(r) for r in rows],
+        total=len(rows),
+    )

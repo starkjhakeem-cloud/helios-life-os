@@ -159,3 +159,36 @@ class AutonomyRuleOut(BaseModel):
 class AutonomyRulesResponse(BaseModel):
     rules: list[AutonomyRuleOut]
     total: int
+
+
+# ── Audit log ─────────────────────────────────────────────────────────────────
+
+AuditEventType = Literal[
+    "suggestion_created",
+    "queue_item_created",
+    "queue_item_approved",
+    "queue_item_rejected",
+    "queue_item_executed",
+    "execution_blocked_by_rule",
+    "execution_failed",
+]
+
+
+class AutonomyAuditLogOut(BaseModel):
+    id: str
+    user_id: str
+    event_type: str
+    source: str
+    related_queue_item_id: str | None
+    action_type: str | None
+    risk_level: str | None
+    message: str
+    metadata: dict[str, Any]
+    created_at: str
+
+    model_config = {"from_attributes": True}
+
+
+class AutonomyAuditLogListResponse(BaseModel):
+    entries: list[AutonomyAuditLogOut]
+    total: int

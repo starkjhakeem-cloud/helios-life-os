@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 import { ApiError } from "../services/apiClient";
 import {
+  type AutonomyAuditLogEntry,
   type AutonomyExecuteResult,
   type AutonomyQueueItem,
   type AutonomyQueueItemCreate,
@@ -62,6 +63,13 @@ type AutonomyState = {
   updateRule: (token: string, id: string, data: AutonomyRuleUpdate) => Promise<void>;
   deleteRule: (token: string, id: string) => Promise<void>;
 
+  // Audit log
+  auditLog: AutonomyAuditLogEntry[];
+  isAuditLogLoading: boolean;
+  auditLogError: string | null;
+
+  fetchAuditLog: (token: string) => Promise<void>;
+
   reset: () => void;
 };
 
@@ -90,6 +98,10 @@ export const useAutonomyStore = create<AutonomyState>()((set, get) => ({
   isRulesLoading: false,
   rulesError: null,
   isRulesMutating: false,
+
+  auditLog: [],
+  isAuditLogLoading: false,
+  auditLogError: null,
 
   // ── Queue actions ─────────────────────────────────────────────────────────
 
@@ -296,6 +308,18 @@ export const useAutonomyStore = create<AutonomyState>()((set, get) => ({
     }
   },
 
+  // ── Audit log actions ─────────────────────────────────────────────────────
+
+  fetchAuditLog: async (token) => {
+    set({ isAuditLogLoading: true, auditLogError: null });
+    try {
+      const data = await autonomyService.getAuditLog(token);
+      set({ auditLog: data.entries, isAuditLogLoading: false });
+    } catch (err) {
+      set({ auditLogError: extractMessage(err), isAuditLogLoading: false });
+    }
+  },
+
   reset: () =>
     set({
       items: [],
@@ -315,5 +339,8 @@ export const useAutonomyStore = create<AutonomyState>()((set, get) => ({
       isRulesLoading: false,
       rulesError: null,
       isRulesMutating: false,
+      auditLog: [],
+      isAuditLogLoading: false,
+      auditLogError: null,
     }),
 }));

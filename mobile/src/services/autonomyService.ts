@@ -124,6 +124,24 @@ export type AutonomyRulesResponse = {
   total: number;
 };
 
+export type AutonomyAuditLogEntry = {
+  id: string;
+  user_id: string;
+  event_type: string;
+  source: string;
+  related_queue_item_id: string | null;
+  action_type: string | null;
+  risk_level: RiskLevel | null;
+  message: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export type AutonomyAuditLogResponse = {
+  entries: AutonomyAuditLogEntry[];
+  total: number;
+};
+
 export const autonomyService = {
   list: (token: string, status?: QueueStatus) => {
     const url = status
@@ -165,4 +183,10 @@ export const autonomyService = {
 
   deleteRule: (token: string, id: string) =>
     apiClient.del(API_ENDPOINTS.autonomy.rule(id), token),
+
+  getAuditLog: (token: string, limit = 50, offset = 0) =>
+    apiClient.get<AutonomyAuditLogResponse>(
+      `${API_ENDPOINTS.autonomy.auditLog}?limit=${limit}&offset=${offset}`,
+      token,
+    ),
 };

@@ -15,6 +15,7 @@ import { SymbolView } from "expo-symbols";
 import { colors, spacing, radius, typography } from "../../theme/theme";
 import { useAuthStore, useAutonomyStore } from "../../store";
 import type {
+  AutonomyAuditLogEntry,
   AutonomyExecuteResult,
   AutonomyQueueItem,
   AutonomyRule,
@@ -699,6 +700,111 @@ function RuleCard({ rule, isMutating, onToggleExecution, onDelete }: RuleCardPro
   );
 }
 
+// ── Audit log section ─────────────────────────────────────────────────────────
+
+const AUDIT_EVENT_LABELS: Record<string, string> = {
+  suggestion_created:      "Suggestions generated",
+  queue_item_created:      "Item added to queue",
+  queue_item_approved:     "Item approved",
+  queue_item_rejected:     "Item rejected",
+  queue_item_executed:     "Execution succeeded",
+  execution_blocked_by_rule: "Execution blocked",
+  execution_failed:        "Execution failed",
+};
+
+const AUDIT_EVENT_COLORS: Record<string, string> = {
+  suggestion_created:      "#6366f1",
+  queue_item_created:      colors.accentCyan,
+  queue_item_approved:     "#22c55e",
+  queue_item_rejected:     colors.textMuted,
+  queue_item_executed:     "#22c55e",
+  execution_blocked_by_rule: "#f59e0b",
+  execution_failed:        "#ef4444",
+};
+
+function formatAuditTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+type AuditEntryRowProps = { entry: AutonomyAuditLogEntry };
+
+function AuditEntryRow({ entry }: AuditEntryRowProps) {
+  const color = AUDIT_EVENT_COLORS[entry.event_type] ?? colors.textMuted;
+  const label = AUDIT_EVENT_LABELS[entry.event_type] ?? entry.event_type.replace(/_/g, " ").toUpperCase();
+  return (
+    <View style={styles.auditRow}>
+      <View style={[styles.auditDot, { backgroundColor: color }]} />
+      <View style={styles.auditRowContent}>
+        <View style={styles.auditRowHeader}>
+          <Text style={[styles.auditEventLabel, { color }]}>{label}</Text>
+          <Text style={styles.auditTimestamp}>{formatAuditTime(entry.created_at)}</Text>
+        </View>
+        <Text style={styles.auditMessage} numberOfLines={2}>{entry.message}</Text>
+        {entry.action_type ? (
+          <Text style={styles.auditActionType}>{entry.action_type.replace(/_/g, " ").toUpperCase()}</Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+type AuditLogSectionProps = {
+  entries: AutonomyAuditLogEntry[];
+  isLoading: boolean;
+  error: string | null;
+};
+
+function AuditLogSection({ entries, isLoading, error }: AuditLogSectionProps) {
+  return (
+    <>
+      <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.lg }} />
+      <Text style={styles.sectionLabel}>AUDIT LOG</Text>
+      <Text style={styles.rulesDescription}>
+        Recent autonomy decisions — approvals, executions, blocks, and failures.
+      </Text>
+
+      {isLoading && entries.length === 0 ? (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={colors.accent} size="small" />
+          <Text style={styles.loadingText}>Loading audit log…</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      ) : entries.length === 0 ? (
+        <View style={styles.emptyState}>
+          <SymbolView name="doc.text.magnifyingglass" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+          <Text style={styles.emptyText}>No audit events yet.</Text>
+          <Text style={styles.emptySubtext}>
+            Events appear here as you review, approve, and execute autonomy queue items.
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.auditCard}>
+          {entries.map((entry, i) => (
+            <View key={entry.id}>
+              <AuditEntryRow entry={entry} />
+              {i < entries.length - 1 ? (
+                <View style={styles.auditDivider} />
+              ) : null}
+            </View>
+          ))}
+        </View>
+      )}
+    </>
+  );
+}
+
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function AutonomyScreen() {
@@ -722,6 +828,9 @@ export default function AutonomyScreen() {
     isRulesLoading,
     rulesError,
     isRulesMutating,
+    auditLog,
+    isAuditLogLoading,
+    auditLogError,
     fetchQueue,
     fetchSuggestions,
     approveItem,
@@ -734,6 +843,7 @@ export default function AutonomyScreen() {
     createRule,
     updateRule,
     deleteRule,
+    fetchAuditLog,
   } = useAutonomyStore();
 
   const [showAddRuleForm, setShowAddRuleForm] = useState(false);
@@ -743,7 +853,8 @@ export default function AutonomyScreen() {
     fetchQueue(accessToken);
     fetchSuggestions(accessToken);
     fetchRules(accessToken);
-  }, [accessToken, fetchQueue, fetchSuggestions, fetchRules]);
+    fetchAuditLog(accessToken);
+  }, [accessToken, fetchQueue, fetchSuggestions, fetchRules, fetchAuditLog]);
 
   useEffect(() => {
     loadAll();
@@ -818,7 +929,7 @@ export default function AutonomyScreen() {
   const pending  = items.filter((i) => i.status === "pending");
   const approved = items.filter((i) => i.status === "approved");
   const resolved = items.filter((i) => i.status === "rejected" || i.status === "completed");
-  const isRefreshing = isLoading || isSuggestionsLoading || isRulesLoading;
+  const isRefreshing = isLoading || isSuggestionsLoading || isRulesLoading || isAuditLogLoading;
 
   const getIsBlocked = useCallback(
     (item: AutonomyQueueItem) => isBlockedByRules(item, rules),
@@ -1029,6 +1140,13 @@ export default function AutonomyScreen() {
           />
         ))
       )}
+
+      {/* ── Audit Log ───────────────────────────────────────────────── */}
+      <AuditLogSection
+        entries={auditLog}
+        isLoading={isAuditLogLoading}
+        error={auditLogError}
+      />
 
       <View style={{ height: spacing.xl * 2 }} />
     </ScrollView>
@@ -1429,4 +1547,55 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   formOptionActiveText: { color: colors.accentCyan },
+
+  // Audit log
+  auditCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
+    marginBottom: spacing.md,
+  },
+  auditRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    gap: spacing.sm,
+  },
+  auditDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginTop: 5,
+    flexShrink: 0,
+  },
+  auditRowContent: { flex: 1, gap: 2 },
+  auditRowHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  auditEventLabel: {
+    fontSize: 9,
+    fontWeight: "700" as const,
+    letterSpacing: 1.2,
+    flex: 1,
+  },
+  auditTimestamp: { ...typography.caption, color: colors.textMuted },
+  auditMessage: { ...typography.body, color: colors.textSecondary, lineHeight: 20 },
+  auditActionType: {
+    fontSize: 9,
+    fontWeight: "700" as const,
+    letterSpacing: 0.8,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  auditDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginHorizontal: spacing.md,
+  },
 });

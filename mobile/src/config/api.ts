@@ -73,5 +73,6 @@ export const API_ENDPOINTS = {
     dailyPlan: "/api/v1/autonomy/daily-plan",
     rules: "/api/v1/autonomy/rules",
     rule: (id: string) => `/api/v1/autonomy/rules/${id}`,
+    auditLog: "/api/v1/autonomy/audit-log",
   },
 } as const;
