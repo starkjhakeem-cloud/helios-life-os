@@ -48,7 +48,7 @@ class GoogleTokens:
     scope: str
     token_type: str = "Bearer"
     refresh_token: str | None = None
-    stub: bool = False         # True means placeholder data — never store these
+    stub: bool = False         # True → placeholder tokens from _STUB_EXCHANGE mode; real tokens overwrite on OAuth activation
 
 
 def missing_oauth_vars() -> list[str]:
