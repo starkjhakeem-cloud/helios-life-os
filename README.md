@@ -1,27 +1,59 @@
 # HELIOS
 
-> A full-stack iOS productivity app demonstrating complete product engineering: goal tracking, task management, AI-assisted planning, analytics, and production-grade infrastructure.
+> A full-stack iOS productivity app demonstrating complete product engineering: goal tracking, task management, AI-assisted planning, persistent AI memory, multi-agent orchestration, Google integrations architecture, and production-grade infrastructure.
 
-**Status:** ✅ V1 Release Candidate — Portfolio-demo ready. All features working. No blockers.
+**Status:** ✅ V2 Complete — Portfolio-demo ready. All features working. No blockers.
 
 Built mobile-first with **React Native 0.83 / Expo SDK 55** and **FastAPI (Python 3.12)**, HELIOS is a complete, working codebase — not a prototype or design mockup. Every phase ships tested, documented functionality to main. 
 
 **What's included:**
 - JWT authentication with bcrypt hashing
-- PostgreSQL persistence with 6 Alembic migrations
+- PostgreSQL persistence with 13 Alembic migrations
 - 8/8 backend tests passing, 2 mobile test suites passing
 - User-scoped SQL queries preventing cross-user data leakage
 - Docker Compose for local dev (live reload), Dockerfile for production
 - Comprehensive deployment guides for Render / Railway / Fly.io
 - No secrets committed, all environment-driven configuration
 - TypeScript strict mode, Pydantic v2 validation, SQLAlchemy 2.0 ORM
+- Fernet AES-128-CBC token encryption for OAuth credential storage
+- `_STUB` flag pattern for safe incremental real-API activation
 
 **Quick links:**
+- **[V2 Feature Matrix](docs/v2-feature-matrix.md)** — Real vs mock vs stub breakdown
+- **[V2 Demo Guide](docs/v2-demo-guide.md)** — Walkthrough script for portfolio demos
+- **[V2 Completion Report](docs/v2-completion-report.md)** — All phases, bugs fixed, V3 handoff notes
+- **[Google OAuth Checklist](docs/google-oauth-implementation-checklist.md)** — Steps to activate real OAuth
 - **[Portfolio Case Study](PORTFOLIO.md)** — Full technical writeup & design patterns
-- **[See the audit report](docs/PORTFOLIO_MATERIALS.md)** — Resume bullets, LinkedIn post, recruiter pitch
 - **[Architecture Deep-Dive](docs/architecture-overview.md)** — Database, API, state management
-- **[Known Limitations & Roadmap](docs/LIMITATIONS_AND_ROADMAP.md)** — Honest constraints & next phases
 - **[Deployment Guide](docs/deployment.md)** — Production hosting options
+
+---
+
+## V2 Features
+
+V2 adds five capability layers on top of V1. No rewrites, no new repositories — all built incrementally.
+
+### AI Memory (V2.1)
+Persistent user memory stored in PostgreSQL (`ai_memories` table). Four types: `preference`, `important_fact`, `goal_context`, `recurring_interest`. Every AI prompt receives a LONG-TERM MEMORY section. 200-memory soft cap. Full CRUD with type filtering.
+
+### Multi-Agent Orchestration (V2.2–V2.13)
+Five specialized agents (Strategy, Finance, Study, Health, Career) each receive a domain-filtered context package. `POST /agents/orchestrate` calls the AI provider once per selected agent and assembles a unified response with prioritized recommended actions. Conversation history persists to PostgreSQL.
+
+### Google Integrations Architecture (V2.14–V2.19)
+Complete integration infrastructure without requiring live Google credentials:
+
+- **Token storage**: `user_integrations` table with Fernet-encrypted `access_token_encrypted` and `refresh_token_encrypted` columns. Token columns never appear in API responses.
+- **OAuth flow skeleton**: `GET /integrations/google/connect-url`, `POST /integrations/google/exchange`. `_STUB_EXCHANGE=True` validates credentials and writes encrypted placeholder tokens — tests the full encryption + DB-write pipeline without real Google credentials.
+- **Mock sync**: `sync_simulator.run_mock_sync()` writes deterministic fixture records to `calendar_events` and `email_messages` tables.
+- **Google Calendar adapter**: `GoogleCalendarAdapter` with `list_events`, `create_event`, `update_event`, `delete_event`. `_STUB=True` returns fixture events. Token retrieval wired — activated by flipping `_STUB=False`.
+- **Gmail adapter**: `GmailAdapter` with `list_messages`, `get_message`, `mark_as_read`, `archive_message`, `search_messages`. Same pattern. No email sending in V2.
+
+### Sync Simulation Engine
+Deterministic upsert of fixture calendar events and email messages into PostgreSQL. `SyncJob` table tracks sync history per provider. `GET /integrations/sync/status` returns the most recent job per connected provider.
+
+### V2 Mobile Screens
+- **Memory screen** — create/filter/delete AI memories by type
+- **Integrations screen** — connect/disconnect/sync Google Calendar, Gmail, Outlook Calendar, Outlook Mail (all providers support mock connect; Google providers have real OAuth path ready)
 
 ---
 
@@ -71,11 +103,12 @@ Built mobile-first with **React Native 0.83 / Expo SDK 55** and **FastAPI (Pytho
 │                    HELIOS iOS App                          │
 │              React Native 0.83 / Expo SDK 55               │
 │                                                            │
-│  (auth)          (tabs — 7 screens)                        │
+│  (auth)          (tabs — 9 screens)                        │
 │  Login ──────►  Home · Analytics · Agents · Assistant      │
-│  Signup          Goals · Tasks · Profile                   │
+│  Signup          Goals · Tasks · Memory · Integrations     │
+│                  Profile                                   │
 │       │                 │                                   │
-│       └──── Zustand ────┘  11 stores                       │
+│       └──── Zustand ────┘  13 stores                       │
 │             Stores         auth + settings persisted        │
 │             (AsyncStorage) all others in-memory            │
 │                  │                                          │
@@ -110,9 +143,15 @@ Built mobile-first with **React Native 0.83 / Expo SDK 55** and **FastAPI (Pytho
 │  users ──< goals ──< tasks                                 │
 │        ──< conversations ──< conversation_messages         │
 │        ──< reminders                                       │
+│        ──< ai_memories                                     │
+│        ──< user_integrations (encrypted OAuth tokens)      │
+│        ──< sync_jobs                                       │
+│        ──< calendar_events  (from sync)                    │
+│        ──< email_messages   (from sync)                    │
 │        ──  user_preferences  (1-to-1)                      │
 │                                                            │
 │  UUID PKs · FK constraints · CASCADE/SET NULL · Alembic    │
+│  13 migrations (001–013)                                   │
 └────────────────────────────────────────────────────────────┘
 ```
 
@@ -410,6 +449,20 @@ Interactive documentation is available at **[http://localhost:8000/docs](http://
 | `DELETE` | `/api/v1/reminders/{id}` | Yes | Delete a reminder |
 | `GET` | `/api/v1/settings/preferences` | Yes | Get user preferences (creates defaults on first call) |
 | `PATCH` | `/api/v1/settings/preferences` | Yes | Update user preferences |
+| `GET` | `/api/v1/ai/memory` | Yes | List AI memories (optional `?memory_type=` filter) |
+| `POST` | `/api/v1/ai/memory` | Yes | Store a new AI memory |
+| `DELETE` | `/api/v1/ai/memory/{id}` | Yes | Delete an AI memory |
+| `GET` | `/api/v1/agents/{id}` | Yes | Get agent detail |
+| `GET` | `/api/v1/agents/{id}/context` | Yes | Get domain-filtered context package for an agent |
+| `POST` | `/api/v1/agents/orchestrate` | Yes | Run multi-agent orchestration |
+| `GET` | `/api/v1/integrations` | Yes | List all provider integration rows for current user |
+| `POST` | `/api/v1/integrations/mock-connect` | Yes | Mock-connect a provider (creates DB row, no real OAuth) |
+| `DELETE` | `/api/v1/integrations/{id}` | Yes | Disconnect a provider |
+| `POST` | `/api/v1/integrations/{id}/sync` | Yes | Trigger mock sync for a provider |
+| `GET` | `/api/v1/integrations/sync/status` | Yes | Most-recent sync job per connected provider |
+| `GET` | `/api/v1/integrations/google/connect-url` | Yes | Generate Google OAuth authorization URL |
+| `GET` | `/api/v1/integrations/google/callback` | Yes | OAuth redirect target |
+| `POST` | `/api/v1/integrations/google/exchange` | Yes | Exchange authorization code for tokens (stub mode) |
 
 ### Error format
 
@@ -687,7 +740,7 @@ npm test -- --runInBand
 
 ## Roadmap
 
-**Completed (Phases 1–49)**
+**Completed (Phases 1–49 + V2.1–V2.21)**
 
 - [x] **Phases 1–12** — Project scaffold, design system, navigation shell, backend API foundation, JWT authentication, PostgreSQL database layer
 - [x] **Phase 13** — AI agents tab and protected agent profiles endpoint
@@ -716,10 +769,17 @@ npm test -- --runInBand
 - [x] **Phase 47** — Mobile release build foundation: EAS build profiles, TestFlight configuration, bundle ID guidance, iOS release checklist
 - [x] **Phase 48** — V1 release-candidate audit: verified all features working, no blockers, tests passing, no secrets committed, documentation accurate
 - [x] **Phase 49** — Portfolio packaging: polished README, case study, marketing materials, resume bullets, LinkedIn post, limitations & roadmap
+- [x] **V2.1** — AI Memory Foundation: `ai_memories` table, CRUD endpoints, memory injection into all AI prompts
+- [x] **V2.2–V2.13** — Context engine, agent context packages, multi-agent orchestration, persistent conversation history
+- [x] **V2.14–V2.17** — Google OAuth architecture: `user_integrations` table, Fernet token encryption, mock connect/disconnect/sync, stub OAuth exchange pipeline
+- [x] **V2.18** — Google Calendar adapter stub: `GoogleCalendarAdapter` with full CRUD methods; `_STUB=True`
+- [x] **V2.19** — Gmail adapter stub: `GmailAdapter` with read-only methods; `_STUB=True`; no email sending
+- [x] **V2.20** — Real integration readiness audit: 10/10 PASS; security, token hygiene, adapter isolation all verified
+- [x] **V2.21** — Google OAuth implementation checklist: 11-section guide covering all pre-activation requirements
 
-**Planned (Phase 50+)**
+**Planned (V3)**
 
-See [docs/LIMITATIONS_AND_ROADMAP.md](docs/LIMITATIONS_AND_ROADMAP.md) for the prioritized backlog with difficulty ratings and recommended next phases.
+Real Google OAuth activation (see [docs/google-oauth-implementation-checklist.md](docs/google-oauth-implementation-checklist.md) for the step-by-step guide), real Calendar/Gmail sync, calendar event display in dashboard and AI briefing, email previews in assistant context, Outlook OAuth, vector memory search, token refresh background job.
 
 ---
 

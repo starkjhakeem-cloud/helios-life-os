@@ -112,12 +112,12 @@ type AddMemoryModalProps = {
 };
 
 function AddMemoryModal({ visible, onClose, onSubmit, isMutating }: AddMemoryModalProps) {
-  const [selectedType, setSelectedType] = useState<MemoryType>("fact");
+  const [selectedType, setSelectedType] = useState<MemoryType>("preference");
   const [content, setContent] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
   function resetAndClose() {
-    setSelectedType("fact");
+    setSelectedType("preference");
     setContent("");
     setFormError(null);
     Keyboard.dismiss();
