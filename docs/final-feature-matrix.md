@@ -1,191 +1,277 @@
-# HELIOS — Final Feature Matrix (V1)
+# HELIOS — Final Feature Matrix (V1 + V2 + V3)
 
-**Verified:** 2026-06-10 | **Phase:** 50 | **Status:** V1 Release Candidate
+**Verified:** 2026-06-12 | **Audit:** V3.14 | **Status:** Complete
 
-All entries below reflect features verified to exist in the source code as of this audit.
-"Working" means the route/screen/store is implemented and tested end-to-end via the test suite and code inspection.
+All entries reflect features verified against live running backend (Docker) and TypeScript-checked mobile source. Routes were exercised via `curl` against `http://localhost:8000`. Mobile TypeScript check (strict mode): 0 errors.
 
 ---
 
 ## Authentication
 
-| Feature | Backend | Mobile | Status | Notes |
-|---|---|---|---|---|
-| User signup (name + email + password) | `POST /auth/signup` | `(auth)/signup.tsx` | ✅ Working | bcrypt hash, 201 response |
-| User login | `POST /auth/login` | `(auth)/login.tsx` | ✅ Working | JWT HS256 access token |
-| Token validation / session revalidation | `GET /auth/me` | `_layout.tsx` | ✅ Working | Called on every cold start |
-| Persistent login via AsyncStorage | — | `useAuthStore` | ✅ Working | Token survives app restart |
-| Hydration guard (prevents flash-to-login) | — | `_layout.tsx` | ✅ Working | Waits for AsyncStorage read |
-| Account deletion | `DELETE /auth/account` | `authService.ts` | ✅ Working | Cascades to all user data |
-| Rate limiting on auth routes | slowapi 5/min (signup), 10/min (login) | — | ✅ Working | `@limiter.limit()` decorators |
-| Logout state wipe (all stores reset) | — | `useAuthStore.logout()` | ✅ Working | 9 stores cleared |
-| JWT algorithm allowlist | `algorithms=[...]` in `get_current_user` | — | ✅ Working | Prevents algorithm confusion |
-| JWT type claim | `"type": "access"` in payload | — | ✅ Working | Prevents token type confusion |
-| Identical 401 for wrong email/password | Bcrypt constant-time compare | — | ✅ Working | Timing-safe login |
+| Feature | Backend | Mobile | Status |
+|---------|---------|--------|--------|
+| Signup (name + email + password) | `POST /auth/signup` | `(auth)/signup.tsx` | ✅ Real |
+| Login (email + password) | `POST /auth/login` | `(auth)/login.tsx` | ✅ Real |
+| Session validation | `GET /auth/me` | `_layout.tsx` hydration | ✅ Real |
+| Persistent login | — | AsyncStorage token | ✅ Real |
+| Account deletion | `DELETE /auth/account` | `authService.ts` | ✅ Real |
+| Logout (all stores wiped) | — | `useAuthStore.logout()` | ✅ Real |
+| Rate limiting (signup 5/min, login 10/min) | slowapi decorators | — | ✅ Real |
+| JWT algorithm allowlist | `algorithms=["HS256"]` | — | ✅ Real |
+| JWT type claim (prevents token confusion) | `"type":"access"` payload | — | ✅ Real |
+| Timing-safe login (identical 401) | bcrypt constant-time | — | ✅ Real |
 
 ---
 
 ## Goals
 
-| Feature | Backend | Mobile | Status | Notes |
-|---|---|---|---|---|
-| Create goal (title, description, status, optional date) | `POST /goals` | `goals.tsx` | ✅ Working | `active`, `completed`, `paused` |
-| List goals for authenticated user | `GET /goals` | `useGoalsStore` | ✅ Working | User-scoped query |
-| Update goal (status, title, description, date) | `PATCH /goals/{id}` | `goals.tsx` | ✅ Working | Partial update |
-| Delete goal | `DELETE /goals/{id}` | `goals.tsx` | ✅ Working | Cascades to task links |
-| Goal → task linking (optional FK) | `linked_goal_id` on task | — | ✅ Working | SET NULL on goal delete |
-| Ownership enforcement | `WHERE user_id = current_user.id` | — | ✅ Working | All queries scoped |
+| Feature | Backend | Mobile | Status |
+|---------|---------|--------|--------|
+| Create, list, update, delete goals | `GET/POST/PATCH/DELETE /goals` | `goals.tsx` | ✅ Real |
+| Goal status: active / completed / paused | Model constraint | `useGoalsStore` | ✅ Real |
+| Optional target date | `target_date` field | Goals form | ✅ Real |
+| Ownership enforcement | `WHERE user_id = current_user.id` | — | ✅ Real |
 
 ---
 
 ## Tasks
 
-| Feature | Backend | Mobile | Status | Notes |
-|---|---|---|---|---|
-| Create task (title, description, status, priority, due date, optional goal link) | `POST /tasks` | `tasks.tsx` | ✅ Working | Full field set |
-| List tasks for authenticated user | `GET /tasks` | `useTasksStore` | ✅ Working | User-scoped |
-| Update task | `PATCH /tasks/{id}` | `tasks.tsx` | ✅ Working | Partial update |
-| Delete task | `DELETE /tasks/{id}` | `tasks.tsx` | ✅ Working | |
-| Four priority levels | `low`, `medium`, `high`, `critical` | Priority selector | ✅ Working | Pydantic Literal validation |
-| Three status values | `todo`, `in_progress`, `done` | Status selector | ✅ Working | Pydantic Literal validation |
-| Goal link ownership check | FK validated against `current_user.id` | — | ✅ Working | Prevents cross-user linkage |
-| Pull-to-refresh | — | `RefreshControl` | ✅ Working | All list screens |
+| Feature | Backend | Mobile | Status |
+|---------|---------|--------|--------|
+| Create, list, update, delete tasks | `GET/POST/PATCH/DELETE /tasks` | `tasks.tsx` | ✅ Real |
+| Priority: low / medium / high / critical | Model field | Task form | ✅ Real |
+| Status: todo / in_progress / done | Model field | `useTasksStore` | ✅ Real |
+| Link task to goal (optional FK) | `linked_goal_id` | Task form | ✅ Real |
 
 ---
 
 ## Analytics
 
-| Feature | Backend | Mobile | Status | Notes |
-|---|---|---|---|---|
-| Goal metrics (total, completed, active, paused, completion rate) | `GET /analytics/summary` | `analytics.tsx` | ✅ Working | Computed per-request |
-| Task metrics (total, completed, in-progress, todo, overdue, high-priority, completion rate) | `GET /analytics/summary` | `analytics.tsx` | ✅ Working | Computed per-request |
-| Live computation from PostgreSQL | SQL aggregation at route time | — | ✅ Working | No cached/stale values |
-
----
-
-## Dashboard
-
-| Feature | Backend | Mobile | Status | Notes |
-|---|---|---|---|---|
-| Dashboard metric tiles | `GET /dashboard/summary` | `index.tsx` | ✅ Working | Productivity, focus, tasks, energy |
-| AI briefing on home screen | `GET /ai/briefing` | `BriefingCard` | ✅ Working | Daily insight section |
-| Intelligence sections | `GET /dashboard/summary` | `SectionCard` | ✅ Working | Mission, AI insight panels |
-| Greeting + date display | — | `index.tsx` | ✅ Working | Time-of-day greeting |
-| System status indicator | — | `useAppStore` | ✅ Working | Online/offline dot |
-
----
-
-## AI Features
-
-| Feature | Backend | Mobile | Status | Notes |
-|---|---|---|---|---|
-| Daily briefing (summary, priorities, risks, recommendation) | `GET /ai/briefing` | `BriefingCard` | ✅ Working | Mock provider default |
-| Execution plan generator | `POST /ai/plan` | `agents.tsx` | ✅ Working | Multi-step structured plan |
-| Configurable planning horizon (3/7/14/30 days) | `horizon` param | `agents.tsx` | ✅ Working | Reads from user preferences |
-| Optional goal context anchoring | `goal_title` param | `agents.tsx` | ✅ Working | |
-| Conversational AI assistant | `POST /ai/chat` | `assistant.tsx` | ✅ Working | Full chat interface |
-| Follow-up question suggestions | `suggested_actions` in response | Chat UI | ✅ Working | |
-| AI-recommended actions | `recommended_actions` in response | Action chips | ✅ Working | |
-| One-tap action execution | `POST /ai/actions/execute` | Action confirm modal | ✅ Working | create_task, create_goal, update_task_status |
-| Persistent conversation history (PostgreSQL) | `POST /ai/conversations` + messages | `useConversationStore` | ✅ Working | Reloaded on app start |
-| List saved conversations | `GET /ai/conversations` | `assistant.tsx` | ✅ Working | |
-| Live user context injection | `context_builder.py` | `include_context` param | ✅ Working | Goals + tasks in AI prompt |
-| AI provider abstraction | `AIProvider` ABC, `factory.py` | — | ✅ Working | Swap mock ↔ OpenAI via env |
-| OpenAI provider (ready, not default) | `openai_provider.py` | — | ✅ Implemented | Set `AI_PROVIDER=openai` + key |
-| Five agent profiles | `GET /agents` | `agents.tsx` | ✅ Working | Strategy, Finance, Study, Health, Career |
+| Feature | Backend | Mobile | Status |
+|---------|---------|--------|--------|
+| Summary: completion rate, active goals, open tasks | `GET /analytics/summary` | `analytics.tsx` | ✅ Real |
 
 ---
 
 ## Reminders
 
-| Feature | Backend | Mobile | Status | Notes |
-|---|---|---|---|---|
-| Create reminder (title, body, date/time) | `POST /reminders` | `profile.tsx` | ✅ Working | |
-| List reminders | `GET /reminders` | `profile.tsx` | ✅ Working | |
-| Enable/disable reminder | `PATCH /reminders/{id}` | Toggle in profile | ✅ Working | |
-| Delete reminder | `DELETE /reminders/{id}` | Swipe-to-delete | ✅ Working | |
-| Local push notification scheduling | — | `notificationService.ts` | ✅ Working | Expo Notifications |
-| Notification permission request | — | `requestPermissions()` | ✅ Working | Graceful denial handling |
-| Ownership check on linked task/goal FK | `WHERE user_id = current_user.id` | — | ✅ Working | Phase 37 security fix |
+| Feature | Backend | Mobile | Status |
+|---------|---------|--------|--------|
+| Create, list, update, delete reminders | `GET/POST/PATCH/DELETE /reminders` | `useRemindersStore` | ✅ Real |
 
 ---
 
-## User Preferences & Settings
+## Settings / Preferences
 
-| Feature | Backend | Mobile | Status | Notes |
-|---|---|---|---|---|
-| Theme preference (system / dark / light) | `GET/PATCH /settings/preferences` | `useSettingsStore` | ✅ Working | Persisted to PostgreSQL |
-| Default planning horizon (3/7/14/30 days) | Preferences table | Settings picker | ✅ Working | Used as AI plan default |
-| Notifications master toggle | Preferences table | Toggle in profile | ✅ Working | |
-| Reminder notifications toggle | Preferences table | Toggle in profile | ✅ Working | |
-| Optimistic updates | — | Settings store | ✅ Working | UI updates before API response |
-| Preferences loaded on login | `GET /settings/preferences` | App startup | ✅ Working | Get-or-create on first call |
-| Preferences persisted to AsyncStorage | — | `useSettingsStore` (persist) | ✅ Working | Available before network |
+| Feature | Backend | Mobile | Status |
+|---------|---------|--------|--------|
+| Get and update user preferences | `GET/PATCH /settings/preferences` | `useSettingsStore` | ✅ Real |
 
 ---
 
-## Profile
+## AI — Core
 
-| Feature | Backend | Mobile | Status | Notes |
-|---|---|---|---|---|
-| User account info (name, email, member since) | `GET /auth/me` | `profile.tsx` | ✅ Working | |
-| User ID display (truncated) | — | `profile.tsx` | ✅ Working | |
-| System version from backend | `GET /version` | `systemService.ts` | ✅ Working | |
-| Notification permission status + request | — | `profile.tsx` | ✅ Working | |
-| Sign out (wipes all stores) | — | `useAuthStore.logout()` | ✅ Working | |
-
----
-
-## Infrastructure & Developer Experience
-
-| Feature | Location | Status | Notes |
-|---|---|---|---|
-| Docker Compose (local dev with --reload) | `backend/docker-compose.yml` | ✅ Working | API + PostgreSQL 16 |
-| Production Dockerfile | `backend/Dockerfile` | ✅ Working | Runs alembic then uvicorn (no --reload) |
-| Alembic migrations (6 migrations, 7 tables) | `backend/alembic/versions/` | ✅ Working | 001→006 |
-| PostgreSQL volume persistence | `postgres_data` volume | ✅ Working | Survives container restarts |
-| Health check endpoint (unauthenticated) | `GET /health` | ✅ Working | Used by Docker healthcheck |
-| Diagnostics endpoint (DB check) | `GET /health/diagnostics` | ✅ Working | |
-| Request logging middleware | `RequestLoggingMiddleware` in `main.py` | ✅ Working | Method, path, status, duration, request-id |
-| JWT weak-secret startup warning | `startup_checks()` in `main.py` | ✅ Working | Catches misconfigured deploys |
-| No secrets committed | `.gitignore` | ✅ Verified | `.env` in history = placeholder values only |
-| Backend environment example | `backend/.env.example` | ✅ Complete | All variables documented |
-| Mobile environment example | `mobile/.env.example` | ✅ Complete | `EXPO_PUBLIC_API_URL` documented |
-| TypeScript strict mode | `tsconfig.json` | ✅ Enabled | No `any` escapes |
-| Pydantic v2 validation | All schemas | ✅ Working | `Literal` enums, length constraints |
-| SQLAlchemy 2.0 ORM with typed `Mapped[]` | All models | ✅ Working | |
-| Rate limiting on auth endpoints | `slowapi` | ✅ Working | 5/min signup, 10/min login |
-| CORS middleware | `main.py` | ✅ Working | Configurable via `CORS_ORIGINS` env |
-| EAS Build configuration | `mobile/eas.json` | ✅ Present | development, preview, production profiles |
+| Feature | Backend | Mobile | Status |
+|---------|---------|--------|--------|
+| Daily briefing (context-aware) | `GET /ai/briefing/daily` | `BriefingCard` | ✅ Real (mock provider) |
+| AI chat with context injection | `POST /ai/chat` | `assistant.tsx` | ✅ Real (mock provider) |
+| AI execution plan generation | `POST /ai/plan` | `PlanCard` | ✅ Real (mock provider) |
+| Structured action execute | `POST /ai/actions/execute` | `ActionReviewModal` | ✅ Real |
+| OpenAI provider (live GPT) | `openai_provider.py` | — | ✅ Real (requires OPENAI_API_KEY) |
+| Mock provider (offline, deterministic) | `mock_provider.py` | — | ✅ Real |
 
 ---
 
-## Testing
+## AI Memory (V2)
 
-| Suite | Count | Status | Method |
-|---|---|---|---|
-| Backend: auth + goals workflow | 3 tests | ✅ Passing | Docker (Python 3.12) |
-| Backend: health + diagnostics | 2 tests | ✅ Passing | Docker (Python 3.12) |
-| Backend: mock AI provider | 3 tests | ✅ Passing | Docker (Python 3.12) |
-| Mobile: API client | 2 tests | ✅ Passing | Jest (local) |
-| Mobile: ErrorBoundary component | 2 tests | ✅ Passing | Jest (local) |
-| **Total** | **12 tests** | **✅ 12/12 passing** | |
-
-> Backend tests require Python 3.12 (pinned in Docker image). Direct execution on Python 3.14+ is blocked by a SQLAlchemy 2.0.36 typing incompatibility. Use `docker compose run --rm --no-deps -e DATABASE_URL="sqlite:////tmp/test.db" api python -m pytest`.
+| Feature | Backend | Mobile | Status |
+|---------|---------|--------|--------|
+| Create, list, delete memory entries | `GET/POST/DELETE /ai/memory` | `memory.tsx` | ✅ Real |
+| Memory types: preference, important_fact, goal_context, recurring_interest | `memory_type` field | Memory form | ✅ Real |
+| 200-entry soft cap | Server-side enforcement | — | ✅ Real |
+| Memory injected into all AI prompts | `build_context()` LONG-TERM MEMORY section | — | ✅ Real |
 
 ---
 
-## Features Not Implemented (Honest)
+## Conversations (V2)
 
-| Feature | Planned Phase | Notes |
-|---|---|---|
-| Refresh tokens | Phase 51 | 60-min access tokens only; users re-login after expiry |
-| OAuth / Social Login | Phase 53+ | Email + password only |
-| Remote push notifications (APNs/FCM) | Phase 52 | Local notifications only; no server-push |
-| Android support | Phase 53 | iOS only; backend is platform-agnostic |
-| Offline mode | Phase 54 | Requires internet connection |
-| CI/CD pipeline | Phase 51 | Tests must run manually |
-| Data export (CSV/JSON) | Phase 51 | No user data download |
-| Time-series analytics | Phase 54 | Per-request aggregation only |
-| Deep linking | Phase 50 | No URL scheme configured |
-| FastAPI lifespan handlers | Phase 50 | `@app.on_event()` deprecation warnings present |
+| Feature | Backend | Mobile | Status |
+|---------|---------|--------|--------|
+| Create, list, load, delete conversations | `GET/POST/DELETE /ai/conversations` | `useConversationStore` | ✅ Real |
+| Conversation messages | `GET /ai/conversations/{id}/messages` | Assistant screen | ✅ Real |
+| Conversation history modal | — | `assistant.tsx` | ✅ Real |
+
+---
+
+## Unified Context Engine (V2)
+
+| Feature | Backend | Mobile | Status |
+|---------|---------|--------|--------|
+| Context scopes: DAILY_BRIEFING, PLANNING, AGENT, CHAT, CALENDAR_SYNC, EMAIL_SYNC | `ContextScope` enum | — | ✅ Real |
+| Live data composition per scope (goals, tasks, memories, calendar, email) | `build_context()` | — | ✅ Real |
+| Agent-domain-filtered context packages | `AgentContextPackage` | Agent context preview | ✅ Real |
+
+---
+
+## Agents + Orchestration (V2 + V3.11)
+
+| Feature | Backend | Mobile | Status |
+|---------|---------|--------|--------|
+| 5 specialist agents (Strategy, Finance, Health, Study, Career) | `GET /agents` | `agents.tsx` | ✅ Real |
+| Per-agent context | `GET /agents/{id}/context` | `AgentContextPreview` | ✅ Real |
+| Multi-agent orchestration | `POST /agents/orchestrate` | Agents screen | ✅ Real (mock provider) |
+| Coordinated plan output | `coordinated_plan` field | `OrchestrationResultCard` | ✅ Real |
+| Agent consensus summary | `consensus_summary` field | Consensus panel | ✅ Real |
+| Divergent views / disagreements | `disagreements` list | Consensus panel | ✅ Real |
+| Overall confidence (0.0–1.0) | `overall_confidence` field | Confidence badge | ✅ Real |
+
+---
+
+## Google Integration Architecture (V2)
+
+| Feature | Backend | Mobile | Status |
+|---------|---------|--------|--------|
+| Integration list (4 providers) | `GET /integrations` | `integrations.tsx` | ✅ Real |
+| Mock connect (simulate connected state) | `POST /integrations/mock-connect` | Integrations screen | ✅ Real |
+| Disconnect integration | `DELETE /integrations/{id}` | Integrations screen | ✅ Real |
+| Trigger sync | `POST /integrations/{id}/sync` | Integrations screen | ✅ Simulated |
+| Sync status | `GET /integrations/sync/status` | Integrations screen | ✅ Real |
+| Google OAuth connect-URL | `GET /integrations/google/connect-url` | — | ✅ Stub (requires credentials) |
+| Google OAuth code exchange | `POST /integrations/google/exchange` | — | ✅ Stub (STUB_EXCHANGE=True) |
+| OAuth token encryption at rest | Fernet AES-128-CBC | — | ✅ Real (requires TOKEN_ENCRYPTION_KEY) |
+| Google Calendar adapter | `google_calendar_adapter.py` | — | ✅ Stub (_STUB=True) |
+| Gmail adapter | `gmail_adapter.py` | — | ✅ Stub (_STUB=True) |
+| Sync simulator (fixture data) | `sync_simulator.py` | Calendar + Email screens | ✅ Simulated |
+
+---
+
+## Calendar (V2)
+
+| Feature | Backend | Mobile | Status |
+|---------|---------|--------|--------|
+| List calendar events | `GET /calendar/events` | `calendar.tsx` | ✅ Real (populated by sync simulator) |
+| Create, update, delete events | `POST/PATCH/DELETE /calendar/events/{id}` | Calendar screen | ✅ Real |
+| Calendar data in AI context | `build_context()` CALENDAR section | Briefing, plan, chat | ✅ Real |
+
+---
+
+## Email (V2)
+
+| Feature | Backend | Mobile | Status |
+|---------|---------|--------|--------|
+| List email messages | `GET /email/messages` | `email.tsx` | ✅ Real (populated by sync simulator) |
+| Create, update email records | `POST/PATCH /email/messages/{id}` | Email screen | ✅ Real |
+| Email data in AI briefing | `build_context()` EMAIL section | Briefing | ✅ Real |
+
+---
+
+## Autonomy Queue (V3)
+
+| Feature | Backend | Mobile | Status |
+|---------|---------|--------|--------|
+| Create queue item | `POST /autonomy/queue` | Command Center | ✅ Real |
+| List queue (filter by status) | `GET /autonomy/queue` | Command Center | ✅ Real |
+| Approve / reject item | `PATCH /autonomy/queue/{id}` | Queue cards | ✅ Real |
+| Delete item | `DELETE /autonomy/queue/{id}` | Queue cards | ✅ Real |
+| Execute approved item | `POST /autonomy/queue/{id}/execute` | Queue cards | ✅ Real |
+| Execution: create_task | Execution bridge | Queue execute | ✅ Real |
+| Execution: create_goal | Execution bridge | Queue execute | ✅ Real |
+| Execution: update_task_status | Execution bridge | Queue execute | ✅ Real |
+| Execution: generate_plan | Execution bridge | Queue execute | ✅ Real |
+| Reject all other action types | `_SAFE_AUTONOMY_ACTIONS` check | — | ✅ Real |
+
+---
+
+## Proactive Suggestions + Daily Plan (V3)
+
+| Feature | Backend | Mobile | Status |
+|---------|---------|--------|--------|
+| Generate suggestions (ephemeral) | `GET /autonomy/suggestions` | Suggestions section | ✅ Real (mock provider) |
+| Promote suggestion to queue | `POST /autonomy/queue` | "Add to Queue" button | ✅ Real |
+| Generate daily plan | `POST /autonomy/daily-plan` | Daily Plan section | ✅ Real (mock provider) |
+| Promote plan item to queue | `POST /autonomy/queue` | Plan "Add to Queue" | ✅ Real |
+
+---
+
+## Approval Rules (V3)
+
+| Feature | Backend | Mobile | Status |
+|---------|---------|--------|--------|
+| Create, list, update, delete rules | `GET/POST/PATCH/DELETE /autonomy/rules` | Rules section | ✅ Real |
+| Wildcard rules (risk_level=None) | Application-level check | Rule form | ✅ Real |
+| Blocking rule enforcement at execute time | Pre-execute check → 403 | — | ✅ Real |
+| Duplicate rule prevention | Application-level uniqueness check | — | ✅ Real |
+
+---
+
+## Audit Log (V3)
+
+| Feature | Backend | Mobile | Status |
+|---------|---------|--------|--------|
+| List audit log with pagination | `GET /autonomy/audit-log` | Audit Log section | ✅ Real |
+| 7 event types recorded | `_record_audit()` helper | Audit log entries | ✅ Real |
+| Immutable (no update/delete endpoints) | No endpoints exist | — | ✅ Real |
+
+---
+
+## Notifications (V3)
+
+| Feature | Backend | Mobile | Status |
+|---------|---------|--------|--------|
+| List notifications + unread count | `GET /notifications` | Inbox screen | ✅ Real |
+| Mark notification read | `PATCH /notifications/{id}/read` | Inbox screen | ✅ Real |
+| Mark all read | `PATCH /notifications/read-all` | Inbox screen | ✅ Real |
+| Delete notification | `DELETE /notifications/{id}` | Inbox screen | ✅ Real |
+| Tab bar badge (unread count) | — | `_layout.tsx` tabBarBadge | ✅ Real |
+| Notifications emitted by autonomy events | `_emit_notification()` in autonomy.py | — | ✅ Real |
+| Notifications emitted by job triggers | `_emit()` in background_jobs.py | — | ✅ Real |
+
+---
+
+## Background Jobs (V3)
+
+| Feature | Backend | Mobile | Status |
+|---------|---------|--------|--------|
+| Create, list, update, delete jobs | `GET/POST/PATCH/DELETE /background-jobs` | Profile → Background Jobs | ✅ Real |
+| One job per type per user enforcement | Application-level check | — | ✅ Real |
+| Enable/disable toggle | `enabled` field + PATCH | Profile screen | ✅ Real |
+| Trigger job manually | `POST /background-jobs/{id}/trigger` | Profile + Command Center RUN | ✅ Real |
+| daily_briefing_generation trigger | Handler generates briefing, emits notification | RUN button | ✅ Real |
+| proactive_suggestion_scan trigger | Handler queues suggestions as pending items | RUN button | ✅ Real |
+| reminder_check trigger | Handler counts reminders, notifies | RUN button | ✅ Real |
+| integration_sync_simulation trigger | Handler records simulated sync | RUN button | ✅ Real |
+| Job status transitions (idle → running → idle) | trigger endpoint | — | ✅ Real |
+| Job status: failed (on AI RuntimeError) | RuntimeError → status=failed, 502 | — | ✅ Real |
+| Automatic scheduled execution | — | — | ❌ Deferred (no worker) |
+
+---
+
+## Command Center (V3)
+
+| Feature | Backend | Mobile | Status |
+|---------|---------|--------|--------|
+| Command Center hero (HELIOS V3 / Command Center) | — | `autonomy.tsx` | ✅ Real |
+| Status row: PENDING / APPROVED / INBOX / JOBS | — | Status row component | ✅ Real |
+| INBOX accent highlight when non-zero | — | `unreadCount` conditional style | ✅ Real |
+| Scheduled Jobs panel with RUN buttons | `/trigger` endpoint | bgJobs panel | ✅ Real |
+| Pull-to-refresh (all sections) | — | RefreshControl | ✅ Real |
+
+---
+
+## Infrastructure
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Docker Compose (api + postgres) | ✅ Ready | `docker compose up` |
+| PostgreSQL 16 with healthcheck | ✅ Ready | Volume-backed persistence |
+| Alembic migrations (001–017) | ✅ Ready | All applied on clean DB |
+| SQLAlchemy 2.0 ORM | ✅ Real | Parameterized queries only |
+| Pydantic v2 request validation | ✅ Real | All API boundaries |
+| slowapi rate limiting | ✅ Real | Auth routes protected |
+| CORS middleware | ✅ Real | Configurable via CORS_ORIGINS |
+| Request logging middleware with request IDs | ✅ Real | Structured JSON logging |
+| SQLAlchemy error handler (503) | ✅ Real | Generic + specific handlers |
+| Weak-secret startup warning | ✅ Real | Warns on dev placeholder JWT |
+| Expo Router (v55) tab navigation | ✅ Real | 12 tabs, Inbox badge |
+| Zustand state management | ✅ Real | 17 stores |
+| TypeScript strict mode | ✅ Passing | 0 errors |

@@ -76,7 +76,7 @@ export default function HomeScreen() {
       ) : null}
 
       <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionLabel}>TODAY'S METRICS</Text>
+        <Text style={styles.sectionLabel}>{"TODAY'S METRICS"}</Text>
         {dashLoading ? (
           <ActivityIndicator size="small" color={colors.accentCyan} />
         ) : null}

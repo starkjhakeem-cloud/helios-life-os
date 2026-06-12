@@ -356,7 +356,7 @@ function DailyPlanSection({
         <View style={styles.emptyState}>
           <SymbolView name="calendar.badge.clock" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
           <Text style={styles.emptyText}>No plan generated yet.</Text>
-          <Text style={styles.emptySubtext}>Tap Generate to build today's operational plan.</Text>
+          <Text style={styles.emptySubtext}>Tap Generate to build today&apos;s operational plan.</Text>
         </View>
       ) : plan ? (
         <>
