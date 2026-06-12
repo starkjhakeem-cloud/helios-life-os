@@ -90,3 +90,37 @@ class SuggestionsResponse(BaseModel):
     suggestions: list[SuggestionItem]
     total: int
     generated_at: str
+
+
+# ── Daily plan ────────────────────────────────────────────────────────────────
+
+class FocusBlock(BaseModel):
+    time_range: str
+    activity: str
+    task_title: str | None = None
+    energy_level: str  # "high" | "medium" | "low"
+
+
+class PriorityTask(BaseModel):
+    rank: int
+    title: str
+    priority: str  # "critical" | "high" | "medium" | "low"
+    estimated_duration: str
+    linked_goal: str | None = None
+    reason: str
+
+
+class DailyPlanRequest(BaseModel):
+    target_date: str | None = None
+
+
+class DailyPlan(BaseModel):
+    plan_date: str
+    overview: str
+    focus_blocks: list[FocusBlock]
+    priority_tasks: list[PriorityTask]
+    schedule_conflicts: list[str]
+    recommended_agent_actions: list[str]
+    risks: list[str]
+    suggested_queue_items: list[SuggestionItem]
+    generated_at: str

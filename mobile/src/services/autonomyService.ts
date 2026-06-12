@@ -65,6 +65,34 @@ export type SuggestionsResponse = {
   generated_at: string;
 };
 
+export type FocusBlock = {
+  time_range: string;
+  activity: string;
+  task_title: string | null;
+  energy_level: "high" | "medium" | "low";
+};
+
+export type PriorityTask = {
+  rank: number;
+  title: string;
+  priority: "critical" | "high" | "medium" | "low";
+  estimated_duration: string;
+  linked_goal: string | null;
+  reason: string;
+};
+
+export type DailyPlan = {
+  plan_date: string;
+  overview: string;
+  focus_blocks: FocusBlock[];
+  priority_tasks: PriorityTask[];
+  schedule_conflicts: string[];
+  recommended_agent_actions: string[];
+  risks: string[];
+  suggested_queue_items: SuggestionItem[];
+  generated_at: string;
+};
+
 export const autonomyService = {
   list: (token: string, status?: QueueStatus) => {
     const url = status
@@ -91,4 +119,7 @@ export const autonomyService = {
       : API_ENDPOINTS.autonomy.suggestions;
     return apiClient.get<SuggestionsResponse>(url, token);
   },
+
+  generateDailyPlan: (token: string) =>
+    apiClient.post<DailyPlan>(API_ENDPOINTS.autonomy.dailyPlan, {}, token),
 };

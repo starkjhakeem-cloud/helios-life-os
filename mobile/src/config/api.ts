@@ -70,5 +70,6 @@ export const API_ENDPOINTS = {
     item: (id: string) => `/api/v1/autonomy/queue/${id}`,
     execute: (id: string) => `/api/v1/autonomy/queue/${id}/execute`,
     suggestions: "/api/v1/autonomy/suggestions",
+    dailyPlan: "/api/v1/autonomy/daily-plan",
   },
 } as const;

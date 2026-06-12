@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import ValidationError
@@ -21,6 +21,8 @@ from app.schemas.autonomy import (
     AutonomyQueueItemOut,
     AutonomyQueueListResponse,
     AutonomyQueueStatusUpdate,
+    DailyPlan,
+    DailyPlanRequest,
     GeneratePlanPayload,
     SuggestionsResponse,
     _SAFE_AUTONOMY_ACTIONS,
@@ -82,6 +84,43 @@ def get_suggestions(
         total=len(trimmed),
         generated_at=now,
     )
+
+
+# ── Daily plan ────────────────────────────────────────────────────────────────
+
+@router.post("/daily-plan", response_model=DailyPlan)
+def generate_daily_plan(
+    payload: DailyPlanRequest | None = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DailyPlan:
+    """
+    Generate a structured daily operational plan for the authenticated operator.
+
+    The plan is ephemeral — not stored in the database. It includes focus blocks,
+    priority tasks, risks, recommended agent actions, and suggested queue items
+    the operator can review and promote to the autonomy queue.
+    No automatic execution occurs.
+    """
+    plan_date = (payload.target_date if payload and payload.target_date else None) or date.today().isoformat()
+
+    planning_ctx = build_context(
+        ContextScope.PLANNING,
+        user_id=current_user.id,
+        db=db,
+        user_name=current_user.name,
+    )
+
+    try:
+        plan = get_ai_provider().generate_daily_plan(
+            user_name=current_user.name,
+            plan_date=plan_date,
+            user_context=planning_ctx.text,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    return plan
 
 
 # ── Queue CRUD ────────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import {
   type AutonomyExecuteResult,
   type AutonomyQueueItem,
   type AutonomyQueueItemCreate,
+  type DailyPlan,
   type QueueStatus,
   type SuggestionItem,
   autonomyService,
@@ -27,6 +28,13 @@ type AutonomyState = {
   // IDs of suggestions already promoted to the queue this session.
   queuedSuggestionIds: string[];
 
+  // Daily plan
+  dailyPlan: DailyPlan | null;
+  isDailyPlanLoading: boolean;
+  dailyPlanError: string | null;
+  // IDs of daily plan suggested items already promoted to the queue this session.
+  dailyPlanQueuedIds: string[];
+
   fetchQueue: (token: string, status?: QueueStatus) => Promise<void>;
   createItem: (token: string, data: AutonomyQueueItemCreate) => Promise<void>;
   approveItem: (token: string, id: string) => Promise<void>;
@@ -36,6 +44,9 @@ type AutonomyState = {
 
   fetchSuggestions: (token: string) => Promise<void>;
   addSuggestionToQueue: (token: string, suggestion: SuggestionItem) => Promise<void>;
+
+  generateDailyPlan: (token: string) => Promise<void>;
+  addDailyPlanItemToQueue: (token: string, item: SuggestionItem) => Promise<void>;
 
   reset: () => void;
 };
@@ -55,6 +66,11 @@ export const useAutonomyStore = create<AutonomyState>()((set, get) => ({
   isSuggestionsLoading: false,
   suggestionsError: null,
   queuedSuggestionIds: [],
+
+  dailyPlan: null,
+  isDailyPlanLoading: false,
+  dailyPlanError: null,
+  dailyPlanQueuedIds: [],
 
   // ── Queue actions ─────────────────────────────────────────────────────────
 
@@ -180,6 +196,39 @@ export const useAutonomyStore = create<AutonomyState>()((set, get) => ({
     }
   },
 
+  // ── Daily plan actions ────────────────────────────────────────────────────
+
+  generateDailyPlan: async (token) => {
+    set({ isDailyPlanLoading: true, dailyPlanError: null });
+    try {
+      const plan = await autonomyService.generateDailyPlan(token);
+      set({ dailyPlan: plan, isDailyPlanLoading: false, dailyPlanQueuedIds: [] });
+    } catch (err) {
+      set({ dailyPlanError: extractMessage(err), isDailyPlanLoading: false });
+    }
+  },
+
+  addDailyPlanItemToQueue: async (token, item) => {
+    set({ isMutating: true, error: null });
+    try {
+      await autonomyService.create(token, {
+        title: item.title,
+        description: item.description,
+        source_agent: item.source_agent,
+        proposed_action_type: item.suggested_action_type,
+        payload_preview: item.payload_preview,
+        risk_level: item.risk_level,
+      });
+      set((s) => ({
+        dailyPlanQueuedIds: [...s.dailyPlanQueuedIds, item.id],
+        isMutating: false,
+      }));
+      await get().fetchQueue(token);
+    } catch (err) {
+      set({ error: extractMessage(err), isMutating: false });
+    }
+  },
+
   reset: () =>
     set({
       items: [],
@@ -191,5 +240,9 @@ export const useAutonomyStore = create<AutonomyState>()((set, get) => ({
       isSuggestionsLoading: false,
       suggestionsError: null,
       queuedSuggestionIds: [],
+      dailyPlan: null,
+      isDailyPlanLoading: false,
+      dailyPlanError: null,
+      dailyPlanQueuedIds: [],
     }),
 }));

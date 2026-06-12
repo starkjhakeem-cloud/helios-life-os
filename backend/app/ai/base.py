@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 from app.schemas.ai import ChatResponse, DailyBriefing, PlanResponse
-from app.schemas.autonomy import SuggestionItem
+from app.schemas.autonomy import DailyPlan, SuggestionItem
 from app.schemas.orchestration import OrchestrationResponse
 
 
@@ -43,3 +43,11 @@ class AIProvider(ABC):
         user_name: str,
         user_context: str | None = None,
     ) -> list[SuggestionItem]: ...
+
+    @abstractmethod
+    def generate_daily_plan(
+        self,
+        user_name: str,
+        plan_date: str,
+        user_context: str | None = None,
+    ) -> DailyPlan: ...

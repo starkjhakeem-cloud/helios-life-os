@@ -17,12 +17,28 @@ import { useAuthStore, useAutonomyStore } from "../../store";
 import type {
   AutonomyExecuteResult,
   AutonomyQueueItem,
+  DailyPlan,
+  FocusBlock,
+  PriorityTask,
   QueueStatus,
   RiskLevel,
   SuggestionItem,
 } from "../../store";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
+
+const ENERGY_COLORS: Record<"high" | "medium" | "low", string> = {
+  high:   colors.accent,
+  medium: "#f59e0b",
+  low:    colors.textMuted,
+};
+
+const PRIORITY_COLORS: Record<string, string> = {
+  critical: "#ef4444",
+  high:     "#f59e0b",
+  medium:   colors.accentCyan,
+  low:      colors.textMuted,
+};
 
 const RISK_COLORS: Record<RiskLevel, string> = {
   low: "#22c55e",
@@ -271,6 +287,196 @@ function QueueCard({
   );
 }
 
+// ── Daily plan section ────────────────────────────────────────────────────────
+
+type DailyPlanSectionProps = {
+  plan: DailyPlan | null;
+  isLoading: boolean;
+  error: string | null;
+  isMutating: boolean;
+  queuedIds: string[];
+  onGenerate: () => void;
+  onAddToQueue: (item: SuggestionItem) => void;
+};
+
+function DailyPlanSection({
+  plan,
+  isLoading,
+  error,
+  isMutating,
+  queuedIds,
+  onGenerate,
+  onAddToQueue,
+}: DailyPlanSectionProps) {
+  const handleAdd = (item: SuggestionItem) => {
+    Alert.alert(
+      "Add to Queue",
+      `Add "${item.title}" to the autonomy queue for review?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Add to Queue", onPress: () => onAddToQueue(item) },
+      ],
+    );
+  };
+
+  return (
+    <>
+      {/* Section header with generate button */}
+      <View style={styles.planSectionHeader}>
+        <Text style={styles.sectionLabel}>DAILY PLAN</Text>
+        <TouchableOpacity
+          onPress={onGenerate}
+          disabled={isLoading}
+          activeOpacity={0.75}
+          style={[styles.generateBtn, isLoading && styles.btnDisabled]}
+        >
+          {isLoading ? (
+            <ActivityIndicator color={colors.accent} size="small" />
+          ) : (
+            <Text style={styles.generateBtnText}>{plan ? "Regenerate" : "Generate"}</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {error ? (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      ) : !plan && !isLoading ? (
+        <View style={styles.emptyState}>
+          <SymbolView name="calendar.badge.clock" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+          <Text style={styles.emptyText}>No plan generated yet.</Text>
+          <Text style={styles.emptySubtext}>Tap Generate to build today's operational plan.</Text>
+        </View>
+      ) : plan ? (
+        <>
+          {/* Overview */}
+          <View style={styles.planOverviewCard}>
+            <Text style={styles.planDate}>{plan.plan_date}</Text>
+            <Text style={styles.planOverview}>{plan.overview}</Text>
+          </View>
+
+          {/* Focus Blocks */}
+          <Text style={styles.planSubLabel}>FOCUS BLOCKS</Text>
+          {plan.focus_blocks.map((block: FocusBlock, idx: number) => (
+            <View key={idx} style={styles.focusBlockRow}>
+              <View style={styles.focusBlockLeft}>
+                <Text style={styles.focusTimeRange}>{block.time_range}</Text>
+                <Text style={styles.focusActivity}>{block.activity}</Text>
+              </View>
+              <View style={[styles.energyDot, { backgroundColor: ENERGY_COLORS[block.energy_level] ?? colors.textMuted }]} />
+            </View>
+          ))}
+
+          {/* Priority Tasks */}
+          <Text style={[styles.planSubLabel, { marginTop: spacing.md }]}>PRIORITY TASKS</Text>
+          {plan.priority_tasks.map((task: PriorityTask) => (
+            <View key={task.rank} style={styles.priorityTaskRow}>
+              <View style={styles.priorityTaskHeader}>
+                <Text style={styles.priorityRank}>#{task.rank}</Text>
+                <Badge
+                  label={task.priority.toUpperCase()}
+                  color={PRIORITY_COLORS[task.priority] ?? colors.textMuted}
+                />
+                <Text style={styles.priorityDuration}>{task.estimated_duration}</Text>
+              </View>
+              <Text style={styles.priorityTaskTitle}>{task.title}</Text>
+              <Text style={styles.priorityTaskReason}>{task.reason}</Text>
+            </View>
+          ))}
+
+          {/* Suggested Queue Items */}
+          {plan.suggested_queue_items.length > 0 ? (
+            <>
+              <Text style={[styles.planSubLabel, { marginTop: spacing.md }]}>SUGGESTED ACTIONS</Text>
+              {plan.suggested_queue_items.map((item: SuggestionItem) => {
+                const isQueued = queuedIds.includes(item.id);
+                return (
+                  <View key={item.id} style={[styles.card, isQueued && styles.cardQueued]}>
+                    <View style={styles.cardHeader}>
+                      <View style={styles.cardMeta}>
+                        <Badge label={agentLabel(item.source_agent)} color={colors.accent} />
+                        <Badge label={item.risk_level.toUpperCase()} color={RISK_COLORS[item.risk_level as RiskLevel]} />
+                      </View>
+                      <Badge
+                        label={item.suggested_action_type.replace(/_/g, " ").toUpperCase()}
+                        color={colors.accentCyan}
+                      />
+                    </View>
+                    <Text style={styles.cardTitle}>{item.title}</Text>
+                    <Text style={styles.cardDescription}>{item.description}</Text>
+                    <View style={styles.reasonBox}>
+                      <Text style={styles.reasonLabel}>WHY THIS IS SUGGESTED</Text>
+                      <Text style={styles.reasonText}>{item.reason}</Text>
+                    </View>
+                    {isQueued ? (
+                      <View style={styles.queuedRow}>
+                        <SymbolView name="checkmark.circle.fill" size={14} tintColor="#22c55e" resizeMode="scaleAspectFit" />
+                        <Text style={styles.queuedText}>Added to Queue</Text>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={[styles.actionBtn, styles.addToQueueBtn, isMutating && styles.btnDisabled]}
+                        onPress={() => handleAdd(item)}
+                        disabled={isMutating}
+                        activeOpacity={0.75}
+                      >
+                        <Text style={styles.addToQueueBtnText}>Add to Queue</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })}
+            </>
+          ) : null}
+
+          {/* Risks */}
+          {plan.risks.length > 0 ? (
+            <>
+              <Text style={[styles.planSubLabel, { marginTop: spacing.md }]}>RISKS</Text>
+              <View style={styles.planListCard}>
+                {plan.risks.map((risk, idx) => (
+                  <Text key={idx} style={styles.planListItem}>
+                    <Text style={styles.planBullet}>• </Text>{risk}
+                  </Text>
+                ))}
+              </View>
+            </>
+          ) : null}
+
+          {/* Agent recommendations */}
+          {plan.recommended_agent_actions.length > 0 ? (
+            <>
+              <Text style={[styles.planSubLabel, { marginTop: spacing.md }]}>AGENT RECOMMENDATIONS</Text>
+              <View style={styles.planListCard}>
+                {plan.recommended_agent_actions.map((action, idx) => (
+                  <Text key={idx} style={styles.planListItem}>
+                    <Text style={styles.planBullet}>→ </Text>{action}
+                  </Text>
+                ))}
+              </View>
+            </>
+          ) : null}
+
+          {/* Schedule conflicts */}
+          {plan.schedule_conflicts.length > 0 ? (
+            <>
+              <Text style={[styles.planSubLabel, { marginTop: spacing.md }]}>SCHEDULE CONFLICTS</Text>
+              <View style={[styles.planListCard, styles.conflictCard]}>
+                {plan.schedule_conflicts.map((conflict, idx) => (
+                  <Text key={idx} style={[styles.planListItem, { color: "#f59e0b" }]}>
+                    <Text style={{ color: "#f59e0b" }}>⚠ </Text>{conflict}
+                  </Text>
+                ))}
+              </View>
+            </>
+          ) : null}
+        </>
+      ) : null}
+    </>
+  );
+}
+
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function AutonomyScreen() {
@@ -286,12 +492,18 @@ export default function AutonomyScreen() {
     isSuggestionsLoading,
     suggestionsError,
     queuedSuggestionIds,
+    dailyPlan,
+    isDailyPlanLoading,
+    dailyPlanError,
+    dailyPlanQueuedIds,
     fetchQueue,
     fetchSuggestions,
     approveItem,
     rejectItem,
     executeItem,
     addSuggestionToQueue,
+    generateDailyPlan,
+    addDailyPlanItemToQueue,
   } = useAutonomyStore();
 
   const loadAll = useCallback(() => {
@@ -337,6 +549,17 @@ export default function AutonomyScreen() {
     [accessToken, addSuggestionToQueue],
   );
 
+  const handleGenerateDailyPlan = useCallback(() => {
+    if (accessToken) generateDailyPlan(accessToken);
+  }, [accessToken, generateDailyPlan]);
+
+  const handleAddDailyPlanItemToQueue = useCallback(
+    (item: SuggestionItem) => {
+      if (accessToken) addDailyPlanItemToQueue(accessToken, item);
+    },
+    [accessToken, addDailyPlanItemToQueue],
+  );
+
   const pending  = items.filter((i) => i.status === "pending");
   const approved = items.filter((i) => i.status === "approved");
   const resolved = items.filter((i) => i.status === "rejected" || i.status === "completed");
@@ -380,6 +603,19 @@ export default function AutonomyScreen() {
       {isLoading && items.length === 0 ? (
         <ActivityIndicator color={colors.accent} style={{ marginTop: spacing.xl }} />
       ) : null}
+
+      {/* ── Daily Plan ───────────────────────────────────────────────── */}
+      <DailyPlanSection
+        plan={dailyPlan}
+        isLoading={isDailyPlanLoading}
+        error={dailyPlanError}
+        isMutating={isMutating}
+        queuedIds={dailyPlanQueuedIds}
+        onGenerate={handleGenerateDailyPlan}
+        onAddToQueue={handleAddDailyPlanItemToQueue}
+      />
+
+      <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.lg }} />
 
       {/* ── Proactive Suggestions ─────────────────────────────────────── */}
       <Text style={styles.sectionLabel}>PROACTIVE SUGGESTIONS</Text>
@@ -669,4 +905,113 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   executingText: { ...typography.caption, color: colors.accent, letterSpacing: 1 },
+
+  // Daily plan
+  planSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  generateBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    backgroundColor: "rgba(124, 58, 237, 0.12)",
+    minWidth: 80,
+    alignItems: "center",
+  },
+  generateBtnText: {
+    ...typography.caption,
+    color: colors.accent,
+    fontWeight: "700" as const,
+    letterSpacing: 1,
+  },
+  planOverviewCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
+  },
+  planDate: {
+    ...typography.caption,
+    color: colors.accent,
+    letterSpacing: 1.5,
+    marginBottom: spacing.xs,
+  },
+  planOverview: { ...typography.body, color: colors.textSecondary, lineHeight: 22 },
+  planSubLabel: {
+    fontSize: 9,
+    fontWeight: "700" as const,
+    letterSpacing: 1.5,
+    color: colors.textMuted,
+    marginBottom: spacing.xs,
+  },
+  focusBlockRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  focusBlockLeft: { flex: 1, gap: 2 },
+  focusTimeRange: {
+    ...typography.caption,
+    color: colors.accentCyan,
+    letterSpacing: 0.5,
+    fontWeight: "700" as const,
+  },
+  focusActivity: { ...typography.body, color: colors.textPrimary },
+  energyDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginLeft: spacing.sm,
+  },
+  priorityTaskRow: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.xs,
+    gap: spacing.xs,
+  },
+  priorityTaskHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginBottom: 2,
+  },
+  priorityRank: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontWeight: "700" as const,
+    minWidth: 20,
+  },
+  priorityDuration: { ...typography.caption, color: colors.textMuted, marginLeft: "auto" },
+  priorityTaskTitle: { ...typography.title, color: colors.textPrimary },
+  priorityTaskReason: { ...typography.caption, color: colors.textSecondary, lineHeight: 18 },
+  planListCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  conflictCard: { borderColor: "rgba(245, 158, 11, 0.35)" },
+  planListItem: { ...typography.body, color: colors.textSecondary, lineHeight: 22 },
+  planBullet: { color: colors.textMuted },
 });

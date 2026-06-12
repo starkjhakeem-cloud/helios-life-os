@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from app.ai.base import AIProvider
 from app.schemas.ai import BriefingPriority, ChatResponse, DailyBriefing, PlanResponse, PlanStep, RecommendedAction
-from app.schemas.autonomy import SuggestionItem
+from app.schemas.autonomy import DailyPlan, FocusBlock, PriorityTask, SuggestionItem
 from app.schemas.orchestration import AgentAssessment, OrchestrationResponse
 
 # ── Intent detection ──────────────────────────────────────────────────────────
@@ -735,3 +735,177 @@ class MockAIProvider(AIProvider):
             ))
 
         return suggestions[:5]
+
+    def generate_daily_plan(
+        self,
+        user_name: str,
+        plan_date: str,
+        user_context: str | None = None,
+    ) -> DailyPlan:
+        now = datetime.now(timezone.utc).isoformat()
+        has_goals    = bool(user_context and "GOALS"           in user_context)
+        has_tasks    = bool(user_context and "TASKS"           in user_context)
+        has_calendar = bool(user_context and "CALENDAR"        in user_context)
+        has_emails   = bool(user_context and "UNREAD MESSAGES" in user_context)
+
+        focus_blocks = [
+            FocusBlock(
+                time_range="09:00 – 10:30",
+                activity="Deep work: advance highest-priority task",
+                task_title=None,
+                energy_level="high",
+            ),
+            FocusBlock(
+                time_range="11:00 – 12:00",
+                activity="Goal strategy review and alignment" if has_goals else "Strategic review and planning",
+                task_title=None,
+                energy_level="high",
+            ),
+            FocusBlock(
+                time_range="14:00 – 15:30",
+                activity="Execution sprint: secondary tasks and communications",
+                task_title=None,
+                energy_level="medium",
+            ),
+            FocusBlock(
+                time_range="16:30 – 17:00",
+                activity="Daily review, capture, and next-day preparation",
+                task_title=None,
+                energy_level="low",
+            ),
+        ]
+
+        priority_tasks = [
+            PriorityTask(
+                rank=1,
+                title="Complete top critical task",
+                priority="critical",
+                estimated_duration="90 min",
+                linked_goal=None,
+                reason=(
+                    "Critical tasks carry the highest cost of deferral. "
+                    "Clear before accepting any new work."
+                ),
+            ),
+            PriorityTask(
+                rank=2,
+                title="Advance active goal — next milestone action",
+                priority="high",
+                estimated_duration="60 min",
+                linked_goal="Active goal" if has_goals else None,
+                reason=(
+                    "Goal velocity requires daily forward motion. "
+                    "At least one goal-linked action must advance today."
+                ),
+            ),
+            PriorityTask(
+                rank=3,
+                title="Inbox triage and high-priority communications" if has_emails else "Review backlog and defer low-value items",
+                priority="medium",
+                estimated_duration="30 min",
+                linked_goal=None,
+                reason=(
+                    "Deferred communications compound into planning debt — triage early."
+                    if has_emails else
+                    "An uncurated backlog silently grows and obscures true priorities."
+                ),
+            ),
+        ]
+
+        schedule_conflicts: list[str] = []
+        if has_calendar:
+            schedule_conflicts.append(
+                "Deep-work block (09:00–10:30) may overlap with calendar events — "
+                "verify and protect before committing to the schedule."
+            )
+
+        recommended_agent_actions = [
+            "Strategy Agent: Confirm today's highest-leverage action aligns with the active goal stack.",
+            "Task Manager: Close or defer overdue tasks before starting new work.",
+            "Analytics Engine: Verify task completion rate is on target — if below baseline, reduce WIP first.",
+        ]
+        if has_emails:
+            recommended_agent_actions.append(
+                "Email Intelligence: Triage high-priority inbox before the 11:00 block."
+            )
+
+        risks = [
+            "Context switching between tasks reduces deep-work output — protect the 09:00 block from all interruptions.",
+            "Goals without today's task progress stall — ensure at least one goal-linked action is captured.",
+        ]
+        if has_tasks:
+            risks.append(
+                "Overdue tasks silently accumulate — run a quick backlog scan before the end-of-day review."
+            )
+
+        suggested_queue_items = [
+            SuggestionItem(
+                id=str(uuid.uuid4()),
+                title="Create task: Today's #1 execution anchor",
+                description=(
+                    "Capture your single highest-priority action for today as a tracked task "
+                    "to prevent priority drift during the day."
+                ),
+                source_agent="strategy_agent",
+                suggested_action_type="create_task",
+                risk_level="low",
+                reason=(
+                    "Daily plans without a concrete #1 task have no execution anchor — "
+                    "the plan evaporates under distraction."
+                ),
+                payload_preview={
+                    "title": "Today's top priority execution action",
+                    "priority": "critical",
+                    "status": "todo",
+                },
+                created_at=now,
+            ),
+            SuggestionItem(
+                id=str(uuid.uuid4()),
+                title="Generate 7-day sprint plan",
+                description=(
+                    "Produce a structured 7-day execution plan to align today's work "
+                    "with your current goals and task backlog."
+                ),
+                source_agent="strategy_agent",
+                suggested_action_type="generate_plan",
+                risk_level="low",
+                reason=(
+                    "A daily plan is strongest when embedded in a weekly horizon — "
+                    "ad-hoc days fragment strategy."
+                ),
+                payload_preview={
+                    "prompt": "Generate a 7-day sprint plan aligned to active goals and current task backlog",
+                    "planning_horizon_days": 7,
+                },
+                created_at=now,
+            ),
+        ]
+
+        goal_clause = "Goal velocity requires at least one milestone action before end of day. " if has_goals else ""
+        email_clause = (
+            "Inbox triage is scheduled for the mid-morning slot — "
+            "do not let it bleed into the morning deep-work block. "
+            if has_emails else ""
+        )
+        overview = (
+            f"Today's operational plan for {user_name} — {plan_date}. "
+            "Four structured focus blocks protect deep-work time while maintaining "
+            "communication and review cycles. "
+            f"Key constraint: context switching. "
+            f"{goal_clause}"
+            f"{email_clause}"
+            "Close the day with a review and next-day capture session."
+        )
+
+        return DailyPlan(
+            plan_date=plan_date,
+            overview=overview,
+            focus_blocks=focus_blocks,
+            priority_tasks=priority_tasks,
+            schedule_conflicts=schedule_conflicts,
+            recommended_agent_actions=recommended_agent_actions,
+            risks=risks,
+            suggested_queue_items=suggested_queue_items,
+            generated_at=now,
+        )
