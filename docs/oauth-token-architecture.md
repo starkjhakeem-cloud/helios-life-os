@@ -1,7 +1,7 @@
 # OAuth and Secure Token Architecture
 
-**Status:** OAuth skeleton active. Authorization URL generation working. Token exchange not yet implemented.
-**Added in:** V2.14 (architecture), V2.15 (skeleton flow)
+**Status:** OAuth skeleton active. Token exchange wired. Google Calendar provider adapter layer added (stub mode).
+**Added in:** V2.14 (architecture), V2.15 (skeleton flow), V2.18 (Calendar adapter)
 **Applies to:** Google Calendar, Gmail (Outlook planned separately)
 
 ---
@@ -28,8 +28,10 @@ HELIOS V2.14 completes the infrastructure layer required to support real Google 
 | Token encryption service (`token_encryption.py`) | ✅ Fernet encrypt/decrypt + `validate_key()` |
 | Startup key validation | ✅ Valid/invalid/absent logged at startup |
 | Frontend CONNECT GOOGLE button | ✅ Calls storage pipeline; refreshes cards on success |
+| Google Calendar provider adapter (`google_calendar_adapter.py`) | ✅ Added in V2.18 — `_STUB=True` |
 | State token persistence (CSRF) | ⏳ Not yet implemented |
 | Deep-link intercept in mobile app | ⏳ Not yet implemented |
+| Real Google Calendar API calls via adapter | ⏳ Pending — flip `_STUB=False` |
 
 ---
 
@@ -240,3 +242,106 @@ If `TOKEN_ENCRYPTION_KEY` must be rotated (e.g., suspected compromise):
 | `backend/app/main.py` | Imports `validate_key`; startup check now logs `info` (not set), `warning` (invalid key), or `info` (configured and valid) |
 | `mobile/src/app/(tabs)/integrations.tsx` | `handleGoogleConnect` now calls `exchangeCode` when configured; refreshes integration list if `tokens_stored: true`; shows pipeline status in alert |
 | `docs/oauth-token-architecture.md` | Updated current-state table, limitations; added V2.17 file list |
+
+---
+
+## V2.18 — Google Calendar Provider Adapter
+
+### What Was Added
+
+A new adapter service (`backend/app/services/google_calendar_adapter.py`) sits between HELIOS business logic and the Google Calendar REST API. It defines the full interface for calendar operations — `list_events`, `create_event`, `update_event`, `delete_event` — but executes stub behaviour only. No real Google API calls are made.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Calendar router  (app/routers/calendar.py)                         │
+│  Manages HELIOS-local calendar_events table — unchanged             │
+└───────────────────────────────┬─────────────────────────────────────┘
+                                │ future: adapter bridges local ↔ Google
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  GoogleCalendarAdapter  (app/services/google_calendar_adapter.py)   │
+│  _STUB = True  →  returns fixture data, no network call             │
+│  _STUB = False →  decrypts token → httpx → Google Calendar API      │
+└───────────────────────────────┬─────────────────────────────────────┘
+                                │ (real path only)
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  token_encryption.decrypt_token()                                   │
+│  Reads access_token_encrypted from user_integrations row            │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### What Is Stubbed vs. What Is Real
+
+| Behaviour | Status |
+|-----------|--------|
+| `list_events` method signature and call pattern | ✅ Real (stub returns 3 fixture events) |
+| `create_event` method signature and call pattern | ✅ Real (stub echoes input with deterministic ID) |
+| `update_event` method signature and call pattern | ✅ Real (stub patches fixture in memory) |
+| `delete_event` method signature and call pattern | ✅ Real (stub returns `True`, no network call) |
+| Token retrieval path (`_get_access_token`) | ✅ Real — DB look-up + `decrypt_token` call wired (not reached in stub mode) |
+| HTTP calls to `googleapis.com/calendar/v3` | ⏳ Stubbed — flip `_STUB = False` to activate |
+| Token refresh before expired access token | ⏳ Not yet implemented |
+
+### Stub flag
+
+```python
+# backend/app/services/google_calendar_adapter.py
+_STUB: bool = True   # ← set to False when real credentials are configured
+```
+
+When `_STUB = True`:
+- No DB read for tokens.
+- No HTTP request to Google.
+- Each method logs at `INFO` level indicating stub mode.
+- Returns deterministic fixture data (`_STUB_EVENTS` list for reads).
+
+When `_STUB = False` (not yet enabled):
+- `_get_access_token(user_id, db)` queries `user_integrations` for the connected Google Calendar row and calls `token_encryption.decrypt_token()`.
+- The decrypted value is used only in the `Authorization: Bearer` header and never logged or returned.
+- Real HTTP calls go to `https://www.googleapis.com/calendar/v3/calendars/primary/events`.
+
+### Usage pattern (future)
+
+```python
+from app.services.google_calendar_adapter import (
+    google_calendar_adapter,
+    GoogleCalendarEventCreate,
+)
+
+events = google_calendar_adapter.list_events(user_id=current_user.id, db=db)
+
+new_event = google_calendar_adapter.create_event(
+    user_id=current_user.id,
+    db=db,
+    event=GoogleCalendarEventCreate(
+        summary="Team Sync",
+        start="2026-06-16T10:00:00Z",
+        end="2026-06-16T10:30:00Z",
+    ),
+)
+```
+
+### Security invariants
+
+- Raw token values are **never** logged (only `type(exc).__name__` on decryption failure).
+- Raw token values are **never** returned from any adapter method.
+- `_get_access_token` is a private helper; callers receive domain objects, not credentials.
+- Stub tokens stored by `_STUB_EXCHANGE=True` (V2.17) are never passed to this adapter — the adapter operates on real encrypted rows only, and in stub mode it skips token access entirely.
+
+### What remains for real sync
+
+1. Set `_STUB = False` in `google_calendar_adapter.py`.
+2. Set `_STUB_EXCHANGE = False` in `google_oauth.py` so real tokens are stored.
+3. Provision `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `TOKEN_ENCRYPTION_KEY` in `.env`.
+4. Implement token refresh: before each adapter call check `token_expires_at`; if within 5 minutes of expiry, call the Google token refresh endpoint and re-encrypt the new access token.
+5. Wire the adapter into the sync router or a background task so triggered syncs call the real API instead of `sync_simulator.run_mock_sync`.
+
+## Files Changed in V2.18
+
+| File | Change |
+|------|--------|
+| `backend/app/services/google_calendar_adapter.py` | **NEW** — `GoogleCalendarAdapter` class with `list_events`, `create_event`, `update_event`, `delete_event`; `_STUB=True`; `_get_access_token` helper; singleton `google_calendar_adapter` |
+| `docs/oauth-token-architecture.md` | Updated status table; added V2.18 architecture section |
