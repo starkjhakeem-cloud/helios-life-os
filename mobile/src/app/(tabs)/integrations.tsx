@@ -454,12 +454,29 @@ export default function IntegrationsScreen() {
           "Real Google OAuth is not configured on this server.\n\nTo enable it, add the following to backend/.env:\n\n  • GOOGLE_CLIENT_ID\n  • GOOGLE_CLIENT_SECRET\n  • TOKEN_ENCRYPTION_KEY\n\nSee backend/.env.example for setup instructions.\n\nTap MOCK on this card to connect with simulated data in the meantime.",
           [{ text: "OK" }],
         );
-      } else {
-        const urlPreview =
-          data.url.length > 100 ? `${data.url.substring(0, 100)}…` : data.url;
+        return;
+      }
+
+      // Credentials configured — run the full storage pipeline.
+      // In stub mode (_STUB_EXCHANGE=True), placeholder tokens are encrypted
+      // and stored so the pipeline can be validated end-to-end.
+      const result = await integrationService.exchangeCode(accessToken, {
+        code: "stub_pipeline_v2_17",
+        state: data.state,
+      });
+
+      if (result.tokens_stored) {
+        // Refresh the list so both Google cards show "connected"
+        await fetchIntegrations(accessToken);
         Alert.alert(
-          "Google OAuth — Stub Active",
-          `✓ Credentials configured\n\nToken exchange is in stub mode — placeholder tokens are returned but not stored. This will be activated in a future release.\n\nUse MOCK to connect with simulated data for now.\n\nAuthorization URL:\n${urlPreview}`,
+          "Storage Pipeline Active",
+          `✓ Token storage working\n\n${result.stub ? "Stub" : "Real"} tokens encrypted and stored for Google Calendar and Gmail. Both cards now show as connected.\n\nReal tokens will replace the stubs when real OAuth is activated.`,
+          [{ text: "OK" }],
+        );
+      } else {
+        Alert.alert(
+          "Exchange Completed",
+          `✓ Credentials configured — exchange completed.\n\n${result.note}`,
           [{ text: "OK" }],
         );
       }

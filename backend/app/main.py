@@ -15,6 +15,7 @@ from app.core.limiter import limiter
 from app.logging_config import configure_logging
 from app.routers import agents, ai, analytics, auth, calendar, conversations, dashboard, email, goals, health, integrations, memory, reminders, tasks
 from app.routers import settings as settings_router
+from app.services.token_encryption import validate_key as validate_encryption_key
 
 configure_logging(settings)
 logger = logging.getLogger(__name__)
@@ -220,13 +221,29 @@ async def startup_checks() -> None:
             "Generate a strong secret: python3 -c \"import secrets; print(secrets.token_hex(32))\"",
             extra={"request_id": "-"},
         )
-    if settings.token_encryption_key is None:
+    if not settings.token_encryption_key:
         logger.info(
-            "TOKEN_ENCRYPTION_KEY is not set — mock integrations work without it. "
-            "Generate and set one before enabling real OAuth token storage. "
+            "TOKEN_ENCRYPTION_KEY is not set — mock integrations work without it; "
+            "required before storing real OAuth tokens. "
             "Generate: python3 -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\"",
             extra={"request_id": "-"},
         )
+    else:
+        key_error = validate_encryption_key()
+        if key_error:
+            logger.warning(
+                "TOKEN_ENCRYPTION_KEY is present but invalid — %s. "
+                "OAuth token storage will fail until this is corrected. "
+                "Generate a valid key: python3 -c \"from cryptography.fernet import Fernet; "
+                "print(Fernet.generate_key().decode())\"",
+                key_error,
+                extra={"request_id": "-"},
+            )
+        else:
+            logger.info(
+                "TOKEN_ENCRYPTION_KEY is configured and valid — token storage active.",
+                extra={"request_id": "-"},
+            )
 
 
 @app.on_event("shutdown")

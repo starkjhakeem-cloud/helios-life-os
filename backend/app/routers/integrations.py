@@ -1,12 +1,15 @@
 import json
+import logging
 import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from app.config import settings
 from app.db.session import get_db
@@ -31,6 +34,7 @@ from app.services.google_oauth import (
     is_oauth_configured,
 )
 from app.services.sync_simulator import run_mock_sync
+from app.services.token_encryption import TokenEncryptionError, encrypt_token
 
 router = APIRouter()
 
@@ -347,27 +351,29 @@ def google_exchange_code(
     db: Session = Depends(get_db),
 ) -> ExchangeCodeResponse:
     """
-    Exchange a Google authorization code for tokens (JWT-authenticated).
+    Exchange a Google authorization code for tokens, encrypt them, and persist
+    to user_integrations. JWT-authenticated — tokens are always tied to the
+    requesting user.
 
     Called by the mobile app after intercepting the `helios://oauth/callback/google`
-    deep link and extracting the authorization code. Requires a valid JWT so
-    tokens are always associated with the authenticated user.
+    deep link and extracting the authorization code.  In V2.17 stub mode
+    (_STUB_EXCHANGE=True), placeholder token strings are exchanged and stored —
+    this validates the full encryption + DB-write pipeline without real credentials.
 
-    V2.16 behavior:
-    - Validates that all required OAuth env vars are configured.
-    - Calls exchange_authorization_code:
-      * _STUB_EXCHANGE=True  → returns placeholder GoogleTokens (no Google API call).
-      * _STUB_EXCHANGE=False → performs the real HTTP exchange.
-    - Does NOT store tokens yet — token encryption + DB write wired in V2.17.
-
-    Returns HTTP 503 when OAuth credentials are not configured.
+    Returns HTTP 503 when GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, or
+    TOKEN_ENCRYPTION_KEY are missing from config.
     Returns HTTP 502 when the Google token endpoint returns an error.
+    Returns HTTP 500 when encryption or DB write fails unexpectedly.
 
-    V2.17+ production:
-    1. Verify state against the value stored for current_user.id (CSRF protection).
-    2. Encrypt tokens:  encrypt_token(tokens.access_token / tokens.refresh_token).
-    3. Upsert user_integrations: status=connected, token_expires_at=now+expires_in.
-    4. Set last_sync_at on first connect if a sync is triggered immediately.
+    Security:
+    - Raw token values are NEVER logged or included in API responses.
+    - Encrypted ciphertext is stored only in `access_token_encrypted` /
+      `refresh_token_encrypted` columns — never surfaced via any API endpoint.
+    - token_expires_at (a non-sensitive timestamp) IS returned via the
+      integration list so the frontend can surface token-expiry warnings.
+
+    State verification (CSRF protection) is not yet implemented — wire in
+    a future phase once state persistence is added.
     """
     try:
         tokens = exchange_authorization_code(
@@ -379,24 +385,76 @@ def google_exchange_code(
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=f"Token exchange failed: {exc}")
 
-    # V2.17: uncomment to encrypt and persist tokens.
-    # from datetime import timedelta
-    # from app.services.token_encryption import encrypt_token
-    # enc_access  = encrypt_token(tokens.access_token)
-    # enc_refresh = encrypt_token(tokens.refresh_token) if tokens.refresh_token else None
-    # expires_at  = datetime.now(timezone.utc) + timedelta(seconds=tokens.expires_in)
-    # ... upsert user_integrations row, set status="connected" ...
+    # exchange_authorization_code already validated is_oauth_configured(), which
+    # includes TOKEN_ENCRYPTION_KEY, so encrypt_token() is safe to call here.
+    try:
+        enc_access = encrypt_token(tokens.access_token)
+        enc_refresh = (
+            encrypt_token(tokens.refresh_token) if tokens.refresh_token else None
+        )
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=tokens.expires_in)
+        scopes_json = json.dumps(tokens.scope.split())
+        now = datetime.now(timezone.utc)
+
+        # One Google OAuth token set covers both calendar and gmail scopes.
+        # Upsert both provider rows with the same encrypted tokens.
+        for provider in ("google_calendar", "gmail"):
+            existing = db.execute(
+                select(UserIntegration).where(
+                    UserIntegration.user_id == current_user.id,
+                    UserIntegration.provider == provider,
+                )
+            ).scalar_one_or_none()
+
+            if existing:
+                existing.access_token_encrypted = enc_access
+                existing.refresh_token_encrypted = enc_refresh
+                existing.token_expires_at = expires_at
+                existing.status = "connected"
+                existing.connected_at = existing.connected_at or now
+                existing.scopes = scopes_json
+                existing.updated_at = now
+            else:
+                db.add(UserIntegration(
+                    id=str(uuid.uuid4()),
+                    user_id=current_user.id,
+                    provider=provider,
+                    status="connected",
+                    connected_at=now,
+                    access_token_encrypted=enc_access,
+                    refresh_token_encrypted=enc_refresh,
+                    token_expires_at=expires_at,
+                    scopes=scopes_json,
+                    created_at=now,
+                    updated_at=now,
+                ))
+
+        db.commit()
+
+    except (TokenEncryptionError, Exception) as exc:
+        db.rollback()
+        # Log only the exception type — never log raw token values or the
+        # encryption key, even indirectly through exception messages.
+        logger.error(
+            "google_exchange: token storage failed for user %s (%s)",
+            current_user.id,
+            type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Token storage failed. Check server logs.",
+        )
 
     return ExchangeCodeResponse(
         success=True,
         provider="google",
         stub=tokens.stub,
-        tokens_stored=False,
+        tokens_stored=True,
         note=(
-            "Stub exchange completed — real credentials configured but _STUB_EXCHANGE=True. "
-            "Token storage not yet implemented (V2.17)."
+            "Stub tokens encrypted and stored for google_calendar and gmail. "
+            "Real tokens will replace these when _STUB_EXCHANGE=False."
             if tokens.stub
-            else "Token exchange succeeded. Token storage not yet implemented (V2.17)."
+            else "Real tokens encrypted and stored for google_calendar and gmail."
         ),
     )
 
