@@ -8,9 +8,6 @@ RiskLevel = Literal["low", "medium", "high"]
 QueueStatus = Literal["pending", "approved", "rejected", "completed"]
 UpdateableStatus = Literal["approved", "rejected", "completed"]
 
-# Action types that the autonomy execution bridge will handle.
-# generate_plan is added here but not in ai.py's ExecutableActionType because
-# the plan endpoint has a different response shape (plan field vs. plain result).
 _SAFE_AUTONOMY_ACTIONS: frozenset[str] = frozenset({
     "create_task",
     "create_goal",
@@ -18,6 +15,8 @@ _SAFE_AUTONOMY_ACTIONS: frozenset[str] = frozenset({
     "generate_plan",
 })
 
+
+# ── Queue CRUD ────────────────────────────────────────────────────────────────
 
 class AutonomyQueueItemCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
@@ -71,3 +70,23 @@ class AutonomyExecuteResult(BaseModel):
     executed_at: str
     # Only populated for generate_plan executions.
     plan: PlanResponse | None = None
+
+
+# ── Proactive suggestions ─────────────────────────────────────────────────────
+
+class SuggestionItem(BaseModel):
+    id: str
+    title: str
+    description: str
+    source_agent: str
+    suggested_action_type: str
+    risk_level: str
+    reason: str
+    payload_preview: dict[str, Any]
+    created_at: str
+
+
+class SuggestionsResponse(BaseModel):
+    suggestions: list[SuggestionItem]
+    total: int
+    generated_at: str

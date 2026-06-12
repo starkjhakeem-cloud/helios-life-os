@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
 from app.schemas.ai import ChatResponse, DailyBriefing, PlanResponse
+from app.schemas.autonomy import SuggestionItem
 from app.schemas.orchestration import OrchestrationResponse
 
 
@@ -35,3 +36,10 @@ class AIProvider(ABC):
         user_context: str | None,
         user_name: str,
     ) -> OrchestrationResponse: ...
+
+    @abstractmethod
+    def generate_suggestions(
+        self,
+        user_name: str,
+        user_context: str | None = None,
+    ) -> list[SuggestionItem]: ...

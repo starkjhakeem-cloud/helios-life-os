@@ -207,7 +207,7 @@ app.include_router(
 
 app.include_router(
     autonomy.router,
-    prefix=f"/api/{settings.api_version}/autonomy/queue",
+    prefix=f"/api/{settings.api_version}/autonomy",
     tags=["autonomy"],
 )
 

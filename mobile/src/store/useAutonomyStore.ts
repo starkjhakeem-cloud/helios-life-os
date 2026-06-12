@@ -6,24 +6,37 @@ import {
   type AutonomyQueueItem,
   type AutonomyQueueItemCreate,
   type QueueStatus,
+  type SuggestionItem,
   autonomyService,
 } from "../services/autonomyService";
 import { useGoalsStore } from "./useGoalsStore";
 import { useTasksStore } from "./useTasksStore";
 
 type AutonomyState = {
+  // Queue
   items: AutonomyQueueItem[];
   isLoading: boolean;
   isMutating: boolean;
-  // Tracks which item is currently executing so the card can show a spinner.
   executingItemId: string | null;
   error: string | null;
+
+  // Suggestions
+  suggestions: SuggestionItem[];
+  isSuggestionsLoading: boolean;
+  suggestionsError: string | null;
+  // IDs of suggestions already promoted to the queue this session.
+  queuedSuggestionIds: string[];
+
   fetchQueue: (token: string, status?: QueueStatus) => Promise<void>;
   createItem: (token: string, data: AutonomyQueueItemCreate) => Promise<void>;
   approveItem: (token: string, id: string) => Promise<void>;
   rejectItem: (token: string, id: string) => Promise<void>;
   executeItem: (token: string, id: string) => Promise<AutonomyExecuteResult | null>;
   deleteItem: (token: string, id: string) => Promise<void>;
+
+  fetchSuggestions: (token: string) => Promise<void>;
+  addSuggestionToQueue: (token: string, suggestion: SuggestionItem) => Promise<void>;
+
   reset: () => void;
 };
 
@@ -37,6 +50,13 @@ export const useAutonomyStore = create<AutonomyState>()((set, get) => ({
   isMutating: false,
   executingItemId: null,
   error: null,
+
+  suggestions: [],
+  isSuggestionsLoading: false,
+  suggestionsError: null,
+  queuedSuggestionIds: [],
+
+  // ── Queue actions ─────────────────────────────────────────────────────────
 
   fetchQueue: async (token, status) => {
     set({ isLoading: true, error: null });
@@ -90,7 +110,6 @@ export const useAutonomyStore = create<AutonomyState>()((set, get) => ({
     set({ executingItemId: id, isMutating: true, error: null });
     try {
       const result = await autonomyService.execute(token, id);
-      // Optimistically mark the item completed in local state.
       set((s) => ({
         items: s.items.map((item) =>
           item.id === id ? { ...item, status: "completed" as QueueStatus } : item,
@@ -98,7 +117,6 @@ export const useAutonomyStore = create<AutonomyState>()((set, get) => ({
         executingItemId: null,
         isMutating: false,
       }));
-      // Refresh related stores so Goals/Tasks screens reflect the change.
       if (
         result.action_type === "create_task" ||
         result.action_type === "update_task_status"
@@ -128,6 +146,40 @@ export const useAutonomyStore = create<AutonomyState>()((set, get) => ({
     }
   },
 
+  // ── Suggestion actions ────────────────────────────────────────────────────
+
+  fetchSuggestions: async (token) => {
+    set({ isSuggestionsLoading: true, suggestionsError: null });
+    try {
+      const data = await autonomyService.getSuggestions(token);
+      set({ suggestions: data.suggestions, isSuggestionsLoading: false });
+    } catch (err) {
+      set({ suggestionsError: extractMessage(err), isSuggestionsLoading: false });
+    }
+  },
+
+  addSuggestionToQueue: async (token, suggestion) => {
+    set({ isMutating: true, error: null });
+    try {
+      await autonomyService.create(token, {
+        title: suggestion.title,
+        description: suggestion.description,
+        source_agent: suggestion.source_agent,
+        proposed_action_type: suggestion.suggested_action_type,
+        payload_preview: suggestion.payload_preview,
+        risk_level: suggestion.risk_level,
+      });
+      set((s) => ({
+        queuedSuggestionIds: [...s.queuedSuggestionIds, suggestion.id],
+        isMutating: false,
+      }));
+      // Refresh queue so the new item appears in Pending Review immediately.
+      await get().fetchQueue(token);
+    } catch (err) {
+      set({ error: extractMessage(err), isMutating: false });
+    }
+  },
+
   reset: () =>
     set({
       items: [],
@@ -135,5 +187,9 @@ export const useAutonomyStore = create<AutonomyState>()((set, get) => ({
       isMutating: false,
       executingItemId: null,
       error: null,
+      suggestions: [],
+      isSuggestionsLoading: false,
+      suggestionsError: null,
+      queuedSuggestionIds: [],
     }),
 }));

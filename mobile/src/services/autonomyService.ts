@@ -47,6 +47,24 @@ export type AutonomyExecuteResult = {
   plan?: PlanResponse | null;
 };
 
+export type SuggestionItem = {
+  id: string;
+  title: string;
+  description: string;
+  source_agent: string;
+  suggested_action_type: string;
+  risk_level: RiskLevel;
+  reason: string;
+  payload_preview: Record<string, unknown>;
+  created_at: string;
+};
+
+export type SuggestionsResponse = {
+  suggestions: SuggestionItem[];
+  total: number;
+  generated_at: string;
+};
+
 export const autonomyService = {
   list: (token: string, status?: QueueStatus) => {
     const url = status
@@ -66,4 +84,11 @@ export const autonomyService = {
 
   delete: (token: string, id: string) =>
     apiClient.del(API_ENDPOINTS.autonomy.item(id), token),
+
+  getSuggestions: (token: string, limit?: number) => {
+    const url = limit
+      ? `${API_ENDPOINTS.autonomy.suggestions}?limit=${limit}`
+      : API_ENDPOINTS.autonomy.suggestions;
+    return apiClient.get<SuggestionsResponse>(url, token);
+  },
 };

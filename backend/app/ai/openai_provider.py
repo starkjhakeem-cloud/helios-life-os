@@ -13,6 +13,7 @@ from app.ai.prompts import (
     build_plan_user_message,
 )
 from app.schemas.ai import BriefingPriority, ChatResponse, DailyBriefing, PlanResponse, PlanStep, RecommendedAction
+from app.schemas.autonomy import SuggestionItem
 from app.schemas.orchestration import AgentAssessment, OrchestrationResponse
 
 
@@ -209,3 +210,14 @@ class OpenAIProvider(AIProvider):
             raise RuntimeError(
                 f"OpenAI orchestration response did not match expected schema: {exc}"
             ) from exc
+
+    def generate_suggestions(
+        self,
+        user_name: str,
+        user_context: str | None = None,
+    ) -> list[SuggestionItem]:
+        # Proactive suggestion generation via OpenAI requires a dedicated prompt
+        # template and structured output schema — deferred to a future phase.
+        # Delegate to mock so the endpoint works regardless of provider configuration.
+        from app.ai.mock_provider import MockAIProvider
+        return MockAIProvider().generate_suggestions(user_name, user_context)

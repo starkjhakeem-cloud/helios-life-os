@@ -22,6 +22,7 @@ from app.schemas.autonomy import (
     AutonomyQueueListResponse,
     AutonomyQueueStatusUpdate,
     GeneratePlanPayload,
+    SuggestionsResponse,
     _SAFE_AUTONOMY_ACTIONS,
 )
 
@@ -46,7 +47,46 @@ def _to_out(item: AutonomyQueueItem) -> AutonomyQueueItemOut:
     )
 
 
-@router.get("", response_model=AutonomyQueueListResponse)
+# ── Proactive suggestions ─────────────────────────────────────────────────────
+
+@router.get("/suggestions", response_model=SuggestionsResponse)
+def get_suggestions(
+    limit: int = Query(default=5, ge=1, le=10, description="Maximum number of suggestions to return"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> SuggestionsResponse:
+    """
+    Generate proactive planning suggestions from the operator's unified context.
+    Suggestions are ephemeral — not stored in the database.
+    Call POST /queue to promote a suggestion into the review queue.
+    """
+    planning_ctx = build_context(
+        ContextScope.PLANNING,
+        user_id=current_user.id,
+        db=db,
+        user_name=current_user.name,
+    )
+
+    try:
+        suggestions = get_ai_provider().generate_suggestions(
+            user_name=current_user.name,
+            user_context=planning_ctx.text,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    now = datetime.now(timezone.utc).isoformat()
+    trimmed = suggestions[:limit]
+    return SuggestionsResponse(
+        suggestions=trimmed,
+        total=len(trimmed),
+        generated_at=now,
+    )
+
+
+# ── Queue CRUD ────────────────────────────────────────────────────────────────
+
+@router.get("/queue", response_model=AutonomyQueueListResponse)
 def list_queue(
     status: str | None = Query(default=None, description="Filter by status: pending | approved | rejected | completed"),
     current_user: User = Depends(get_current_user),
@@ -67,7 +107,7 @@ def list_queue(
     return AutonomyQueueListResponse(items=[_to_out(r) for r in rows], total=len(rows))
 
 
-@router.post("", response_model=AutonomyQueueItemOut, status_code=201)
+@router.post("/queue", response_model=AutonomyQueueItemOut, status_code=201)
 def create_queue_item(
     payload: AutonomyQueueItemCreate,
     current_user: User = Depends(get_current_user),
@@ -93,7 +133,7 @@ def create_queue_item(
     return _to_out(item)
 
 
-@router.patch("/{item_id}", response_model=AutonomyQueueItemOut)
+@router.patch("/queue/{item_id}", response_model=AutonomyQueueItemOut)
 def update_queue_item_status(
     item_id: str,
     payload: AutonomyQueueStatusUpdate,
@@ -117,7 +157,7 @@ def update_queue_item_status(
     return _to_out(item)
 
 
-@router.delete("/{item_id}", status_code=204)
+@router.delete("/queue/{item_id}", status_code=204)
 def delete_queue_item(
     item_id: str,
     current_user: User = Depends(get_current_user),
@@ -137,7 +177,9 @@ def delete_queue_item(
     db.commit()
 
 
-@router.post("/{item_id}/execute", response_model=AutonomyExecuteResult)
+# ── Execution bridge ──────────────────────────────────────────────────────────
+
+@router.post("/queue/{item_id}/execute", response_model=AutonomyExecuteResult)
 def execute_queue_item(
     item_id: str,
     current_user: User = Depends(get_current_user),

@@ -1,8 +1,9 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from app.ai.base import AIProvider
 from app.schemas.ai import BriefingPriority, ChatResponse, DailyBriefing, PlanResponse, PlanStep, RecommendedAction
+from app.schemas.autonomy import SuggestionItem
 from app.schemas.orchestration import AgentAssessment, OrchestrationResponse
 
 # ── Intent detection ──────────────────────────────────────────────────────────
@@ -552,3 +553,185 @@ class MockAIProvider(AIProvider):
             provider="mock",
             generated_at=datetime.now(timezone.utc).isoformat(),
         )
+
+    def generate_suggestions(
+        self,
+        user_name: str,
+        user_context: str | None = None,
+    ) -> list[SuggestionItem]:
+        now = datetime.now(timezone.utc).isoformat()
+        has_goals    = bool(user_context and "GOALS"           in user_context)
+        has_tasks    = bool(user_context and "TASKS"           in user_context)
+        has_calendar = bool(user_context and "CALENDAR"        in user_context)
+        has_emails   = bool(user_context and "UNREAD MESSAGES" in user_context)
+        has_memories = bool(user_context and "LONG-TERM MEMORY" in user_context)
+
+        target_30 = (date.today() + timedelta(days=30)).isoformat()
+        target_7  = (date.today() + timedelta(days=7)).isoformat()
+
+        suggestions: list[SuggestionItem] = []
+
+        # ── Strategy agent: always suggest a daily execution plan ────────────
+        suggestions.append(SuggestionItem(
+            id=str(uuid.uuid4()),
+            title="Generate today's execution plan",
+            description=(
+                f"Build a structured 7-day plan for {user_name} based on active goals, "
+                "current tasks, and available focus time."
+            ),
+            source_agent="strategy_agent",
+            suggested_action_type="generate_plan",
+            risk_level="low",
+            reason=(
+                "Daily planning converts ambition into execution. "
+                "A structured plan prevents priority drift and surfaces blockers early."
+            ),
+            payload_preview={
+                "prompt": "Generate a focused execution plan for today and the next 7 days",
+                "planning_horizon_days": 7,
+            },
+            created_at=now,
+        ))
+
+        # ── Strategy agent: 30-day goal execution plan ────────────────────────
+        if has_goals:
+            suggestions.append(SuggestionItem(
+                id=str(uuid.uuid4()),
+                title="Create 30-day plan for active goal",
+                description=(
+                    "Generate a phased execution plan linked to your highest-priority active goal."
+                ),
+                source_agent="strategy_agent",
+                suggested_action_type="generate_plan",
+                risk_level="low",
+                reason=(
+                    "Active goals without execution plans are at risk of stalling. "
+                    "A 30-day horizon provides enough structure without over-committing."
+                ),
+                payload_preview={
+                    "prompt": "Advance highest-priority active goal with a phased plan",
+                    "planning_horizon_days": 30,
+                },
+                created_at=now,
+            ))
+
+        # ── Task manager: create a weekly review task ─────────────────────────
+        if has_tasks:
+            suggestions.append(SuggestionItem(
+                id=str(uuid.uuid4()),
+                title="Schedule weekly progress review",
+                description=(
+                    "Create a recurring checkpoint task to review goal and task status each week."
+                ),
+                source_agent="task_manager",
+                suggested_action_type="create_task",
+                risk_level="low",
+                reason=(
+                    "Task lists without regular reviews accumulate stale items. "
+                    "A weekly checkpoint keeps the backlog accurate and priorities fresh."
+                ),
+                payload_preview={
+                    "title": "Weekly progress review",
+                    "priority": "medium",
+                    "status": "todo",
+                    "due_date": target_7,
+                },
+                created_at=now,
+            ))
+
+        # ── Email intelligence: create task from inbox ────────────────────────
+        if has_emails:
+            suggestions.append(SuggestionItem(
+                id=str(uuid.uuid4()),
+                title="Create task from high-priority email",
+                description=(
+                    "Convert an unread high-priority email into a tracked action item."
+                ),
+                source_agent="email_intelligence",
+                suggested_action_type="create_task",
+                risk_level="low",
+                reason=(
+                    "Unread important emails often contain hidden action items. "
+                    "Capturing them as tasks prevents follow-up slip."
+                ),
+                payload_preview={
+                    "title": "Action item from high-priority inbox",
+                    "priority": "high",
+                    "status": "todo",
+                },
+                created_at=now,
+            ))
+
+        # ── Calendar intelligence: schedule a focus block task ────────────────
+        if has_calendar:
+            suggestions.append(SuggestionItem(
+                id=str(uuid.uuid4()),
+                title="Block deep-work time for top task",
+                description=(
+                    "Create a focus-block task for your highest-priority in-progress item."
+                ),
+                source_agent="calendar_intelligence",
+                suggested_action_type="create_task",
+                risk_level="low",
+                reason=(
+                    "Calendar context shows available windows — anchoring a focus block "
+                    "as a task prevents context-switching and protects execution time."
+                ),
+                payload_preview={
+                    "title": "Deep-work focus block: highest-priority task",
+                    "priority": "high",
+                    "status": "todo",
+                    "due_date": target_7,
+                },
+                created_at=now,
+            ))
+
+        # ── Strategy agent: define next goal (when no other extras filled slots) ─
+        if not has_emails and not has_calendar:
+            suggestions.append(SuggestionItem(
+                id=str(uuid.uuid4()),
+                title="Define your next strategic goal",
+                description=(
+                    "Create a new goal with a clear outcome statement and a 30-day target date."
+                ),
+                source_agent="strategy_agent",
+                suggested_action_type="create_goal",
+                risk_level="low",
+                reason=(
+                    "Operators without a defined next objective lose strategic momentum. "
+                    "Setting a goal now keeps the execution stack healthy."
+                ),
+                payload_preview={
+                    "title": "Next strategic objective",
+                    "description": "Define the outcome, success criteria, and key milestones.",
+                    "status": "active",
+                    "target_date": target_30,
+                },
+                created_at=now,
+            ))
+
+        # ── Memory agent: create a reflection task (when memories exist) ─────
+        if has_memories:
+            suggestions.append(SuggestionItem(
+                id=str(uuid.uuid4()),
+                title="Review and update long-term memory",
+                description=(
+                    "Create a task to review stored preferences and goals context "
+                    "and update any entries that no longer reflect your current state."
+                ),
+                source_agent="strategy_agent",
+                suggested_action_type="create_task",
+                risk_level="low",
+                reason=(
+                    "Long-term memory entries become stale without periodic review. "
+                    "Keeping them current improves AI personalisation quality."
+                ),
+                payload_preview={
+                    "title": "Review and refresh long-term memory entries",
+                    "priority": "low",
+                    "status": "todo",
+                },
+                created_at=now,
+            ))
+
+        return suggestions[:5]
