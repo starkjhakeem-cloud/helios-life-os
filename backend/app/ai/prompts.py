@@ -270,7 +270,12 @@ Return ONLY valid JSON — no markdown fences — matching this exact structure:
       "payload_preview": {"<human-readable key>": "<human-readable value>"},
       "execution_payload": <structured payload dict or null>
     }
-  ]
+  ],
+  "consensus_summary": "<1-2 sentences summarising what all participating agents agree on>",
+  "disagreements": [
+    "<specific point where agents recommend different approaches or have conflicting priorities>"
+  ],
+  "overall_confidence": <0.0-1.0 average confidence across all agent assessments>
 }"""
 
 

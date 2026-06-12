@@ -465,6 +465,33 @@ class MockAIProvider(AIProvider):
 
         short_title = objective[:50].rstrip()
 
+        agent_ids = [a["id"] for a in agents]
+        avg_confidence = sum(a.confidence for a in assessments) / len(assessments) if assessments else 0.75
+
+        consensus_summary = (
+            f"All {len(agents)} participating agent{'s' if len(agents) != 1 else ''} concur that "
+            f"'{short_title}' requires structured, cross-domain execution. "
+            "The consensus priority is: establish strategic clarity first, then assess resource and "
+            "knowledge requirements before committing to a timeline."
+        )
+
+        disagreements: list[str] = []
+        if "strategy" in agent_ids and "finance" in agent_ids:
+            disagreements.append(
+                "Strategy Agent prioritizes goal alignment and long-term milestones, "
+                "while Finance Agent recommends budget validation before any resource commitment."
+            )
+        if "study" in agent_ids and "career" in agent_ids:
+            disagreements.append(
+                "Study Agent focuses on skill acquisition as the primary enabler, "
+                "whereas Career Agent emphasizes network leverage for faster progress."
+            )
+        if "health" in agent_ids:
+            disagreements.append(
+                "Health Agent flags current recovery status as a potential constraint "
+                "on the execution intensity proposed by other agents."
+            )
+
         return OrchestrationResponse(
             objective=objective,
             participating_agents=[a["name"] for a in agents],
@@ -487,6 +514,9 @@ class MockAIProvider(AIProvider):
                 "Check your Goals and Tasks tabs to ensure this objective has at least one active task",
                 "Schedule a review checkpoint in 7 days to assess early progress across all domains",
             ],
+            consensus_summary=consensus_summary,
+            disagreements=disagreements,
+            overall_confidence=round(avg_confidence, 2),
             actionable_recommendations=[
                 RecommendedAction(
                     id=f"orch-{uuid.uuid4().hex[:8]}",

@@ -205,6 +205,9 @@ class OpenAIProvider(AIProvider):
                 actionable_recommendations=actionable,
                 context_scope="openai",
                 generated_at=datetime.now(timezone.utc).isoformat(),
+                consensus_summary=data.get("consensus_summary") or "",
+                disagreements=data.get("disagreements") or [],
+                overall_confidence=float(data.get("overall_confidence") or 0.0),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise RuntimeError(

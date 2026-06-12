@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SymbolView } from "expo-symbols";
 
 import { colors, spacing, radius, typography } from "../../theme/theme";
-import { useAuthStore, useAutonomyStore } from "../../store";
+import { useAuthStore, useAutonomyStore, useNotificationsStore, useBackgroundJobsStore } from "../../store";
 import type {
   AutonomyAuditLogEntry,
   AutonomyExecuteResult,
@@ -848,13 +848,22 @@ export default function AutonomyScreen() {
 
   const [showAddRuleForm, setShowAddRuleForm] = useState(false);
 
+  const { unreadCount } = useNotificationsStore();
+  const {
+    jobs: bgJobs,
+    isMutating: bgJobsMutating,
+    fetchJobs,
+    triggerJob,
+  } = useBackgroundJobsStore();
+
   const loadAll = useCallback(() => {
     if (!accessToken) return;
     fetchQueue(accessToken);
     fetchSuggestions(accessToken);
     fetchRules(accessToken);
     fetchAuditLog(accessToken);
-  }, [accessToken, fetchQueue, fetchSuggestions, fetchRules, fetchAuditLog]);
+    fetchJobs(accessToken);
+  }, [accessToken, fetchQueue, fetchSuggestions, fetchRules, fetchAuditLog, fetchJobs]);
 
   useEffect(() => {
     loadAll();
@@ -930,6 +939,7 @@ export default function AutonomyScreen() {
   const approved = items.filter((i) => i.status === "approved");
   const resolved = items.filter((i) => i.status === "rejected" || i.status === "completed");
   const isRefreshing = isLoading || isSuggestionsLoading || isRulesLoading || isAuditLogLoading;
+  const enabledBgJobs = bgJobs.filter((j) => j.enabled);
 
   const getIsBlocked = useCallback(
     (item: AutonomyQueueItem) => isBlockedByRules(item, rules),
@@ -958,10 +968,86 @@ export default function AutonomyScreen() {
     >
       {/* Hero */}
       <View style={styles.heroCard}>
-        <Text style={styles.heroLabel}>HELIOS AUTONOMY</Text>
-        <Text style={styles.heroTitle}>Action Queue</Text>
+        <Text style={styles.heroLabel}>HELIOS V3</Text>
+        <Text style={styles.heroTitle}>Command Center</Text>
         <Text style={styles.heroSubtitle}>{heroSubtitle}</Text>
       </View>
+
+      {/* ── Command Center Status Row ─────────────────────────────────── */}
+      <View style={styles.ccRow}>
+        <View style={styles.ccStat}>
+          <Text style={styles.ccStatValue}>{pending.length}</Text>
+          <Text style={styles.ccStatLabel}>PENDING</Text>
+        </View>
+        <View style={styles.ccDivider} />
+        <View style={styles.ccStat}>
+          <Text style={styles.ccStatValue}>{approved.length}</Text>
+          <Text style={styles.ccStatLabel}>APPROVED</Text>
+        </View>
+        <View style={styles.ccDivider} />
+        <View style={styles.ccStat}>
+          <Text style={[styles.ccStatValue, unreadCount > 0 && { color: colors.accent }]}>
+            {unreadCount}
+          </Text>
+          <Text style={styles.ccStatLabel}>INBOX</Text>
+        </View>
+        <View style={styles.ccDivider} />
+        <View style={styles.ccStat}>
+          <Text style={styles.ccStatValue}>{enabledBgJobs.length}</Text>
+          <Text style={styles.ccStatLabel}>JOBS</Text>
+        </View>
+      </View>
+
+      {/* ── Background Jobs Panel ─────────────────────────────────────── */}
+      {bgJobs.length > 0 ? (
+        <>
+          <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.lg }} />
+          <Text style={styles.sectionLabel}>SCHEDULED JOBS</Text>
+          <Text style={styles.rulesDescription}>
+            Manually trigger any job below. Created items enter the review queue — no auto-execution.
+          </Text>
+          <View style={styles.bgJobsCard}>
+            {bgJobs.map((job, idx) => {
+              const JOB_LABELS: Record<string, string> = {
+                daily_briefing_generation: "Daily Briefing",
+                proactive_suggestion_scan: "Proactive Scan",
+                reminder_check:            "Reminder Check",
+                integration_sync_simulation: "Integration Sync",
+              };
+              return (
+                <View key={job.id}>
+                  {idx > 0 ? <View style={styles.auditDivider} /> : null}
+                  <View style={styles.bgJobRow}>
+                    <View style={[styles.bgJobDot, { backgroundColor: job.enabled ? "#22c55e" : colors.textMuted }]} />
+                    <View style={styles.bgJobInfo}>
+                      <Text style={styles.bgJobName}>{JOB_LABELS[job.job_type] ?? job.job_type}</Text>
+                      <Text style={styles.bgJobSchedule}>{job.schedule_label}</Text>
+                    </View>
+                    {job.enabled ? (
+                      <TouchableOpacity
+                        style={[styles.bgJobRunBtn, bgJobsMutating && styles.btnDisabled]}
+                        onPress={() => {
+                          if (!accessToken) return;
+                          triggerJob(accessToken, job.id).then((result) => {
+                            if (result) Alert.alert("Job Triggered", result.result_summary, [{ text: "OK" }]);
+                          });
+                        }}
+                        disabled={bgJobsMutating}
+                        activeOpacity={0.7}
+                      >
+                        <SymbolView name="play.fill" size={10} tintColor="#22c55e" resizeMode="scaleAspectFit" />
+                        <Text style={styles.bgJobRunBtnText}>RUN</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <Text style={styles.bgJobDisabled}>DISABLED</Text>
+                    )}
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </>
+      ) : null}
 
       {/* Global error */}
       {error ? (
@@ -1597,5 +1683,89 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: colors.border,
     marginHorizontal: spacing.md,
+  },
+
+  // ── Command Center ──────────────────────────────────────────────────────────
+  ccRow: {
+    flexDirection: "row",
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.md,
+    overflow: "hidden",
+  },
+  ccStat: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: spacing.md,
+  },
+  ccStatValue: {
+    fontSize: 22,
+    fontWeight: "700" as const,
+    color: colors.textPrimary,
+    letterSpacing: -0.5,
+  },
+  ccStatLabel: {
+    fontSize: 8,
+    fontWeight: "700" as const,
+    letterSpacing: 1.2,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  ccDivider: {
+    width: 1,
+    backgroundColor: colors.border,
+    marginVertical: spacing.sm,
+  },
+
+  // ── Background jobs (command center panel) ─────────────────────────────────
+  bgJobsCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.md,
+    overflow: "hidden",
+  },
+  bgJobRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
+  },
+  bgJobDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    flexShrink: 0,
+  },
+  bgJobInfo: { flex: 1 },
+  bgJobName: { ...typography.body, color: colors.textPrimary, fontWeight: "600" as const, fontSize: 14 },
+  bgJobSchedule: { ...typography.caption, color: colors.textMuted, marginTop: 1 },
+  bgJobRunBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs - 2,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: "#22c55e",
+    backgroundColor: "rgba(34, 197, 94, 0.08)",
+  },
+  bgJobRunBtnText: {
+    fontSize: 9,
+    fontWeight: "700" as const,
+    letterSpacing: 0.8,
+    color: "#22c55e",
+  },
+  bgJobDisabled: {
+    fontSize: 8,
+    fontWeight: "700" as const,
+    letterSpacing: 1,
+    color: colors.textMuted,
+    opacity: 0.5,
   },
 });

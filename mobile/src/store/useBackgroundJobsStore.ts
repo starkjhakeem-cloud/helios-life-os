@@ -4,6 +4,7 @@ import { ApiError } from "../services/apiClient";
 import {
   type BackgroundJob,
   type BackgroundJobCreate,
+  type BackgroundJobTriggerResult,
   type BackgroundJobUpdate,
   backgroundJobsService,
 } from "../services/backgroundJobsService";
@@ -13,11 +14,13 @@ type BackgroundJobsState = {
   isLoading: boolean;
   isMutating: boolean;
   error: string | null;
+  lastTriggerResult: BackgroundJobTriggerResult | null;
 
   fetchJobs: (token: string) => Promise<void>;
   createJob: (token: string, body: BackgroundJobCreate) => Promise<void>;
   updateJob: (token: string, id: string, body: BackgroundJobUpdate) => Promise<void>;
   deleteJob: (token: string, id: string) => Promise<void>;
+  triggerJob: (token: string, id: string) => Promise<BackgroundJobTriggerResult | null>;
 
   reset: () => void;
 };
@@ -31,6 +34,7 @@ export const useBackgroundJobsStore = create<BackgroundJobsState>()((set) => ({
   isLoading: false,
   isMutating: false,
   error: null,
+  lastTriggerResult: null,
 
   fetchJobs: async (token) => {
     set({ isLoading: true, error: null });
@@ -75,5 +79,24 @@ export const useBackgroundJobsStore = create<BackgroundJobsState>()((set) => ({
     }
   },
 
-  reset: () => set({ jobs: [], isLoading: false, isMutating: false, error: null }),
+  triggerJob: async (token, id) => {
+    set({ isMutating: true, error: null });
+    try {
+      const result = await backgroundJobsService.trigger(token, id);
+      set((s) => ({
+        jobs: s.jobs.map((j) =>
+          j.id === id ? { ...j, last_run_at: result.triggered_at, status: "idle" as const } : j,
+        ),
+        lastTriggerResult: result,
+        isMutating: false,
+      }));
+      return result;
+    } catch (err) {
+      set({ error: extractMessage(err), isMutating: false });
+      return null;
+    }
+  },
+
+  reset: () =>
+    set({ jobs: [], isLoading: false, isMutating: false, error: null, lastTriggerResult: null }),
 }));

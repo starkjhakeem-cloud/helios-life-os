@@ -74,6 +74,7 @@ export const API_ENDPOINTS = {
   backgroundJobs: {
     base: "/api/v1/background-jobs",
     item: (id: string) => `/api/v1/background-jobs/${id}`,
+    trigger: (id: string) => `/api/v1/background-jobs/${id}/trigger`,
   },
   autonomy: {
     queue: "/api/v1/autonomy/queue",

@@ -31,6 +31,10 @@ export type OrchestrationResponse = {
   actionable_recommendations: RecommendedAction[];
   context_scope: string;
   generated_at: string;
+  // V3.11 — multi-agent coordination upgrade
+  consensus_summary: string;
+  disagreements: string[];
+  overall_confidence: number;               // 0.0–1.0
 };
 
 // ── Service ───────────────────────────────────────────────────────────────────

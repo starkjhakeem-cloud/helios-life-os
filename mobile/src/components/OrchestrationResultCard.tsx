@@ -107,6 +107,35 @@ export default function OrchestrationResultCard({
         );
       })}
 
+      {/* ── Consensus Summary (V3.11) ── */}
+      {result.consensus_summary ? (
+        <View style={styles.consensusBox}>
+          <View style={styles.consensusHeader}>
+            <SymbolView name="checkmark.seal.fill" size={12} tintColor="#22c55e" resizeMode="scaleAspectFit" />
+            <Text style={styles.consensusLabel}>AGENT CONSENSUS</Text>
+            {result.overall_confidence > 0 ? (
+              <View style={styles.overallConfBadge}>
+                <Text style={styles.overallConfText}>
+                  {Math.round(result.overall_confidence * 100)}% confidence
+                </Text>
+              </View>
+            ) : null}
+          </View>
+          <Text style={styles.consensusText}>{result.consensus_summary}</Text>
+          {result.disagreements.length > 0 ? (
+            <>
+              <Text style={styles.disagreementsLabel}>DIVERGENT VIEWS</Text>
+              {result.disagreements.map((d, i) => (
+                <View key={i} style={styles.disagreementRow}>
+                  <SymbolView name="arrow.triangle.branch" size={10} tintColor="#f59e0b" resizeMode="scaleAspectFit" />
+                  <Text style={styles.disagreementText}>{d}</Text>
+                </View>
+              ))}
+            </>
+          ) : null}
+        </View>
+      ) : null}
+
       {/* ── Coordinated Plan ── */}
       <View style={styles.planBox}>
         <View style={styles.planHeader}>
@@ -578,5 +607,66 @@ const styles = StyleSheet.create({
     ...typography.label,
     color: colors.textMuted,
     fontSize: 11,
+  },
+
+  consensusBox: {
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: "rgba(34, 197, 94, 0.25)",
+    backgroundColor: "rgba(34, 197, 94, 0.06)",
+    padding: spacing.md,
+    margin: spacing.lg,
+    marginTop: 0,
+    gap: spacing.xs,
+  },
+  consensusHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    marginBottom: 2,
+  },
+  consensusLabel: {
+    fontSize: 9,
+    fontWeight: "700" as const,
+    letterSpacing: 1.2,
+    color: "#22c55e",
+    flex: 1,
+  },
+  overallConfBadge: {
+    backgroundColor: "rgba(34, 197, 94, 0.15)",
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: "rgba(34, 197, 94, 0.3)",
+  },
+  overallConfText: {
+    fontSize: 9,
+    fontWeight: "700" as const,
+    color: "#22c55e",
+  },
+  consensusText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  disagreementsLabel: {
+    fontSize: 9,
+    fontWeight: "700" as const,
+    letterSpacing: 1,
+    color: "#f59e0b",
+    marginTop: spacing.xs,
+  },
+  disagreementRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.xs,
+    marginTop: 3,
+  },
+  disagreementText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    flex: 1,
+    lineHeight: 16,
   },
 });

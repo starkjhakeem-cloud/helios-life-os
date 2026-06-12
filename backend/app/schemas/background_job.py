@@ -41,3 +41,11 @@ class BackgroundJobOut(BaseModel):
 class BackgroundJobListResponse(BaseModel):
     jobs: list[BackgroundJobOut]
     total: int
+
+
+class BackgroundJobTriggerResult(BaseModel):
+    job_id: str
+    job_type: str
+    triggered_at: str
+    result_summary: str
+    items_created: int

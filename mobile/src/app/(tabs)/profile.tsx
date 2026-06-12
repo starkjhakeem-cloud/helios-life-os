@@ -45,6 +45,22 @@ function truncateId(id: string): string {
   return id.length > 16 ? `${id.slice(0, 8)}…${id.slice(-8)}` : id;
 }
 
+function formatLastRun(iso: string | null): string {
+  if (!iso) return "Never run";
+  try {
+    const d = new Date(iso);
+    const diffMs = Date.now() - d.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) return "Just now";
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `${diffHr}h ago`;
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  } catch {
+    return iso;
+  }
+}
+
 function formatRemindAt(iso: string): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
@@ -267,6 +283,7 @@ export default function ProfileScreen() {
     createJob,
     updateJob,
     deleteJob,
+    triggerJob,
   } = useBackgroundJobsStore();
 
   useEffect(() => {
@@ -612,11 +629,27 @@ export default function ProfileScreen() {
                       <Text style={styles.jobSchedule}>
                         {job ? job.schedule_label : def.defaultSchedule}
                       </Text>
+                      {job ? (
+                        <Text style={styles.jobLastRun}>{formatLastRun(job.last_run_at)}</Text>
+                      ) : null}
                     </View>
                   </View>
                   <View style={styles.jobRight}>
                     {job ? (
                       <>
+                        <TouchableOpacity
+                          style={[styles.jobRunBtn, (!job.enabled || isMutating || jobsMutating) && styles.btnDisabled]}
+                          onPress={() => {
+                            if (!accessToken) return;
+                            triggerJob(accessToken, job.id).then((result) => {
+                              if (result) Alert.alert("Job Triggered", result.result_summary, [{ text: "OK" }]);
+                            });
+                          }}
+                          disabled={!job.enabled || isMutating || jobsMutating}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.jobRunBtnText}>RUN</Text>
+                        </TouchableOpacity>
                         <TouchableOpacity
                           style={[styles.jobToggle, (isMutating || jobsMutating) && styles.btnDisabled]}
                           onPress={() =>
@@ -1232,10 +1265,26 @@ const styles = StyleSheet.create({
   jobInfo: { flex: 1 },
   jobName: { ...typography.body, color: colors.textPrimary, fontWeight: "600" as const },
   jobSchedule: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
+  jobLastRun: { ...typography.caption, color: colors.textMuted, opacity: 0.6, marginTop: 1, fontSize: 10 },
   jobRight: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
+  },
+  jobRunBtn: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs - 2,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: "#22c55e",
+    backgroundColor: "rgba(34, 197, 94, 0.08)",
+    alignItems: "center",
+  },
+  jobRunBtnText: {
+    fontSize: 9,
+    fontWeight: "700" as const,
+    letterSpacing: 0.8,
+    color: "#22c55e",
   },
   jobToggle: {
     paddingHorizontal: spacing.sm,

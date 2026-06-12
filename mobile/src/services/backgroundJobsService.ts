@@ -37,6 +37,14 @@ export type BackgroundJobUpdate = {
   schedule_label?: string;
 };
 
+export type BackgroundJobTriggerResult = {
+  job_id: string;
+  job_type: JobType;
+  triggered_at: string;
+  result_summary: string;
+  items_created: number;
+};
+
 export const backgroundJobsService = {
   list: (token: string) =>
     apiClient.get<BackgroundJobListResponse>(API_ENDPOINTS.backgroundJobs.base, token),
@@ -49,4 +57,11 @@ export const backgroundJobsService = {
 
   remove: (token: string, id: string) =>
     apiClient.del(API_ENDPOINTS.backgroundJobs.item(id), token),
+
+  trigger: (token: string, id: string) =>
+    apiClient.post<BackgroundJobTriggerResult>(
+      API_ENDPOINTS.backgroundJobs.trigger(id),
+      {},
+      token,
+    ),
 };

@@ -37,3 +37,7 @@ class OrchestrationResponse(BaseModel):
     actionable_recommendations: list[RecommendedAction] = []
     context_scope: str
     generated_at: str
+    # V3.11 — multi-agent coordination upgrade
+    consensus_summary: str = ""             # what all agents agree on
+    disagreements: list[str] = []           # divergent recommendations between agents
+    overall_confidence: float = 0.0         # aggregate confidence across all assessments
