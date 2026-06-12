@@ -1,7 +1,8 @@
 import { View, Text, StyleSheet } from "react-native";
 import { SymbolView } from "expo-symbols";
 import type { SFSymbol } from "sf-symbols-typescript";
-import { colors, spacing, radius } from "../theme/theme";
+import { spacing, radius, type ThemeColors } from "../theme/theme";
+import { useTheme } from "../theme/ThemeContext";
 
 type MetricCardProps = {
   value: string;
@@ -10,6 +11,9 @@ type MetricCardProps = {
 };
 
 export default function MetricCard({ value, label, icon }: MetricCardProps) {
+  const { colors } = useTheme();
+  const styles = createStyles(colors);
+
   return (
     <View style={styles.card}>
       {icon && (
@@ -27,26 +31,31 @@ export default function MetricCard({ value, label, icon }: MetricCardProps) {
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    width: "48%",
-    backgroundColor: colors.surfaceDark,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.borderDark,
-  },
-  icon: {
-    marginBottom: spacing.sm,
-  },
-  value: {
-    color: colors.textPrimary,
-    fontSize: 26,
-    fontWeight: "800",
-    marginBottom: spacing.xs,
-  },
-  label: {
-    color: colors.textMuted,
-    fontSize: 13,
-  },
-});
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    card: {
+      width: "48%",
+      minHeight: 132,
+      backgroundColor: colors.surface,
+      borderRadius: radius.lg,
+      padding: spacing.lg,
+      borderWidth: 1,
+      borderColor: `${colors.accentCyan}18`,
+      justifyContent: "space-between",
+    },
+    icon: {
+      marginBottom: spacing.md,
+    },
+    value: {
+      color: colors.textPrimary,
+      fontSize: 30,
+      fontWeight: "900",
+      marginBottom: spacing.xs,
+    },
+    label: {
+      color: colors.textMuted,
+      fontSize: 13,
+      fontWeight: "600",
+    },
+  });
+}

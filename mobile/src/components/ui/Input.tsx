@@ -1,6 +1,7 @@
 import { forwardRef, useState } from "react";
 import { View, TextInput, Text, StyleSheet, type TextInputProps } from "react-native";
-import { colors, spacing, radius, typography } from "../../theme/theme";
+import { spacing, radius, typography } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 
 type Props = TextInputProps & {
   label?: string;
@@ -12,15 +13,22 @@ const Input = forwardRef<TextInput, Props>(function Input(
   ref,
 ) {
   const [focused, setFocused] = useState(false);
+  const { colors } = useTheme();
 
   return (
     <View style={styles.container}>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
+      {label ? <Text style={[styles.label, { color: colors.textMuted }]}>{label}</Text> : null}
       <TextInput
         ref={ref}
         style={[
           styles.input,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+            color: colors.textPrimary,
+          },
           focused && styles.inputFocused,
+          focused && { borderColor: colors.accentCyan },
           error ? styles.inputError : null,
           style,
         ]}
@@ -49,21 +57,15 @@ const styles = StyleSheet.create({
   },
   label: {
     ...typography.label,
-    color: colors.textMuted,
   },
   input: {
-    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
     borderRadius: radius.sm,
     paddingVertical: spacing.sm + spacing.xs,
     paddingHorizontal: spacing.md,
-    color: colors.textPrimary,
     ...typography.body,
   },
-  inputFocused: {
-    borderColor: colors.accentCyan,
-  },
+  inputFocused: {},
   inputError: {
     borderColor: "#ef4444",
   },

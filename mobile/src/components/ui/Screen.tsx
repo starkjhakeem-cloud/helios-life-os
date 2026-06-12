@@ -1,7 +1,8 @@
 import { type ReactNode } from "react";
 import { View, ScrollView, StyleSheet, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, spacing } from "../../theme/theme";
+import { spacing } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 
 type Props = {
   children: ReactNode;
@@ -11,6 +12,7 @@ type Props = {
 
 export default function Screen({ children, scroll = false, style }: Props) {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
 
   const contentStyle = [
     styles.container,
@@ -21,7 +23,7 @@ export default function Screen({ children, scroll = false, style }: Props) {
   if (scroll) {
     return (
       <ScrollView
-        style={styles.fill}
+        style={[styles.fill, { backgroundColor: colors.background }]}
         contentContainerStyle={contentStyle}
         showsVerticalScrollIndicator={false}
       >
@@ -31,7 +33,7 @@ export default function Screen({ children, scroll = false, style }: Props) {
   }
 
   return (
-    <View style={[styles.fill, contentStyle]}>
+    <View style={[styles.fill, { backgroundColor: colors.background }, contentStyle]}>
       {children}
     </View>
   );
@@ -40,7 +42,6 @@ export default function Screen({ children, scroll = false, style }: Props) {
 const styles = StyleSheet.create({
   fill: {
     flex: 1,
-    backgroundColor: colors.background,
   },
   container: {
     paddingHorizontal: spacing.lg,

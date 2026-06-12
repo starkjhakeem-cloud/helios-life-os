@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -21,7 +21,8 @@ import { SymbolView } from "expo-symbols";
 import { systemService, type VersionResponse } from "../../services/systemService";
 import { requestPermissions } from "../../services/notificationService";
 import { useAuthStore, useRemindersStore, useSettingsStore, useBackgroundJobsStore, type ReminderOut, type ThemePreference, type BackgroundJob, type JobType } from "../../store";
-import { colors, radius, spacing, typography } from "../../theme/theme";
+import { colors, radius, spacing, typography, type ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -80,10 +81,12 @@ function formatRemindAt(iso: string): string {
 
 type InfoRowProps = { label: string; value: string };
 function InfoRow({ label, value }: InfoRowProps) {
+  const { colors } = useTheme();
+
   return (
     <View style={styles.infoRow}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue} numberOfLines={1}>{value}</Text>
+      <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>{label}</Text>
+      <Text style={[styles.infoValue, { color: colors.textPrimary }]} numberOfLines={1}>{value}</Text>
     </View>
   );
 }
@@ -94,6 +97,8 @@ type ReminderRowProps = {
   onDelete: () => void;
 };
 function ReminderRow({ reminder, onToggle, onDelete }: ReminderRowProps) {
+  const { colors } = useTheme();
+
   return (
     <View style={styles.reminderRow}>
       <View style={[styles.reminderDot, { backgroundColor: reminder.is_enabled ? colors.accentCyan : colors.border }]} />
@@ -125,6 +130,7 @@ type NewReminderModalProps = {
 };
 
 function NewReminderModal({ visible, onClose, onSubmit, isMutating }: NewReminderModalProps) {
+  const { colors } = useTheme();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [remindAt, setRemindAt] = useState("");
@@ -239,9 +245,14 @@ const JOB_TYPE_DEFS: { type: JobType; label: string; icon: string; defaultSchedu
   { type: "integration_sync_simulation",label: "Integration Sync",      icon: "arrow.triangle.2.circlepath", defaultSchedule: "Every 6 hours" },
 ];
 
+let styles = createStyles(colors);
+
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function ProfileScreen() {
+  const { colors } = useTheme();
+  styles = useMemo(() => createStyles(colors), [colors]);
+
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
@@ -735,7 +746,8 @@ export default function ProfileScreen() {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   container: {
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxl * 2,
@@ -1325,3 +1337,4 @@ const styles = StyleSheet.create({
   },
   btnDisabled: { opacity: 0.5 },
 });
+}

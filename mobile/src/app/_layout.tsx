@@ -6,34 +6,36 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { useBackendHealth } from '../hooks/useBackendHealth';
 import { useAuthStore } from '../store';
-import { colors } from '../theme/theme';
+import { ThemeProvider, useTheme } from '../theme/ThemeContext';
 
 export default function RootLayout() {
+  return (
+    <ThemeProvider>
+      <RootLayoutInner />
+    </ThemeProvider>
+  );
+}
+
+function RootLayoutInner() {
   useBackendHealth();
 
-  // Derived: authenticated when a token is present in the store.
+  const { colors } = useTheme();
   const isAuthenticated = useAuthStore((s) => s.accessToken !== null);
   const revalidate = useAuthStore((s) => s.revalidate);
   const segments = useSegments();
   const router = useRouter();
 
-  // Tracks whether zustand-persist has finished reading from AsyncStorage.
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    // Zustand persist exposes a .persist API on the store instance.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const store = useAuthStore as any;
 
     function onHydrated() {
       setHydrated(true);
-      // Silently validate the persisted token. If expired, revalidate()
-      // clears the session and the routing effect below redirects to login.
       revalidate();
     }
 
     if (store.persist?.hasHydrated?.()) {
-      // Rehydration already completed before this effect ran (fast path).
       onHydrated();
     } else {
       const unsub = store.persist?.onFinishHydration?.(onHydrated) as
@@ -54,7 +56,6 @@ export default function RootLayout() {
     }
   }, [isAuthenticated, hydrated, segments, router]);
 
-  // Show a minimal splash while AsyncStorage is being read.
   if (!hydrated) {
     return (
       <SafeAreaProvider>

@@ -24,6 +24,7 @@ import {
   useConversationStore,
 } from "../../store";
 import { colors, radius, spacing, typography } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 
 const WELCOME: ChatMessage = {
   id: "helios-welcome",
@@ -293,6 +294,7 @@ function HistoryModal({
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function AssistantScreen() {
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const accessToken = useAuthStore((s) => s.accessToken);
 

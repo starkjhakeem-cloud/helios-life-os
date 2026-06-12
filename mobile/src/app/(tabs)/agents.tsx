@@ -16,6 +16,7 @@ import AgentCard from "../../components/AgentCard";
 import OrchestrationResultCard from "../../components/OrchestrationResultCard";
 import PlanCard from "../../components/PlanCard";
 import { colors, spacing, radius, typography } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 import {
   useAgentsStore,
   useAIStore,
@@ -41,6 +42,7 @@ const ORCH_ACCENT: Record<string, string> = {
 };
 
 export default function AgentsScreen() {
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const accessToken = useAuthStore((s) => s.accessToken);
 

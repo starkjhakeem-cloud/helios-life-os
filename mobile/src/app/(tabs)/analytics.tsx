@@ -12,6 +12,7 @@ import { SymbolView } from "expo-symbols";
 import type { SFSymbol } from "sf-symbols-typescript";
 
 import { colors, spacing, radius, typography } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 import { useAnalyticsStore, useAuthStore } from "../../store";
 
 // ── Inline components ────────────────────────────────────────────────────────
@@ -93,6 +94,7 @@ const barStyles = StyleSheet.create({
 // ── Screen ───────────────────────────────────────────────────────────────────
 
 export default function AnalyticsScreen() {
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const accessToken = useAuthStore((s) => s.accessToken);
   const { summary, isLoading, error, fetchSummary } = useAnalyticsStore();

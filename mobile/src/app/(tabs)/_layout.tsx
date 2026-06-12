@@ -4,7 +4,7 @@ import { SymbolView } from "expo-symbols";
 import type { SFSymbol } from "sf-symbols-typescript";
 
 import { useAuthStore, useNotificationsStore } from "../../store";
-import { colors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 
 type TabIconProps = {
   name: SFSymbol;
@@ -15,7 +15,7 @@ function TabIcon({ name, color }: TabIconProps) {
   return (
     <SymbolView
       name={name}
-      size={22}
+      size={25}
       tintColor={color}
       resizeMode="scaleAspectFit"
     />
@@ -23,10 +23,11 @@ function TabIcon({ name, color }: TabIconProps) {
 }
 
 export default function TabsLayout() {
+  const { colors } = useTheme();
   const isAuthenticated = useAuthStore((s) => s.accessToken !== null);
   const accessToken = useAuthStore((s) => s.accessToken);
   const router = useRouter();
-  const { unreadCount, fetchNotifications } = useNotificationsStore();
+  const fetchNotifications = useNotificationsStore((s) => s.fetchNotifications);
 
   useEffect(() => {
     if (accessToken) fetchNotifications(accessToken);
@@ -45,19 +46,23 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopColor: colors.border,
+          backgroundColor: colors.surfaceDark,
+          borderTopColor: `${colors.accentCyan}22`,
           borderTopWidth: 1,
-          height: 80,
-          paddingBottom: 20,
-          paddingTop: 10,
+          height: 92,
+          paddingBottom: 24,
+          paddingTop: 12,
+          paddingHorizontal: 6,
         },
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: "600",
-          marginTop: 2,
+          fontSize: 12,
+          fontWeight: "700",
+          marginTop: 5,
+        },
+        tabBarItemStyle: {
+          paddingVertical: 4,
         },
       }}
     >
@@ -72,31 +77,11 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
-        name="analytics"
+        name="autonomy"
         options={{
-          title: "Analytics",
+          title: "Autonomy",
           tabBarIcon: ({ color }) => (
-            <TabIcon name="chart.bar" color={color} />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="agents"
-        options={{
-          title: "Agents",
-          tabBarIcon: ({ color }) => (
-            <TabIcon name="cpu" color={color} />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="assistant"
-        options={{
-          title: "Assistant",
-          tabBarIcon: ({ color }) => (
-            <TabIcon name="bubble.left.and.bubble.right" color={color} />
+            <TabIcon name="sparkles" color={color} />
           ),
         }}
       />
@@ -132,58 +117,72 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
+        name="more"
+        options={{
+          title: "More",
+          tabBarIcon: ({ color }) => (
+            <TabIcon name="ellipsis.circle" color={color} />
+          ),
+        }}
+      />
+
+      {/* Secondary screens — reachable from More, hidden from the bottom bar. */}
+      <Tabs.Screen
+        name="analytics"
+        options={{
+          href: null,
+          title: "Analytics",
+        }}
+      />
+
+      <Tabs.Screen
+        name="agents"
+        options={{
+          href: null,
+          title: "Agents",
+        }}
+      />
+
+      <Tabs.Screen
+        name="assistant"
+        options={{
+          href: null,
+          title: "Assistant",
+        }}
+      />
+
+      <Tabs.Screen
         name="email"
         options={{
+          href: null,
           title: "Email",
-          tabBarIcon: ({ color }) => (
-            <TabIcon name="envelope" color={color} />
-          ),
         }}
       />
 
       <Tabs.Screen
         name="memory"
         options={{
+          href: null,
           title: "Memory",
-          tabBarIcon: ({ color }) => (
-            <TabIcon name="brain.head.profile" color={color} />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="autonomy"
-        options={{
-          title: "Queue",
-          tabBarIcon: ({ color }) => (
-            <TabIcon name="list.bullet.clipboard" color={color} />
-          ),
         }}
       />
 
       <Tabs.Screen
         name="notifications"
         options={{
-          title: "Inbox",
-          tabBarIcon: ({ color }) => (
-            <TabIcon name="bell" color={color} />
-          ),
-          tabBarBadge: unreadCount > 0 ? (unreadCount > 99 ? "99+" : unreadCount) : undefined,
-          tabBarBadgeStyle: { backgroundColor: colors.accent, fontSize: 10 },
+          href: null,
+          title: "Queue",
         }}
       />
 
       <Tabs.Screen
         name="profile"
         options={{
+          href: null,
           title: "Profile",
-          tabBarIcon: ({ color }) => (
-            <TabIcon name="person.crop.circle" color={color} />
-          ),
         }}
       />
 
-      {/* Hidden from tab bar — navigated to from Profile screen */}
       <Tabs.Screen
         name="integrations"
         options={{

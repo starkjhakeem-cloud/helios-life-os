@@ -1,6 +1,7 @@
 import { Pressable, Text, ActivityIndicator, StyleSheet } from "react-native";
 import * as Haptics from "expo-haptics";
-import { colors, spacing, radius, typography } from "../../theme/theme";
+import { spacing, radius, typography } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 
 type ButtonVariant = "primary" | "secondary" | "ghost";
 
@@ -13,18 +14,6 @@ type Props = {
   loading?: boolean;
 };
 
-const variantStyle = {
-  primary:   { backgroundColor: colors.accent,  borderWidth: 0, borderColor: "transparent" },
-  secondary: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  ghost:     { backgroundColor: "transparent",  borderWidth: 1, borderColor: colors.border },
-} as const;
-
-const labelColor: Record<ButtonVariant, string> = {
-  primary:   colors.textPrimary,
-  secondary: colors.textPrimary,
-  ghost:     colors.accent,
-};
-
 export default function Button({
   label,
   onPress,
@@ -33,6 +22,18 @@ export default function Button({
   fullWidth = false,
   loading = false,
 }: Props) {
+  const { colors } = useTheme();
+  const variantStyle = {
+    primary:   { backgroundColor: colors.accent,  borderWidth: 0, borderColor: "transparent" },
+    secondary: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+    ghost:     { backgroundColor: "transparent",  borderWidth: 1, borderColor: colors.border },
+  } as const;
+  const labelColor: Record<ButtonVariant, string> = {
+    primary:   colors.textPrimary,
+    secondary: colors.textPrimary,
+    ghost:     colors.accent,
+  };
+
   function handlePress() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     onPress();
