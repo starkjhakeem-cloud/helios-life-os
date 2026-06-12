@@ -14,6 +14,7 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.autonomy import AutonomyAuditLog, AutonomyQueueItem, AutonomyRule as AutonomyRuleModel
 from app.models.goal import Goal
+from app.models.notification import Notification
 from app.models.task import Task
 from app.models.user import User
 from app.schemas.ai import CreateGoalPayload, CreateTaskPayload, UpdateTaskStatusPayload
@@ -126,6 +127,39 @@ def _record_audit(
             pass
 
 
+def _emit_notification(
+    db: Session,
+    user_id: str,
+    event_type: str,
+    title: str,
+    body: str | None = None,
+    *,
+    related_queue_item_id: str | None = None,
+    action_type: str | None = None,
+) -> None:
+    """Persist an in-app notification. Silently swallows errors so the main request is never affected."""
+    try:
+        n = Notification(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            event_type=event_type,
+            title=title,
+            body=body,
+            is_read=False,
+            related_queue_item_id=related_queue_item_id,
+            action_type=action_type,
+            created_at=datetime.now(timezone.utc),
+        )
+        db.add(n)
+        db.commit()
+    except Exception:
+        logger.exception("Failed to emit notification (event=%s, user=%s)", event_type, user_id)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+
 # ── Proactive suggestions ─────────────────────────────────────────────────────
 
 @router.get("/suggestions", response_model=SuggestionsResponse)
@@ -164,6 +198,15 @@ def get_suggestions(
         f"{len(trimmed)} suggestion(s) generated.",
         metadata={"count": len(trimmed)},
     )
+
+    if trimmed:
+        _emit_notification(
+            db,
+            current_user.id,
+            "new_suggestion",
+            "New Suggestions Available",
+            f"HELIOS generated {len(trimmed)} proactive suggestion{'s' if len(trimmed) != 1 else ''} for your review.",
+        )
 
     return SuggestionsResponse(
         suggestions=trimmed,
@@ -385,6 +428,16 @@ def create_queue_item(
         metadata={"source_agent": item.source_agent, "title": item.title},
     )
 
+    _emit_notification(
+        db,
+        current_user.id,
+        "approval_required",
+        "Action Requires Your Approval",
+        f'"{item.title}" has been added to the queue and is waiting for your review.',
+        related_queue_item_id=item.id,
+        action_type=item.proposed_action_type,
+    )
+
     return _to_out(item)
 
 
@@ -537,6 +590,15 @@ def execute_queue_item(
                 "title": item.title,
             },
         )
+        _emit_notification(
+            db,
+            current_user.id,
+            "execution_blocked",
+            "Execution Blocked",
+            f'"{item.title}" could not be executed — an approval rule is blocking this action type.',
+            related_queue_item_id=item.id,
+            action_type=item.proposed_action_type,
+        )
         raise HTTPException(status_code=403, detail=detail)
 
     now = datetime.now(timezone.utc)
@@ -555,6 +617,15 @@ def execute_queue_item(
                 action_type=item.proposed_action_type,
                 risk_level=item.risk_level,
                 metadata={"error": "payload_validation_error", "title": item.title},
+            )
+            _emit_notification(
+                db,
+                current_user.id,
+                "execution_failed",
+                "Execution Failed",
+                f'"{item.title}" could not be executed — the action payload is invalid.',
+                related_queue_item_id=item.id,
+                action_type=item.proposed_action_type,
             )
             raise HTTPException(status_code=422, detail=exc.errors())
 
@@ -595,6 +666,15 @@ def execute_queue_item(
             risk_level=item.risk_level,
             metadata={"created_id": task.id, "title": task.title},
         )
+        _emit_notification(
+            db,
+            current_user.id,
+            "execution_completed",
+            "Execution Completed",
+            f'Task "{task.title}" was created successfully.',
+            related_queue_item_id=item_id,
+            action_type="create_task",
+        )
 
         return AutonomyExecuteResult(
             success=True,
@@ -619,6 +699,15 @@ def execute_queue_item(
                 action_type=item.proposed_action_type,
                 risk_level=item.risk_level,
                 metadata={"error": "payload_validation_error", "title": item.title},
+            )
+            _emit_notification(
+                db,
+                current_user.id,
+                "execution_failed",
+                "Execution Failed",
+                f'"{item.title}" could not be executed — the action payload is invalid.',
+                related_queue_item_id=item.id,
+                action_type=item.proposed_action_type,
             )
             raise HTTPException(status_code=422, detail=exc.errors())
 
@@ -647,6 +736,15 @@ def execute_queue_item(
             risk_level=item.risk_level,
             metadata={"created_id": goal.id, "title": goal.title},
         )
+        _emit_notification(
+            db,
+            current_user.id,
+            "execution_completed",
+            "Execution Completed",
+            f'Goal "{goal.title}" was created successfully.',
+            related_queue_item_id=item_id,
+            action_type="create_goal",
+        )
 
         return AutonomyExecuteResult(
             success=True,
@@ -671,6 +769,15 @@ def execute_queue_item(
                 action_type=item.proposed_action_type,
                 risk_level=item.risk_level,
                 metadata={"error": "payload_validation_error", "title": item.title},
+            )
+            _emit_notification(
+                db,
+                current_user.id,
+                "execution_failed",
+                "Execution Failed",
+                f'"{item.title}" could not be executed — the action payload is invalid.',
+                related_queue_item_id=item.id,
+                action_type=item.proposed_action_type,
             )
             raise HTTPException(status_code=422, detail=exc.errors())
 
@@ -699,6 +806,15 @@ def execute_queue_item(
             risk_level=item.risk_level,
             metadata={"updated_id": task.id, "new_status": update_data.status, "title": task.title},
         )
+        _emit_notification(
+            db,
+            current_user.id,
+            "execution_completed",
+            "Execution Completed",
+            f'Task "{task.title}" was marked as {update_data.status.replace("_", " ")}.',
+            related_queue_item_id=item_id,
+            action_type="update_task_status",
+        )
 
         return AutonomyExecuteResult(
             success=True,
@@ -723,6 +839,15 @@ def execute_queue_item(
                 action_type=item.proposed_action_type,
                 risk_level=item.risk_level,
                 metadata={"error": "payload_validation_error", "title": item.title},
+            )
+            _emit_notification(
+                db,
+                current_user.id,
+                "execution_failed",
+                "Execution Failed",
+                f'"{item.title}" could not be executed — the action payload is invalid.',
+                related_queue_item_id=item.id,
+                action_type=item.proposed_action_type,
             )
             raise HTTPException(status_code=422, detail=exc.errors())
 
@@ -764,6 +889,15 @@ def execute_queue_item(
                 risk_level=item.risk_level,
                 metadata={"error": "ai_provider_error", "title": item.title},
             )
+            _emit_notification(
+                db,
+                current_user.id,
+                "execution_failed",
+                "Execution Failed",
+                f'"{item.title}" could not be executed — the AI provider returned an error.',
+                related_queue_item_id=item.id,
+                action_type=item.proposed_action_type,
+            )
             raise HTTPException(status_code=502, detail=str(exc))
 
         item.status = "completed"
@@ -779,6 +913,15 @@ def execute_queue_item(
             action_type="generate_plan",
             risk_level=item.risk_level,
             metadata={"plan_title": plan.plan_title, "title": item.title},
+        )
+        _emit_notification(
+            db,
+            current_user.id,
+            "execution_completed",
+            "Execution Completed",
+            f'Plan "{plan.plan_title}" was generated successfully.',
+            related_queue_item_id=item_id,
+            action_type="generate_plan",
         )
 
         return AutonomyExecuteResult(

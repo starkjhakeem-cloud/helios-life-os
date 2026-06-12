@@ -65,6 +65,12 @@ export const API_ENDPOINTS = {
     disconnect: (id: string) => `/api/v1/integrations/${id}`,
     triggerSync: (id: string) => `/api/v1/integrations/${id}/sync`,
   },
+  notifications: {
+    list: "/api/v1/notifications",
+    markRead: (id: string) => `/api/v1/notifications/${id}/read`,
+    markAllRead: "/api/v1/notifications/read-all",
+    delete: (id: string) => `/api/v1/notifications/${id}`,
+  },
   autonomy: {
     queue: "/api/v1/autonomy/queue",
     item: (id: string) => `/api/v1/autonomy/queue/${id}`,

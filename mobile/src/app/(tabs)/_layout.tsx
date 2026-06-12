@@ -3,7 +3,7 @@ import { Tabs, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import type { SFSymbol } from "sf-symbols-typescript";
 
-import { useAuthStore } from "../../store";
+import { useAuthStore, useNotificationsStore } from "../../store";
 import { colors } from "../../theme/theme";
 
 type TabIconProps = {
@@ -24,7 +24,13 @@ function TabIcon({ name, color }: TabIconProps) {
 
 export default function TabsLayout() {
   const isAuthenticated = useAuthStore((s) => s.accessToken !== null);
+  const accessToken = useAuthStore((s) => s.accessToken);
   const router = useRouter();
+  const { unreadCount, fetchNotifications } = useNotificationsStore();
+
+  useEffect(() => {
+    if (accessToken) fetchNotifications(accessToken);
+  }, [accessToken, fetchNotifications]);
 
   // Secondary guard: root _layout.tsx is the primary gatekeeper, but this
   // catches any edge-case (e.g., deep-link into a tab while unauthenticated).
@@ -152,6 +158,18 @@ export default function TabsLayout() {
           tabBarIcon: ({ color }) => (
             <TabIcon name="list.bullet.clipboard" color={color} />
           ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          title: "Inbox",
+          tabBarIcon: ({ color }) => (
+            <TabIcon name="bell" color={color} />
+          ),
+          tabBarBadge: unreadCount > 0 ? (unreadCount > 99 ? "99+" : unreadCount) : undefined,
+          tabBarBadgeStyle: { backgroundColor: colors.accent, fontSize: 10 },
         }}
       />
 

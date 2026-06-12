@@ -26,4 +26,6 @@ export type { AgentAssessment, OrchestrationRequest, OrchestrationResponse } fro
 export { useIntegrationStore } from "./useIntegrationStore";
 export type { ConnectUrlResponse, ExchangeCodeRequest, ExchangeCodeResponse, Integration, IntegrationProvider, IntegrationStatus, IntegrationListResponse, SyncJobOut, SyncStatusResponse } from "../services/integrationService";
 export { useAutonomyStore } from "./useAutonomyStore";
+export { useNotificationsStore } from "./useNotificationsStore";
+export type { InboxNotification, NotificationEventType } from "../services/inboxService";
 export type { AutonomyAuditLogEntry, AutonomyQueueItem, AutonomyExecuteResult, SuggestionItem, DailyPlan, FocusBlock, PriorityTask, AutonomyRule, AutonomyRuleCreate, AutonomyRuleUpdate, QueueStatus, RiskLevel } from "../services/autonomyService";
