@@ -215,7 +215,7 @@ function IntegrationCard({
             />
             <Text style={styles.oauthNoteText}>
               {isOAuthReady
-                ? "OAuth architecture prepared — encrypted token storage ready for production"
+                ? "OAuth architecture ready — set GOOGLE_CLIENT_ID in backend/.env to activate"
                 : "Real OAuth coming soon — mock connection available now"}
             </Text>
           </View>
@@ -448,16 +448,25 @@ export default function IntegrationsScreen() {
     setConnectingProvider(provider);
     try {
       const data = await integrationService.getConnectUrl(accessToken);
-      const urlPreview = data.url.length > 120 ? `${data.url.substring(0, 120)}…` : data.url;
-      Alert.alert(
-        "Google OAuth — Skeleton",
-        `${data.configured ? "✓ Real URL generated (GOOGLE_CLIENT_ID configured)" : "⚠ Placeholder URL (GOOGLE_CLIENT_ID not set)"}\n\n${data.note}\n\nURL:\n${urlPreview}`,
-        [{ text: "OK" }],
-      );
+      if (!data.configured) {
+        Alert.alert(
+          "OAuth Credentials Required",
+          "Real Google OAuth is not configured on this server.\n\nTo enable it, add the following to backend/.env:\n\n  • GOOGLE_CLIENT_ID\n  • GOOGLE_CLIENT_SECRET\n  • TOKEN_ENCRYPTION_KEY\n\nSee backend/.env.example for setup instructions.\n\nTap MOCK on this card to connect with simulated data in the meantime.",
+          [{ text: "OK" }],
+        );
+      } else {
+        const urlPreview =
+          data.url.length > 100 ? `${data.url.substring(0, 100)}…` : data.url;
+        Alert.alert(
+          "Google OAuth — Stub Active",
+          `✓ Credentials configured\n\nToken exchange is in stub mode — placeholder tokens are returned but not stored. This will be activated in a future release.\n\nUse MOCK to connect with simulated data for now.\n\nAuthorization URL:\n${urlPreview}`,
+          [{ text: "OK" }],
+        );
+      }
     } catch (err) {
       Alert.alert(
         "Connection Error",
-        err instanceof Error ? err.message : "Failed to generate authorization URL.",
+        err instanceof Error ? err.message : "Failed to contact the authorization server.",
       );
     } finally {
       setConnectingProvider(null);

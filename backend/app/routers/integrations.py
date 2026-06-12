@@ -17,11 +17,18 @@ from app.models.user import User
 from app.schemas.integration import (
     CallbackResponse,
     ConnectUrlResponse,
+    ExchangeCodeRequest,
+    ExchangeCodeResponse,
     IntegrationListResponse,
     IntegrationOut,
     MockConnectRequest,
     SyncJobOut,
     SyncStatusResponse,
+)
+from app.services.google_oauth import (
+    OAuthNotConfiguredError,
+    exchange_authorization_code,
+    is_oauth_configured,
 )
 from app.services.sync_simulator import run_mock_sync
 
@@ -275,29 +282,24 @@ def google_oauth_callback(
     error_description: str | None = Query(default=None),
 ) -> CallbackResponse:
     """
-    Google OAuth 2.0 callback skeleton — accepts the redirect from Google
-    (or from the mobile app after it intercepts the deep link).
+    Google OAuth 2.0 callback for server-side redirect flows.
 
-    V2.15 skeleton:
-    - Does NOT verify the state parameter (would require persisted state lookup).
-    - Does NOT exchange the authorization code for tokens.
-    - Does NOT call any Google API.
-    - Returns a structured JSON response describing what was received.
+    Called when GOOGLE_REDIRECT_URI points to this server rather than a
+    mobile deep link. When using `helios://oauth/callback/google`, the mobile
+    app intercepts the deep link and calls POST /google/exchange instead.
 
-    Production implementation (V2.16+) will:
-    1. Verify state matches the value stored for this user (CSRF protection).
-    2. POST to https://oauth2.googleapis.com/token to exchange `code` for
-       access_token and refresh_token.
-    3. Encrypt tokens via app.services.token_encryption and persist to
-       user_integrations.
-    4. Redirect the mobile app via the helios:// deep link.
+    V2.16 — uses exchange_authorization_code (stub when _STUB_EXCHANGE=True).
+    Token storage not yet implemented (V2.17).
+
+    State verification is skipped — a production implementation must store
+    state before redirecting and verify it here (CSRF protection).
     """
     if error:
         return CallbackResponse(
             success=False,
             provider="google",
             code_received=False,
-            note=f"Google returned an error: {error}. {error_description or ''}".strip(". ") + ".",
+            note=f"Google returned an error: {error}. {(error_description or '').rstrip('.')}.",
         )
 
     if not code:
@@ -308,15 +310,93 @@ def google_oauth_callback(
             note="No authorization code received. The request may have been cancelled.",
         )
 
-    # Real implementation: verify state, exchange code, encrypt tokens.
-    return CallbackResponse(
-        success=False,
+    try:
+        tokens = exchange_authorization_code(
+            code=code,
+            redirect_uri=settings.google_redirect_uri,
+        )
+        return CallbackResponse(
+            success=True,
+            provider="google",
+            code_received=True,
+            note=(
+                f"{'Stub' if tokens.stub else 'Real'} token exchange completed. "
+                "Token storage not yet implemented — wire in V2.17."
+            ),
+        )
+    except OAuthNotConfiguredError as exc:
+        return CallbackResponse(
+            success=False,
+            provider="google",
+            code_received=True,
+            note=str(exc),
+        )
+    except RuntimeError as exc:
+        return CallbackResponse(
+            success=False,
+            provider="google",
+            code_received=True,
+            note=f"Token exchange failed: {exc}",
+        )
+
+
+@router.post("/google/exchange", response_model=ExchangeCodeResponse)
+def google_exchange_code(
+    payload: ExchangeCodeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ExchangeCodeResponse:
+    """
+    Exchange a Google authorization code for tokens (JWT-authenticated).
+
+    Called by the mobile app after intercepting the `helios://oauth/callback/google`
+    deep link and extracting the authorization code. Requires a valid JWT so
+    tokens are always associated with the authenticated user.
+
+    V2.16 behavior:
+    - Validates that all required OAuth env vars are configured.
+    - Calls exchange_authorization_code:
+      * _STUB_EXCHANGE=True  → returns placeholder GoogleTokens (no Google API call).
+      * _STUB_EXCHANGE=False → performs the real HTTP exchange.
+    - Does NOT store tokens yet — token encryption + DB write wired in V2.17.
+
+    Returns HTTP 503 when OAuth credentials are not configured.
+    Returns HTTP 502 when the Google token endpoint returns an error.
+
+    V2.17+ production:
+    1. Verify state against the value stored for current_user.id (CSRF protection).
+    2. Encrypt tokens:  encrypt_token(tokens.access_token / tokens.refresh_token).
+    3. Upsert user_integrations: status=connected, token_expires_at=now+expires_in.
+    4. Set last_sync_at on first connect if a sync is triggered immediately.
+    """
+    try:
+        tokens = exchange_authorization_code(
+            code=payload.code,
+            redirect_uri=settings.google_redirect_uri,
+        )
+    except OAuthNotConfiguredError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=f"Token exchange failed: {exc}")
+
+    # V2.17: uncomment to encrypt and persist tokens.
+    # from datetime import timedelta
+    # from app.services.token_encryption import encrypt_token
+    # enc_access  = encrypt_token(tokens.access_token)
+    # enc_refresh = encrypt_token(tokens.refresh_token) if tokens.refresh_token else None
+    # expires_at  = datetime.now(timezone.utc) + timedelta(seconds=tokens.expires_in)
+    # ... upsert user_integrations row, set status="connected" ...
+
+    return ExchangeCodeResponse(
+        success=True,
         provider="google",
-        code_received=True,
+        stub=tokens.stub,
+        tokens_stored=False,
         note=(
-            "Authorization code received. "
-            "Token exchange not yet implemented — this is the V2.15 skeleton. "
-            "Implement state verification and token exchange in V2.16."
+            "Stub exchange completed — real credentials configured but _STUB_EXCHANGE=True. "
+            "Token storage not yet implemented (V2.17)."
+            if tokens.stub
+            else "Token exchange succeeded. Token storage not yet implemented (V2.17)."
         ),
     )
 

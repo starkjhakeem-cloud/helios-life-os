@@ -22,11 +22,13 @@ HELIOS V2.14 completes the infrastructure layer required to support real Google 
 | Mock connect / disconnect | ✅ Fully functional |
 | Sync simulation | ✅ Writes real calendar/email records |
 | `GET /integrations/google/connect-url` | ✅ Generates real URL (or placeholder) |
-| `GET /integrations/google/callback` | ✅ Skeleton — accepts code, no exchange yet |
-| Frontend CONNECT GOOGLE button | ✅ Calls endpoint, shows URL in alert |
+| `GET /integrations/google/callback` | ✅ Calls exchange service; returns stub result |
+| `POST /integrations/google/exchange` | ✅ JWT-auth stub; validates creds, returns placeholder |
+| Token exchange service (`google_oauth.py`) | ✅ Full HTTP structure; `_STUB_EXCHANGE=True` |
+| Frontend CONNECT GOOGLE button | ✅ Differentiated alerts for configured vs. unconfigured |
 | State token persistence (CSRF) | ⏳ Not yet implemented |
-| Real token exchange | ⏳ Not yet implemented (V2.16) |
-| Deep-link intercept + exchange | ⏳ Not yet implemented (V2.16) |
+| Real token storage (encrypt + DB write) | ⏳ Not yet implemented (V2.17) |
+| Deep-link intercept in mobile app | ⏳ Not yet implemented (V2.17) |
 
 ---
 
@@ -175,13 +177,13 @@ If `TOKEN_ENCRYPTION_KEY` must be rotated (e.g., suspected compromise):
 
 ## Current Limitations
 
-- **No real token exchange** — `GET /integrations/google/callback` accepts the authorization code but does not exchange it for tokens yet.
-- **No state persistence** — The `state` CSRF token returned by `connect-url` is generated but not stored. The callback does not verify it. A production implementation must store state (e.g., Redis TTL or DB row) and reject callbacks with mismatched state.
-- **No real token storage** — `access_token_encrypted` and `refresh_token_encrypted` are always `NULL`. Token storage will be wired in V2.16.
-- **No real browser flow** — The frontend CONNECT GOOGLE button calls `connect-url` and shows the URL in an alert. Real OAuth requires `expo-auth-session` or `expo-web-browser` to open the authorization URL and intercept the deep link callback.
+- **`_STUB_EXCHANGE = True`** — `exchange_authorization_code()` in `google_oauth.py` validates credentials but returns placeholder tokens instead of calling Google. Flip to `False` to activate real exchange (all credentials must be configured first).
+- **No state persistence** — The `state` CSRF token is generated on each `connect-url` call but not stored. The callback and exchange endpoints do not verify it. A production implementation must store state (e.g., Redis with TTL) before the redirect and verify on return.
+- **No token storage** — `access_token_encrypted` and `refresh_token_encrypted` remain `NULL`. `POST /google/exchange` returns `tokens_stored: false`. Token encryption + DB write is wired in V2.17.
+- **No deep-link intercept** — The mobile app shows the authorization URL in an alert but does not open a browser or intercept the `helios://` deep link. Full deep-link handling (using `expo-auth-session` or `expo-web-browser`) is V2.17.
 - **No token refresh** — Sync simulation uses deterministic fake records; it does not call any Google API.
-- **Outlook OAuth** — Microsoft OAuth (MSAL) is a separate flow and is not in the current roadmap. The architecture supports it via the same encrypted columns.
-- **No PKCE** — For a fully public mobile app, PKCE (`code_challenge` + `code_verifier`) should be added before the `helios://` deep-link callback is considered safe against code-interception attacks.
+- **Outlook OAuth** — Microsoft OAuth (MSAL) is a separate flow not in the current roadmap. The architecture supports it via the same encrypted columns.
+- **No PKCE** — For a mobile OAuth public client, PKCE (`code_challenge` + `code_verifier`) should be added before the `helios://` deep-link callback is considered safe against authorization code interception.
 
 ---
 
@@ -213,3 +215,17 @@ If `TOKEN_ENCRYPTION_KEY` must be rotated (e.g., suspected compromise):
 | `mobile/src/store/index.ts` | Exported `ConnectUrlResponse` type |
 | `mobile/src/app/(tabs)/integrations.tsx` | CONNECT GOOGLE button (+ MOCK secondary) for Google providers; skeleton alert on press |
 | `docs/oauth-token-architecture.md` | Updated status table and limitations for V2.15 skeleton |
+
+## Files Changed in V2.16
+
+| File | Change |
+|------|--------|
+| `backend/app/services/google_oauth.py` | **NEW** — token exchange service with `_STUB_EXCHANGE` flag, `OAuthNotConfiguredError`, `GoogleTokens` dataclass, full real-exchange HTTP path (deferred behind flag) |
+| `backend/app/schemas/integration.py` | Added `ExchangeCodeRequest`, `ExchangeCodeResponse` |
+| `backend/app/routers/integrations.py` | Added `POST /google/exchange` (JWT-auth); updated `GET /google/callback` to call exchange service; imported new service and schemas |
+| `backend/requirements.txt` | Added `httpx==0.27.2` (HTTP client for real exchange path) |
+| `mobile/src/config/api.ts` | Added `googleExchange` endpoint constant |
+| `mobile/src/services/integrationService.ts` | Added `ExchangeCodeRequest`, `ExchangeCodeResponse` types; added `exchangeCode` service method |
+| `mobile/src/store/index.ts` | Exported `ExchangeCodeRequest`, `ExchangeCodeResponse` |
+| `mobile/src/app/(tabs)/integrations.tsx` | Differentiated alerts: unconfigured → setup instructions; configured → stub-active notice; updated static oauth note |
+| `docs/oauth-token-architecture.md` | Updated current state table, limitations, and added V2.16 file list |

@@ -43,10 +43,23 @@ export type SyncStatusResponse = {
 };
 
 export type ConnectUrlResponse = {
-  url: string;       // Full authorization URL or placeholder
-  state: string;     // CSRF state token (not yet persisted in V2.15)
+  url: string;         // Full authorization URL or placeholder
+  state: string;       // CSRF state token (not yet persisted)
   configured: boolean; // true when GOOGLE_CLIENT_ID is set in backend config
-  note: string;      // Developer note about skeleton limitations
+  note: string;        // Developer note about current limitations
+};
+
+export type ExchangeCodeRequest = {
+  code: string;
+  state?: string;  // CSRF state token; verified when persistence is wired
+};
+
+export type ExchangeCodeResponse = {
+  success: boolean;
+  provider: string;
+  stub: boolean;         // true when exchange returned placeholder tokens
+  tokens_stored: boolean; // true when tokens were encrypted and persisted (V2.17+)
+  note: string;
 };
 
 // ── Service ───────────────────────────────────────────────────────────────────
@@ -77,4 +90,7 @@ export const integrationService = {
 
   getConnectUrl: (token: string) =>
     apiClient.get<ConnectUrlResponse>(API_ENDPOINTS.integrations.googleConnectUrl, token),
+
+  exchangeCode: (token: string, body: ExchangeCodeRequest) =>
+    apiClient.post<ExchangeCodeResponse>(API_ENDPOINTS.integrations.googleExchange, body, token),
 };

@@ -58,3 +58,18 @@ class CallbackResponse(BaseModel):
     provider: str
     code_received: bool
     note: str
+
+
+class ExchangeCodeRequest(BaseModel):
+    """Sent by the mobile app to POST /integrations/google/exchange."""
+    code: str
+    state: str | None = None   # CSRF state token; verified when persistence is wired
+
+
+class ExchangeCodeResponse(BaseModel):
+    """Returned by POST /integrations/google/exchange."""
+    success: bool
+    provider: str
+    stub: bool          # True when exchange returned placeholder tokens (not real)
+    tokens_stored: bool # True when tokens were encrypted and persisted (V2.17+)
+    note: str
