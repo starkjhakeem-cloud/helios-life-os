@@ -146,6 +146,16 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
+        name="autonomy"
+        options={{
+          title: "Queue",
+          tabBarIcon: ({ color }) => (
+            <TabIcon name="list.bullet.clipboard" color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",

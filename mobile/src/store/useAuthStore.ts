@@ -7,6 +7,7 @@ import { authService } from "../services/authService";
 import { useAIStore } from "./useAIStore";
 import { useAgentsStore } from "./useAgentsStore";
 import { useAnalyticsStore } from "./useAnalyticsStore";
+import { useAutonomyStore } from "./useAutonomyStore";
 import { useConversationStore } from "./useConversationStore";
 import { useDashboardStore } from "./useDashboardStore";
 import { useGoalsStore } from "./useGoalsStore";
@@ -81,6 +82,7 @@ export const useAuthStore = create<AuthState>()(
         useConversationStore.getState().reset();
         useRemindersStore.getState().reset();
         useSettingsStore.getState().reset();
+        useAutonomyStore.getState().reset();
         set({ user: null, accessToken: null, error: null });
       },
 
@@ -100,6 +102,7 @@ export const useAuthStore = create<AuthState>()(
           useConversationStore.getState().reset();
           useRemindersStore.getState().reset();
           useSettingsStore.getState().reset();
+          useAutonomyStore.getState().reset();
           set({ user: null, accessToken: null, isLoading: false, error: null });
         } catch (err) {
           const message =

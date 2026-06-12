@@ -25,3 +25,5 @@ export { useOrchestrationStore } from "./useOrchestrationStore";
 export type { AgentAssessment, OrchestrationRequest, OrchestrationResponse } from "../services/orchestrationService";
 export { useIntegrationStore } from "./useIntegrationStore";
 export type { ConnectUrlResponse, ExchangeCodeRequest, ExchangeCodeResponse, Integration, IntegrationProvider, IntegrationStatus, IntegrationListResponse, SyncJobOut, SyncStatusResponse } from "../services/integrationService";
+export { useAutonomyStore } from "./useAutonomyStore";
+export type { AutonomyQueueItem, QueueStatus, RiskLevel } from "../services/autonomyService";

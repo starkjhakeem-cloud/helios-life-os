@@ -65,4 +65,8 @@ export const API_ENDPOINTS = {
     disconnect: (id: string) => `/api/v1/integrations/${id}`,
     triggerSync: (id: string) => `/api/v1/integrations/${id}/sync`,
   },
+  autonomy: {
+    queue: "/api/v1/autonomy/queue",
+    item: (id: string) => `/api/v1/autonomy/queue/${id}`,
+  },
 } as const;
