@@ -1,7 +1,7 @@
 # OAuth and Secure Token Architecture
 
-**Status:** OAuth skeleton active. Token exchange wired. Google Calendar provider adapter layer added (stub mode).
-**Added in:** V2.14 (architecture), V2.15 (skeleton flow), V2.18 (Calendar adapter)
+**Status:** OAuth skeleton active. Token exchange wired. Google Calendar and Gmail provider adapter layers added (stub mode).
+**Added in:** V2.14 (architecture), V2.15 (skeleton flow), V2.18 (Calendar adapter), V2.19 (Gmail adapter)
 **Applies to:** Google Calendar, Gmail (Outlook planned separately)
 
 ---
@@ -29,9 +29,11 @@ HELIOS V2.14 completes the infrastructure layer required to support real Google 
 | Startup key validation | ✅ Valid/invalid/absent logged at startup |
 | Frontend CONNECT GOOGLE button | ✅ Calls storage pipeline; refreshes cards on success |
 | Google Calendar provider adapter (`google_calendar_adapter.py`) | ✅ Added in V2.18 — `_STUB=True` |
+| Gmail provider adapter (`gmail_adapter.py`) | ✅ Added in V2.19 — `_STUB=True` |
 | State token persistence (CSRF) | ⏳ Not yet implemented |
 | Deep-link intercept in mobile app | ⏳ Not yet implemented |
 | Real Google Calendar API calls via adapter | ⏳ Pending — flip `_STUB=False` |
+| Real Gmail API calls via adapter | ⏳ Pending — flip `_STUB=False` |
 
 ---
 
@@ -345,3 +347,125 @@ new_event = google_calendar_adapter.create_event(
 |------|--------|
 | `backend/app/services/google_calendar_adapter.py` | **NEW** — `GoogleCalendarAdapter` class with `list_events`, `create_event`, `update_event`, `delete_event`; `_STUB=True`; `_get_access_token` helper; singleton `google_calendar_adapter` |
 | `docs/oauth-token-architecture.md` | Updated status table; added V2.18 architecture section |
+
+---
+
+## V2.19 — Gmail Provider Adapter
+
+### What Was Added
+
+A new adapter service (`backend/app/services/gmail_adapter.py`) sits between HELIOS business logic and the Gmail REST API. It defines the full interface for reading and modifying messages — `list_messages`, `get_message`, `mark_as_read`, `archive_message`, `search_messages` — but executes stub behaviour only. No real Gmail API calls are made. Email sending is explicitly out of scope.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Email router  (app/routers/email.py)                               │
+│  Manages HELIOS-local email_messages table — unchanged              │
+└───────────────────────────────┬─────────────────────────────────────┘
+                                │ future: adapter bridges local ↔ Gmail
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  GmailAdapter  (app/services/gmail_adapter.py)                      │
+│  _STUB = True  →  returns fixture data, no network call             │
+│  _STUB = False →  decrypts token → httpx → Gmail API               │
+└───────────────────────────────┬─────────────────────────────────────┘
+                                │ (real path only)
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  token_encryption.decrypt_token()                                   │
+│  Reads access_token_encrypted from user_integrations row            │
+│  provider = "gmail"                                                 │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### What Is Stubbed vs. What Is Real
+
+| Behaviour | Status |
+|-----------|--------|
+| `list_messages` method signature and call pattern | ✅ Real (stub returns up to 5 fixture messages, filtered by label) |
+| `get_message` method signature and call pattern | ✅ Real (stub looks up fixture by ID; returns `None` if not found) |
+| `mark_as_read` method signature and call pattern | ✅ Real (stub returns `GmailModifyResult` with UNREAD removed) |
+| `archive_message` method signature and call pattern | ✅ Real (stub returns `GmailModifyResult` with INBOX removed) |
+| `search_messages` method signature and call pattern | ✅ Real (stub does substring match on sender/subject/snippet) |
+| Token retrieval path (`_get_access_token`) | ✅ Real — queries `gmail` provider row + `decrypt_token` (not reached in stub mode) |
+| HTTP calls to `gmail.googleapis.com` | ⏳ Stubbed — flip `_STUB = False` to activate |
+| Per-message metadata batch fetch in `list_messages` | ⏳ Stubbed — real path fetches IDs then calls `get_message` per item |
+| Email sending | Out of scope — not implemented |
+| Token refresh before expired access token | ⏳ Not yet implemented |
+
+### Stub flag
+
+```python
+# backend/app/services/gmail_adapter.py
+_STUB: bool = True   # ← set to False when real credentials are configured
+```
+
+When `_STUB = True`:
+- No DB read for tokens.
+- No HTTP request to Gmail.
+- Each method logs at `INFO` level indicating stub mode.
+- `list_messages` / `search_messages` return from `_STUB_MESSAGES` (5 fixture messages).
+- `get_message` finds by ID; returns `None` for unknown IDs.
+- `mark_as_read` / `archive_message` return a `GmailModifyResult` reflecting the label change without touching Gmail.
+
+When `_STUB = False` (not yet enabled):
+- `_get_access_token(user_id, db)` queries `user_integrations` for the connected `gmail` row and calls `token_encryption.decrypt_token()`.
+- The decrypted value is used only in `Authorization: Bearer` headers and never logged or returned.
+- `list_messages` calls `GET /gmail/v1/users/me/messages` then fetches metadata per message ID.
+- `search_messages` passes the `query` string as Gmail's `q=` parameter.
+- `mark_as_read` / `archive_message` call `POST /messages/{id}/modify` with `removeLabelIds`.
+
+### Gmail API note — two-step list
+
+The Gmail API returns only `{id, threadId}` pairs from the list endpoint. A real `list_messages` call therefore issues one list request and then one `GET /messages/{id}?format=metadata` per item. The stub returns fully-populated `GmailMessage` objects directly, bypassing this two-step pattern. When `_STUB=False` the adapter handles the batch via the `_token` internal parameter to avoid re-decrypting on each iteration.
+
+### Usage pattern (future)
+
+```python
+from app.services.gmail_adapter import gmail_adapter
+
+# List inbox
+messages = gmail_adapter.list_messages(
+    user_id=current_user.id,
+    db=db,
+    label_ids=["INBOX", "UNREAD"],
+)
+
+# Mark as read
+result = gmail_adapter.mark_as_read(
+    user_id=current_user.id,
+    db=db,
+    message_id="stub_gmail_msg_001",
+)
+
+# Search
+hits = gmail_adapter.search_messages(
+    user_id=current_user.id,
+    db=db,
+    query="is:unread from:alex",
+)
+```
+
+### Security invariants
+
+- Raw token values are **never** logged (only `type(exc).__name__` on decryption failure).
+- Raw token values are **never** returned from any adapter method.
+- `_get_access_token` is a private helper; callers receive domain objects, not credentials.
+- The `_token` parameter on `get_message` is prefixed with `_` to signal it is internal only — it passes an already-decrypted token between `list_messages` / `search_messages` and `get_message` to avoid repeated DB reads. It is not part of the public API.
+- Stub tokens stored by `_STUB_EXCHANGE=True` (V2.17) are never passed to this adapter — in stub mode token access is skipped entirely.
+
+### What remains for real sync
+
+1. Set `_STUB = False` in `gmail_adapter.py`.
+2. Set `_STUB_EXCHANGE = False` in `google_oauth.py` so real tokens are stored.
+3. Provision `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `TOKEN_ENCRYPTION_KEY` in `.env`.
+4. Implement token refresh: before each adapter call check `token_expires_at`; if within 5 minutes of expiry, call the Google token refresh endpoint and re-encrypt.
+5. Wire the adapter into the sync router or a background task so triggered syncs call the real API instead of `sync_simulator.run_mock_sync`.
+
+## Files Changed in V2.19
+
+| File | Change |
+|------|--------|
+| `backend/app/services/gmail_adapter.py` | **NEW** — `GmailAdapter` class with `list_messages`, `get_message`, `mark_as_read`, `archive_message`, `search_messages`; `_STUB=True`; `_get_access_token` helper; singleton `gmail_adapter` |
+| `docs/oauth-token-architecture.md` | Updated header, status table; added V2.19 architecture section |
