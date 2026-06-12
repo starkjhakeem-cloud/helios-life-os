@@ -93,6 +93,37 @@ export type DailyPlan = {
   generated_at: string;
 };
 
+export type AutonomyRule = {
+  id: string;
+  user_id: string;
+  action_type: string;
+  risk_level: RiskLevel | null;
+  requires_manual_approval: boolean;
+  allow_execution: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AutonomyRuleCreate = {
+  action_type: string;
+  risk_level?: RiskLevel | null;
+  requires_manual_approval?: boolean;
+  allow_execution?: boolean;
+  notes?: string | null;
+};
+
+export type AutonomyRuleUpdate = {
+  requires_manual_approval?: boolean;
+  allow_execution?: boolean;
+  notes?: string | null;
+};
+
+export type AutonomyRulesResponse = {
+  rules: AutonomyRule[];
+  total: number;
+};
+
 export const autonomyService = {
   list: (token: string, status?: QueueStatus) => {
     const url = status
@@ -122,4 +153,16 @@ export const autonomyService = {
 
   generateDailyPlan: (token: string) =>
     apiClient.post<DailyPlan>(API_ENDPOINTS.autonomy.dailyPlan, {}, token),
+
+  listRules: (token: string) =>
+    apiClient.get<AutonomyRulesResponse>(API_ENDPOINTS.autonomy.rules, token),
+
+  createRule: (token: string, body: AutonomyRuleCreate) =>
+    apiClient.post<AutonomyRule>(API_ENDPOINTS.autonomy.rules, body, token),
+
+  updateRule: (token: string, id: string, body: AutonomyRuleUpdate) =>
+    apiClient.patch<AutonomyRule>(API_ENDPOINTS.autonomy.rule(id), body, token),
+
+  deleteRule: (token: string, id: string) =>
+    apiClient.del(API_ENDPOINTS.autonomy.rule(id), token),
 };

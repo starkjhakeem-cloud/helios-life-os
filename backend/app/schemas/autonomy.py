@@ -124,3 +124,38 @@ class DailyPlan(BaseModel):
     risks: list[str]
     suggested_queue_items: list[SuggestionItem]
     generated_at: str
+
+
+# ── Approval rules ────────────────────────────────────────────────────────────
+
+class AutonomyRuleCreate(BaseModel):
+    action_type: str = Field(..., min_length=1, max_length=100)
+    risk_level: RiskLevel | None = None
+    requires_manual_approval: bool = True
+    allow_execution: bool = True
+    notes: str | None = Field(default=None, max_length=500)
+
+
+class AutonomyRuleUpdate(BaseModel):
+    requires_manual_approval: bool | None = None
+    allow_execution: bool | None = None
+    notes: str | None = None
+
+
+class AutonomyRuleOut(BaseModel):
+    id: str
+    user_id: str
+    action_type: str
+    risk_level: str | None
+    requires_manual_approval: bool
+    allow_execution: bool
+    notes: str | None
+    created_at: str
+    updated_at: str
+
+    model_config = {"from_attributes": True}
+
+
+class AutonomyRulesResponse(BaseModel):
+    rules: list[AutonomyRuleOut]
+    total: int

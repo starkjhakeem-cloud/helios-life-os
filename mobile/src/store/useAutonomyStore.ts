@@ -5,6 +5,9 @@ import {
   type AutonomyExecuteResult,
   type AutonomyQueueItem,
   type AutonomyQueueItemCreate,
+  type AutonomyRule,
+  type AutonomyRuleCreate,
+  type AutonomyRuleUpdate,
   type DailyPlan,
   type QueueStatus,
   type SuggestionItem,
@@ -48,6 +51,17 @@ type AutonomyState = {
   generateDailyPlan: (token: string) => Promise<void>;
   addDailyPlanItemToQueue: (token: string, item: SuggestionItem) => Promise<void>;
 
+  // Rules
+  rules: AutonomyRule[];
+  isRulesLoading: boolean;
+  rulesError: string | null;
+  isRulesMutating: boolean;
+
+  fetchRules: (token: string) => Promise<void>;
+  createRule: (token: string, data: AutonomyRuleCreate) => Promise<void>;
+  updateRule: (token: string, id: string, data: AutonomyRuleUpdate) => Promise<void>;
+  deleteRule: (token: string, id: string) => Promise<void>;
+
   reset: () => void;
 };
 
@@ -71,6 +85,11 @@ export const useAutonomyStore = create<AutonomyState>()((set, get) => ({
   isDailyPlanLoading: false,
   dailyPlanError: null,
   dailyPlanQueuedIds: [],
+
+  rules: [],
+  isRulesLoading: false,
+  rulesError: null,
+  isRulesMutating: false,
 
   // ── Queue actions ─────────────────────────────────────────────────────────
 
@@ -229,6 +248,54 @@ export const useAutonomyStore = create<AutonomyState>()((set, get) => ({
     }
   },
 
+  // ── Rules actions ─────────────────────────────────────────────────────────
+
+  fetchRules: async (token) => {
+    set({ isRulesLoading: true, rulesError: null });
+    try {
+      const data = await autonomyService.listRules(token);
+      set({ rules: data.rules, isRulesLoading: false });
+    } catch (err) {
+      set({ rulesError: extractMessage(err), isRulesLoading: false });
+    }
+  },
+
+  createRule: async (token, data) => {
+    set({ isRulesMutating: true, rulesError: null });
+    try {
+      const rule = await autonomyService.createRule(token, data);
+      set((s) => ({ rules: [...s.rules, rule], isRulesMutating: false }));
+    } catch (err) {
+      set({ rulesError: extractMessage(err), isRulesMutating: false });
+    }
+  },
+
+  updateRule: async (token, id, data) => {
+    set({ isRulesMutating: true, rulesError: null });
+    try {
+      const updated = await autonomyService.updateRule(token, id, data);
+      set((s) => ({
+        rules: s.rules.map((r) => (r.id === id ? updated : r)),
+        isRulesMutating: false,
+      }));
+    } catch (err) {
+      set({ rulesError: extractMessage(err), isRulesMutating: false });
+    }
+  },
+
+  deleteRule: async (token, id) => {
+    set({ isRulesMutating: true, rulesError: null });
+    try {
+      await autonomyService.deleteRule(token, id);
+      set((s) => ({
+        rules: s.rules.filter((r) => r.id !== id),
+        isRulesMutating: false,
+      }));
+    } catch (err) {
+      set({ rulesError: extractMessage(err), isRulesMutating: false });
+    }
+  },
+
   reset: () =>
     set({
       items: [],
@@ -244,5 +311,9 @@ export const useAutonomyStore = create<AutonomyState>()((set, get) => ({
       isDailyPlanLoading: false,
       dailyPlanError: null,
       dailyPlanQueuedIds: [],
+      rules: [],
+      isRulesLoading: false,
+      rulesError: null,
+      isRulesMutating: false,
     }),
 }));

@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -17,6 +17,8 @@ import { useAuthStore, useAutonomyStore } from "../../store";
 import type {
   AutonomyExecuteResult,
   AutonomyQueueItem,
+  AutonomyRule,
+  AutonomyRuleCreate,
   DailyPlan,
   FocusBlock,
   PriorityTask,
@@ -152,6 +154,7 @@ type QueueCardProps = {
   item: AutonomyQueueItem;
   isMutating: boolean;
   isExecuting: boolean;
+  isBlocked: boolean;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
   onExecute: (id: string) => void;
@@ -161,6 +164,7 @@ function QueueCard({
   item,
   isMutating,
   isExecuting,
+  isBlocked,
   onApprove,
   onReject,
   onExecute,
@@ -267,7 +271,12 @@ function QueueCard({
       ) : null}
 
       {isApproved ? (
-        isExecuting ? (
+        isBlocked ? (
+          <View style={styles.blockedRow}>
+            <SymbolView name="lock.fill" size={12} tintColor="#ef4444" resizeMode="scaleAspectFit" />
+            <Text style={styles.blockedText}>BLOCKED BY RULE — update rules to allow execution</Text>
+          </View>
+        ) : isExecuting ? (
           <View style={styles.executingRow}>
             <ActivityIndicator color={colors.accent} size="small" />
             <Text style={styles.executingText}>Executing…</Text>
@@ -477,6 +486,219 @@ function DailyPlanSection({
   );
 }
 
+// ── Rule helpers ──────────────────────────────────────────────────────────────
+
+const SAFE_ACTION_TYPES = [
+  "create_task",
+  "create_goal",
+  "update_task_status",
+  "generate_plan",
+] as const;
+
+const ACTION_LABELS: Record<string, string> = {
+  create_task:        "Create Task",
+  create_goal:        "Create Goal",
+  update_task_status: "Update Status",
+  generate_plan:      "Generate Plan",
+};
+
+function isBlockedByRules(item: AutonomyQueueItem, rules: AutonomyRule[]): boolean {
+  return rules.some(
+    (r) =>
+      r.action_type === item.proposed_action_type &&
+      !r.allow_execution &&
+      (r.risk_level === null || r.risk_level === item.risk_level),
+  );
+}
+
+// ── Add rule form ─────────────────────────────────────────────────────────────
+
+type AddRuleFormProps = {
+  onSave: (data: AutonomyRuleCreate) => void;
+  onCancel: () => void;
+  isMutating: boolean;
+};
+
+function AddRuleForm({ onSave, onCancel, isMutating }: AddRuleFormProps) {
+  const [actionType, setActionType] = useState<string>(SAFE_ACTION_TYPES[0]);
+  const [riskLevel, setRiskLevel] = useState<"any" | RiskLevel>("any");
+  const [allowExecution, setAllowExecution] = useState(true);
+
+  const handleSave = () => {
+    onSave({
+      action_type: actionType,
+      risk_level: riskLevel === "any" ? null : riskLevel,
+      requires_manual_approval: true,
+      allow_execution: allowExecution,
+    });
+  };
+
+  return (
+    <View style={styles.addRuleForm}>
+      {/* Action type */}
+      <Text style={styles.formLabel}>ACTION TYPE</Text>
+      <View style={styles.formOptionGrid}>
+        {SAFE_ACTION_TYPES.map((at) => (
+          <TouchableOpacity
+            key={at}
+            style={[styles.formOption, actionType === at && styles.formOptionActive]}
+            onPress={() => setActionType(at)}
+            activeOpacity={0.75}
+          >
+            <Text style={[styles.formOptionText, actionType === at && styles.formOptionActiveText]}>
+              {ACTION_LABELS[at]}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Risk level */}
+      <Text style={[styles.formLabel, { marginTop: spacing.sm }]}>RISK LEVEL</Text>
+      <View style={styles.formOptionRow}>
+        {(["any", "low", "medium", "high"] as const).map((rl) => (
+          <TouchableOpacity
+            key={rl}
+            style={[styles.formOption, riskLevel === rl && styles.formOptionActive]}
+            onPress={() => setRiskLevel(rl)}
+            activeOpacity={0.75}
+          >
+            <Text style={[styles.formOptionText, riskLevel === rl && styles.formOptionActiveText]}>
+              {rl.toUpperCase()}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Execution permission */}
+      <Text style={[styles.formLabel, { marginTop: spacing.sm }]}>EXECUTION</Text>
+      <View style={styles.formOptionRow}>
+        <TouchableOpacity
+          style={[styles.formOption, allowExecution && styles.formOptionAllowed]}
+          onPress={() => setAllowExecution(true)}
+          activeOpacity={0.75}
+        >
+          <Text style={[styles.formOptionText, allowExecution && { color: "#22c55e" }]}>ALLOW</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.formOption, !allowExecution && styles.formOptionBlocked]}
+          onPress={() => setAllowExecution(false)}
+          activeOpacity={0.75}
+        >
+          <Text style={[styles.formOptionText, !allowExecution && { color: "#ef4444" }]}>BLOCK</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={[styles.actionRow, { marginTop: spacing.md }]}>
+        <TouchableOpacity
+          style={[styles.actionBtn, styles.approveBtn, isMutating && styles.btnDisabled]}
+          onPress={handleSave}
+          disabled={isMutating}
+          activeOpacity={0.75}
+        >
+          <Text style={styles.approveBtnText}>Save Rule</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.actionBtn, styles.rejectBtn]}
+          onPress={onCancel}
+          activeOpacity={0.75}
+        >
+          <Text style={styles.rejectBtnText}>Cancel</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+// ── Rule card ─────────────────────────────────────────────────────────────────
+
+type RuleCardProps = {
+  rule: AutonomyRule;
+  isMutating: boolean;
+  onToggleExecution: (id: string, newValue: boolean) => void;
+  onDelete: (id: string) => void;
+};
+
+function RuleCard({ rule, isMutating, onToggleExecution, onDelete }: RuleCardProps) {
+  const handleToggle = () => {
+    const newAllow = !rule.allow_execution;
+    Alert.alert(
+      newAllow ? "Allow Execution" : "Block Execution",
+      `${newAllow ? "Allow" : "Block"} execution of "${ACTION_LABELS[rule.action_type] ?? rule.action_type}" actions${rule.risk_level ? ` at ${rule.risk_level} risk` : " (any risk level)"}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Confirm", onPress: () => onToggleExecution(rule.id, newAllow) },
+      ],
+    );
+  };
+
+  const handleDelete = () => {
+    Alert.alert(
+      "Delete Rule",
+      `Remove rule for "${ACTION_LABELS[rule.action_type] ?? rule.action_type}"?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => onDelete(rule.id) },
+      ],
+    );
+  };
+
+  return (
+    <View style={styles.ruleCard}>
+      <View style={styles.cardHeader}>
+        <View style={styles.cardMeta}>
+          <Badge
+            label={(ACTION_LABELS[rule.action_type] ?? rule.action_type).toUpperCase()}
+            color={colors.accentCyan}
+          />
+          <Badge
+            label={rule.risk_level ? rule.risk_level.toUpperCase() : "ANY RISK"}
+            color={rule.risk_level ? (RISK_COLORS[rule.risk_level as RiskLevel] ?? colors.textMuted) : colors.textMuted}
+          />
+        </View>
+        <Badge
+          label={rule.allow_execution ? "ALLOW" : "BLOCKED"}
+          color={rule.allow_execution ? "#22c55e" : "#ef4444"}
+        />
+      </View>
+
+      {rule.notes ? (
+        <Text style={styles.cardDescription}>{rule.notes}</Text>
+      ) : null}
+
+      <Text style={styles.ruleIndicatorText}>
+        {rule.requires_manual_approval
+          ? "⚠ Manual approval required before execution"
+          : "○ No manual approval requirement set"}
+      </Text>
+
+      <View style={styles.actionRow}>
+        <TouchableOpacity
+          style={[
+            styles.actionBtn,
+            rule.allow_execution ? styles.rejectBtn : styles.approveBtn,
+            isMutating && styles.btnDisabled,
+          ]}
+          onPress={handleToggle}
+          disabled={isMutating}
+          activeOpacity={0.75}
+        >
+          <Text style={rule.allow_execution ? styles.rejectBtnText : styles.approveBtnText}>
+            {rule.allow_execution ? "Block" : "Allow"}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.actionBtn, styles.rejectBtn, isMutating && styles.btnDisabled]}
+          onPress={handleDelete}
+          disabled={isMutating}
+          activeOpacity={0.75}
+        >
+          <Text style={styles.rejectBtnText}>Delete</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function AutonomyScreen() {
@@ -496,6 +718,10 @@ export default function AutonomyScreen() {
     isDailyPlanLoading,
     dailyPlanError,
     dailyPlanQueuedIds,
+    rules,
+    isRulesLoading,
+    rulesError,
+    isRulesMutating,
     fetchQueue,
     fetchSuggestions,
     approveItem,
@@ -504,13 +730,20 @@ export default function AutonomyScreen() {
     addSuggestionToQueue,
     generateDailyPlan,
     addDailyPlanItemToQueue,
+    fetchRules,
+    createRule,
+    updateRule,
+    deleteRule,
   } = useAutonomyStore();
+
+  const [showAddRuleForm, setShowAddRuleForm] = useState(false);
 
   const loadAll = useCallback(() => {
     if (!accessToken) return;
     fetchQueue(accessToken);
     fetchSuggestions(accessToken);
-  }, [accessToken, fetchQueue, fetchSuggestions]);
+    fetchRules(accessToken);
+  }, [accessToken, fetchQueue, fetchSuggestions, fetchRules]);
 
   useEffect(() => {
     loadAll();
@@ -560,10 +793,37 @@ export default function AutonomyScreen() {
     [accessToken, addDailyPlanItemToQueue],
   );
 
+  const handleCreateRule = useCallback(
+    (data: AutonomyRuleCreate) => {
+      if (!accessToken) return;
+      createRule(accessToken, data).then(() => setShowAddRuleForm(false));
+    },
+    [accessToken, createRule],
+  );
+
+  const handleToggleRuleExecution = useCallback(
+    (id: string, newValue: boolean) => {
+      if (accessToken) updateRule(accessToken, id, { allow_execution: newValue });
+    },
+    [accessToken, updateRule],
+  );
+
+  const handleDeleteRule = useCallback(
+    (id: string) => {
+      if (accessToken) deleteRule(accessToken, id);
+    },
+    [accessToken, deleteRule],
+  );
+
   const pending  = items.filter((i) => i.status === "pending");
   const approved = items.filter((i) => i.status === "approved");
   const resolved = items.filter((i) => i.status === "rejected" || i.status === "completed");
-  const isRefreshing = isLoading || isSuggestionsLoading;
+  const isRefreshing = isLoading || isSuggestionsLoading || isRulesLoading;
+
+  const getIsBlocked = useCallback(
+    (item: AutonomyQueueItem) => isBlockedByRules(item, rules),
+    [rules],
+  );
 
   const heroSubtitle =
     suggestions.length > 0 || pending.length > 0
@@ -664,6 +924,7 @@ export default function AutonomyScreen() {
                 item={item}
                 isMutating={isMutating}
                 isExecuting={executingItemId === item.id}
+                isBlocked={getIsBlocked(item)}
                 onApprove={handleApprove}
                 onReject={handleReject}
                 onExecute={handleExecute}
@@ -683,6 +944,7 @@ export default function AutonomyScreen() {
                   item={item}
                   isMutating={isMutating}
                   isExecuting={executingItemId === item.id}
+                  isBlocked={getIsBlocked(item)}
                   onApprove={handleApprove}
                   onReject={handleReject}
                   onExecute={handleExecute}
@@ -701,6 +963,7 @@ export default function AutonomyScreen() {
                   item={item}
                   isMutating={isMutating}
                   isExecuting={false}
+                  isBlocked={false}
                   onApprove={handleApprove}
                   onReject={handleReject}
                   onExecute={handleExecute}
@@ -710,6 +973,62 @@ export default function AutonomyScreen() {
           ) : null}
         </>
       ) : null}
+
+      {/* ── Approval Rules ───────────────────────────────────────────── */}
+      <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.lg }} />
+      <View style={styles.planSectionHeader}>
+        <Text style={styles.sectionLabel}>APPROVAL RULES</Text>
+        <TouchableOpacity
+          onPress={() => setShowAddRuleForm((v) => !v)}
+          style={styles.generateBtn}
+          activeOpacity={0.75}
+        >
+          <Text style={styles.generateBtnText}>{showAddRuleForm ? "Cancel" : "Add Rule"}</Text>
+        </TouchableOpacity>
+      </View>
+
+      <Text style={styles.rulesDescription}>
+        Configure which action types require extra review or are blocked from execution entirely.
+      </Text>
+
+      {rulesError ? (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>{rulesError}</Text>
+        </View>
+      ) : null}
+
+      {showAddRuleForm ? (
+        <AddRuleForm
+          onSave={handleCreateRule}
+          onCancel={() => setShowAddRuleForm(false)}
+          isMutating={isRulesMutating}
+        />
+      ) : null}
+
+      {isRulesLoading && rules.length === 0 ? (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={colors.accent} size="small" />
+          <Text style={styles.loadingText}>Loading rules…</Text>
+        </View>
+      ) : rules.length === 0 && !showAddRuleForm ? (
+        <View style={styles.emptyState}>
+          <SymbolView name="slider.horizontal.3" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+          <Text style={styles.emptyText}>No rules configured.</Text>
+          <Text style={styles.emptySubtext}>
+            Default: all approved actions require explicit execution. Add a rule to block specific types.
+          </Text>
+        </View>
+      ) : (
+        rules.map((rule) => (
+          <RuleCard
+            key={rule.id}
+            rule={rule}
+            isMutating={isRulesMutating}
+            onToggleExecution={handleToggleRuleExecution}
+            onDelete={handleDeleteRule}
+          />
+        ))
+      )}
 
       <View style={{ height: spacing.xl * 2 }} />
     </ScrollView>
@@ -1014,4 +1333,100 @@ const styles = StyleSheet.create({
   conflictCard: { borderColor: "rgba(245, 158, 11, 0.35)" },
   planListItem: { ...typography.body, color: colors.textSecondary, lineHeight: 22 },
   planBullet: { color: colors.textMuted },
+
+  // Blocked by rule indicator
+  blockedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    backgroundColor: "rgba(239, 68, 68, 0.08)",
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.25)",
+  },
+  blockedText: {
+    ...typography.caption,
+    color: "#ef4444",
+    letterSpacing: 0.5,
+    flex: 1,
+  },
+
+  // Rules section
+  rulesDescription: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginBottom: spacing.md,
+    lineHeight: 18,
+  },
+  ruleCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.xs,
+  },
+  ruleIndicatorText: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+
+  // Add rule form
+  addRuleForm: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  formLabel: {
+    fontSize: 9,
+    fontWeight: "700" as const,
+    letterSpacing: 1.5,
+    color: colors.textMuted,
+    marginBottom: spacing.xs,
+  },
+  formOptionGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+  },
+  formOptionRow: {
+    flexDirection: "row",
+    gap: spacing.xs,
+  },
+  formOption: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceDark,
+  },
+  formOptionActive: {
+    borderColor: colors.accentCyan,
+    backgroundColor: "rgba(34, 211, 238, 0.1)",
+  },
+  formOptionAllowed: {
+    borderColor: "#22c55e",
+    backgroundColor: "rgba(34, 197, 94, 0.1)",
+  },
+  formOptionBlocked: {
+    borderColor: "#ef4444",
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
+  },
+  formOptionText: {
+    fontSize: 9,
+    fontWeight: "700" as const,
+    letterSpacing: 0.8,
+    color: colors.textMuted,
+  },
+  formOptionActiveText: { color: colors.accentCyan },
 });

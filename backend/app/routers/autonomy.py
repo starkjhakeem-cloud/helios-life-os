@@ -3,14 +3,14 @@ from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.ai.context_service import ContextScope, build_context
 from app.ai.factory import get_ai_provider
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
-from app.models.autonomy import AutonomyQueueItem
+from app.models.autonomy import AutonomyQueueItem, AutonomyRule as AutonomyRuleModel
 from app.models.goal import Goal
 from app.models.task import Task
 from app.models.user import User
@@ -21,6 +21,10 @@ from app.schemas.autonomy import (
     AutonomyQueueItemOut,
     AutonomyQueueListResponse,
     AutonomyQueueStatusUpdate,
+    AutonomyRuleCreate,
+    AutonomyRuleOut,
+    AutonomyRulesResponse,
+    AutonomyRuleUpdate,
     DailyPlan,
     DailyPlanRequest,
     GeneratePlanPayload,
@@ -31,6 +35,20 @@ from app.schemas.autonomy import (
 router = APIRouter()
 
 _VALID_STATUSES = {"pending", "approved", "rejected", "completed"}
+
+
+def _rule_to_out(rule: AutonomyRuleModel) -> AutonomyRuleOut:
+    return AutonomyRuleOut(
+        id=rule.id,
+        user_id=rule.user_id,
+        action_type=rule.action_type,
+        risk_level=rule.risk_level,
+        requires_manual_approval=rule.requires_manual_approval,
+        allow_execution=rule.allow_execution,
+        notes=rule.notes,
+        created_at=rule.created_at.isoformat(),
+        updated_at=rule.updated_at.isoformat(),
+    )
 
 
 def _to_out(item: AutonomyQueueItem) -> AutonomyQueueItemOut:
@@ -121,6 +139,124 @@ def generate_daily_plan(
         raise HTTPException(status_code=502, detail=str(exc))
 
     return plan
+
+
+# ── Approval rules ────────────────────────────────────────────────────────────
+
+@router.get("/rules", response_model=AutonomyRulesResponse)
+def list_rules(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AutonomyRulesResponse:
+    """Return all approval rules for the authenticated operator."""
+    rows = db.execute(
+        select(AutonomyRuleModel)
+        .where(AutonomyRuleModel.user_id == current_user.id)
+        .order_by(AutonomyRuleModel.action_type, AutonomyRuleModel.risk_level)
+    ).scalars().all()
+    return AutonomyRulesResponse(rules=[_rule_to_out(r) for r in rows], total=len(rows))
+
+
+@router.post("/rules", response_model=AutonomyRuleOut, status_code=201)
+def create_rule(
+    payload: AutonomyRuleCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AutonomyRuleOut:
+    """
+    Create an approval rule for a given action type and optional risk level.
+
+    Rules with risk_level=None act as wildcards covering all risk levels.
+    Duplicate (action_type, risk_level) combinations per user are rejected with 409.
+    """
+    # Enforce uniqueness application-side to handle NULL risk_level correctly across
+    # all databases (SQL UNIQUE constraints treat NULL ≠ NULL, allowing duplicates).
+    existing_q = select(AutonomyRuleModel).where(
+        AutonomyRuleModel.user_id == current_user.id,
+        AutonomyRuleModel.action_type == payload.action_type,
+    )
+    if payload.risk_level is None:
+        existing_q = existing_q.where(AutonomyRuleModel.risk_level.is_(None))
+    else:
+        existing_q = existing_q.where(AutonomyRuleModel.risk_level == payload.risk_level)
+
+    if db.execute(existing_q).scalar_one_or_none():
+        rl = payload.risk_level or "any"
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"A rule already exists for action_type='{payload.action_type}', "
+                f"risk_level='{rl}'. Update or delete it before creating a new one."
+            ),
+        )
+
+    now = datetime.now(timezone.utc)
+    rule = AutonomyRuleModel(
+        id=str(uuid.uuid4()),
+        user_id=current_user.id,
+        action_type=payload.action_type,
+        risk_level=payload.risk_level,
+        requires_manual_approval=payload.requires_manual_approval,
+        allow_execution=payload.allow_execution,
+        notes=payload.notes,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(rule)
+    db.commit()
+    db.refresh(rule)
+    return _rule_to_out(rule)
+
+
+@router.patch("/rules/{rule_id}", response_model=AutonomyRuleOut)
+def update_rule(
+    rule_id: str,
+    payload: AutonomyRuleUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AutonomyRuleOut:
+    rule = db.execute(
+        select(AutonomyRuleModel).where(
+            AutonomyRuleModel.id == rule_id,
+            AutonomyRuleModel.user_id == current_user.id,
+        )
+    ).scalar_one_or_none()
+
+    if not rule:
+        raise HTTPException(status_code=404, detail="Rule not found.")
+
+    if payload.requires_manual_approval is not None:
+        rule.requires_manual_approval = payload.requires_manual_approval
+    if payload.allow_execution is not None:
+        rule.allow_execution = payload.allow_execution
+    # Use model_fields_set so passing notes=None explicitly clears the field.
+    if "notes" in payload.model_fields_set:
+        rule.notes = payload.notes
+
+    rule.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(rule)
+    return _rule_to_out(rule)
+
+
+@router.delete("/rules/{rule_id}", status_code=204)
+def delete_rule(
+    rule_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    rule = db.execute(
+        select(AutonomyRuleModel).where(
+            AutonomyRuleModel.id == rule_id,
+            AutonomyRuleModel.user_id == current_user.id,
+        )
+    ).scalar_one_or_none()
+
+    if not rule:
+        raise HTTPException(status_code=404, detail="Rule not found.")
+
+    db.delete(rule)
+    db.commit()
 
 
 # ── Queue CRUD ────────────────────────────────────────────────────────────────
@@ -254,6 +390,39 @@ def execute_queue_item(
             detail=(
                 f"Action type '{item.proposed_action_type}' is not supported for execution. "
                 f"Supported: {', '.join(sorted(_SAFE_AUTONOMY_ACTIONS))}"
+            ),
+        )
+
+    # ── Check approval rules ──────────────────────────────────────────────────
+    # Look for any rule that explicitly blocks execution for this action_type
+    # at this item's specific risk level OR at any risk level (wildcard).
+    # Specific rules (non-null risk_level) take priority via nullslast ordering,
+    # but we only care whether ANY matching rule has allow_execution=False.
+    blocking_rule = db.execute(
+        select(AutonomyRuleModel)
+        .where(
+            AutonomyRuleModel.user_id == current_user.id,
+            AutonomyRuleModel.action_type == item.proposed_action_type,
+            or_(
+                AutonomyRuleModel.risk_level == item.risk_level,
+                AutonomyRuleModel.risk_level.is_(None),
+            ),
+            AutonomyRuleModel.allow_execution.is_(False),
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+
+    if blocking_rule:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                blocking_rule.notes
+                or (
+                    f"Execution blocked by approval rule for "
+                    f"'{item.proposed_action_type}' "
+                    f"({'any risk level' if blocking_rule.risk_level is None else blocking_rule.risk_level + ' risk'}). "
+                    "Update or remove the rule to allow execution."
+                )
             ),
         )
 

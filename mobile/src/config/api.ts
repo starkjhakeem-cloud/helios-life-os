@@ -71,5 +71,7 @@ export const API_ENDPOINTS = {
     execute: (id: string) => `/api/v1/autonomy/queue/${id}/execute`,
     suggestions: "/api/v1/autonomy/suggestions",
     dailyPlan: "/api/v1/autonomy/daily-plan",
+    rules: "/api/v1/autonomy/rules",
+    rule: (id: string) => `/api/v1/autonomy/rules/${id}`,
   },
 } as const;
