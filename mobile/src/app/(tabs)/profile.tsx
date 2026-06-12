@@ -20,7 +20,7 @@ import { SymbolView } from "expo-symbols";
 
 import { systemService, type VersionResponse } from "../../services/systemService";
 import { requestPermissions } from "../../services/notificationService";
-import { useAuthStore, useRemindersStore, useSettingsStore, type ReminderOut, type ThemePreference } from "../../store";
+import { useAuthStore, useRemindersStore, useSettingsStore, useBackgroundJobsStore, type ReminderOut, type ThemePreference, type BackgroundJob, type JobType } from "../../store";
 import { colors, radius, spacing, typography } from "../../theme/theme";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -214,6 +214,15 @@ function NewReminderModal({ visible, onClose, onSubmit, isMutating }: NewReminde
   );
 }
 
+// ── Background job definitions ────────────────────────────────────────────────
+
+const JOB_TYPE_DEFS: { type: JobType; label: string; icon: string; defaultSchedule: string }[] = [
+  { type: "daily_briefing_generation",  label: "Daily Briefing",       icon: "sun.horizon",       defaultSchedule: "Daily at 8:00 AM" },
+  { type: "proactive_suggestion_scan",  label: "Proactive Suggestions", icon: "lightbulb",         defaultSchedule: "Every 30 minutes" },
+  { type: "reminder_check",             label: "Reminder Check",        icon: "bell",              defaultSchedule: "Every hour" },
+  { type: "integration_sync_simulation",label: "Integration Sync",      icon: "arrow.triangle.2.circlepath", defaultSchedule: "Every 6 hours" },
+];
+
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function ProfileScreen() {
@@ -251,11 +260,21 @@ export default function ProfileScreen() {
     updatePreferences,
   } = useSettingsStore();
 
+  const {
+    jobs,
+    isMutating: jobsMutating,
+    fetchJobs,
+    createJob,
+    updateJob,
+    deleteJob,
+  } = useBackgroundJobsStore();
+
   useEffect(() => {
     systemService.version().then(setVersion).catch(() => setVersion(null));
     if (accessToken) {
       fetchReminders(accessToken);
       fetchPreferences(accessToken);
+      fetchJobs(accessToken);
     }
   }, [accessToken]);
 
@@ -571,6 +590,89 @@ export default function ProfileScreen() {
             resizeMode="scaleAspectFit"
           />
         </TouchableOpacity>
+
+        {/* Background Jobs */}
+        <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>BACKGROUND JOBS</Text>
+        <View style={styles.card}>
+          {JOB_TYPE_DEFS.map((def, idx) => {
+            const job = jobs.find((j) => j.job_type === def.type);
+            return (
+              <View key={def.type}>
+                {idx > 0 && <View style={styles.cardDivider} />}
+                <View style={styles.jobRow}>
+                  <View style={styles.jobLeft}>
+                    <SymbolView
+                      name={def.icon as Parameters<typeof SymbolView>[0]["name"]}
+                      size={16}
+                      tintColor={job?.enabled ? colors.accent : colors.textMuted}
+                      resizeMode="scaleAspectFit"
+                    />
+                    <View style={styles.jobInfo}>
+                      <Text style={styles.jobName}>{def.label}</Text>
+                      <Text style={styles.jobSchedule}>
+                        {job ? job.schedule_label : def.defaultSchedule}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.jobRight}>
+                    {job ? (
+                      <>
+                        <TouchableOpacity
+                          style={[styles.jobToggle, (isMutating || jobsMutating) && styles.btnDisabled]}
+                          onPress={() =>
+                            accessToken && updateJob(accessToken, job.id, { enabled: !job.enabled })
+                          }
+                          disabled={isMutating || jobsMutating}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[styles.jobToggleText, { color: job.enabled ? colors.accent : colors.textMuted }]}>
+                            {job.enabled ? "ON" : "OFF"}
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.jobDeleteBtn, (isMutating || jobsMutating) && styles.btnDisabled]}
+                          onPress={() => {
+                            Alert.alert(
+                              "Remove Job",
+                              `Remove the "${def.label}" background job?`,
+                              [
+                                { text: "Cancel", style: "cancel" },
+                                {
+                                  text: "Remove",
+                                  style: "destructive",
+                                  onPress: () => accessToken && deleteJob(accessToken, job.id),
+                                },
+                              ],
+                            );
+                          }}
+                          disabled={isMutating || jobsMutating}
+                          activeOpacity={0.7}
+                        >
+                          <SymbolView name="trash" size={13} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+                        </TouchableOpacity>
+                      </>
+                    ) : (
+                      <TouchableOpacity
+                        style={[styles.jobAddBtn, (isMutating || jobsMutating) && styles.btnDisabled]}
+                        onPress={() =>
+                          accessToken &&
+                          createJob(accessToken, {
+                            job_type: def.type,
+                            schedule_label: def.defaultSchedule,
+                          })
+                        }
+                        disabled={isMutating || jobsMutating}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.jobAddBtnText}>ADD</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              </View>
+            );
+          })}
+        </View>
 
         {/* Logout */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
@@ -1114,4 +1216,63 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700" as const,
   },
+
+  jobRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: spacing.md,
+  },
+  jobLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    flex: 1,
+  },
+  jobInfo: { flex: 1 },
+  jobName: { ...typography.body, color: colors.textPrimary, fontWeight: "600" as const },
+  jobSchedule: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
+  jobRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  jobToggle: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs - 2,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    minWidth: 36,
+    alignItems: "center",
+  },
+  jobToggleText: {
+    fontSize: 10,
+    fontWeight: "700" as const,
+    letterSpacing: 0.5,
+  },
+  jobDeleteBtn: {
+    padding: spacing.xs,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  jobAddBtn: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs - 2,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.accentCyan,
+    backgroundColor: "rgba(0, 255, 255, 0.06)",
+    alignItems: "center",
+  },
+  jobAddBtnText: {
+    fontSize: 10,
+    fontWeight: "700" as const,
+    letterSpacing: 0.5,
+    color: colors.accentCyan,
+  },
+  btnDisabled: { opacity: 0.5 },
 });
