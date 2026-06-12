@@ -1,5 +1,6 @@
 import { apiClient } from "./apiClient";
 import { API_ENDPOINTS } from "../config/api";
+import type { PlanResponse } from "./aiService";
 
 export type RiskLevel = "low" | "medium" | "high";
 export type QueueStatus = "pending" | "approved" | "rejected" | "completed";
@@ -36,6 +37,16 @@ export type AutonomyQueueStatusUpdate = {
   status: "approved" | "rejected" | "completed";
 };
 
+export type AutonomyExecuteResult = {
+  success: boolean;
+  action_type: string;
+  message: string;
+  queue_item_id: string;
+  created_or_updated_id?: string | null;
+  executed_at: string;
+  plan?: PlanResponse | null;
+};
+
 export const autonomyService = {
   list: (token: string, status?: QueueStatus) => {
     const url = status
@@ -49,6 +60,9 @@ export const autonomyService = {
 
   updateStatus: (token: string, id: string, body: AutonomyQueueStatusUpdate) =>
     apiClient.patch<AutonomyQueueItem>(API_ENDPOINTS.autonomy.item(id), body, token),
+
+  execute: (token: string, id: string) =>
+    apiClient.post<AutonomyExecuteResult>(API_ENDPOINTS.autonomy.execute(id), {}, token),
 
   delete: (token: string, id: string) =>
     apiClient.del(API_ENDPOINTS.autonomy.item(id), token),

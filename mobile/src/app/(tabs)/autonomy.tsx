@@ -14,7 +14,7 @@ import { SymbolView } from "expo-symbols";
 
 import { colors, spacing, radius, typography } from "../../theme/theme";
 import { useAuthStore, useAutonomyStore } from "../../store";
-import type { AutonomyQueueItem, RiskLevel, QueueStatus } from "../../store";
+import type { AutonomyExecuteResult, AutonomyQueueItem, RiskLevel, QueueStatus } from "../../store";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -60,12 +60,22 @@ function StatusBadge({ status }: StatusBadgeProps) {
 type QueueCardProps = {
   item: AutonomyQueueItem;
   isMutating: boolean;
+  isExecuting: boolean;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
+  onExecute: (id: string) => void;
 };
 
-function QueueCard({ item, isMutating, onApprove, onReject }: QueueCardProps) {
+function QueueCard({
+  item,
+  isMutating,
+  isExecuting,
+  onApprove,
+  onReject,
+  onExecute,
+}: QueueCardProps) {
   const isPending = item.status === "pending";
+  const isApproved = item.status === "approved";
 
   const handleApprove = () => {
     Alert.alert(
@@ -89,6 +99,17 @@ function QueueCard({ item, isMutating, onApprove, onReject }: QueueCardProps) {
     );
   };
 
+  const handleExecute = () => {
+    Alert.alert(
+      "Execute Action",
+      `Execute "${item.title}"?\n\nThis will run the proposed action now. This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Execute", onPress: () => onExecute(item.id) },
+      ],
+    );
+  };
+
   return (
     <View style={styles.card}>
       {/* Header row */}
@@ -102,22 +123,28 @@ function QueueCard({ item, isMutating, onApprove, onReject }: QueueCardProps) {
 
       {/* Title + action type */}
       <Text style={styles.cardTitle}>{item.title}</Text>
-      <Text style={styles.cardActionType}>{item.proposed_action_type.replace(/_/g, " ").toUpperCase()}</Text>
+      <Text style={styles.cardActionType}>
+        {item.proposed_action_type.replace(/_/g, " ").toUpperCase()}
+      </Text>
 
       {/* Description */}
       {item.description ? (
-        <Text style={styles.cardDescription} numberOfLines={3}>{item.description}</Text>
+        <Text style={styles.cardDescription} numberOfLines={3}>
+          {item.description}
+        </Text>
       ) : null}
 
       {/* Payload preview */}
       {Object.keys(item.payload_preview).length > 0 ? (
         <View style={styles.payloadBox}>
-          {Object.entries(item.payload_preview).slice(0, 4).map(([k, v]) => (
-            <Text key={k} style={styles.payloadRow} numberOfLines={1}>
-              <Text style={styles.payloadKey}>{k}: </Text>
-              <Text style={styles.payloadVal}>{String(v)}</Text>
-            </Text>
-          ))}
+          {Object.entries(item.payload_preview)
+            .slice(0, 4)
+            .map(([k, v]) => (
+              <Text key={k} style={styles.payloadRow} numberOfLines={1}>
+                <Text style={styles.payloadKey}>{k}: </Text>
+                <Text style={styles.payloadVal}>{String(v)}</Text>
+              </Text>
+            ))}
         </View>
       ) : null}
 
@@ -131,7 +158,7 @@ function QueueCard({ item, isMutating, onApprove, onReject }: QueueCardProps) {
         })}
       </Text>
 
-      {/* Actions — only for pending items */}
+      {/* Pending: Approve + Reject */}
       {isPending ? (
         <View style={styles.actionRow}>
           <TouchableOpacity
@@ -152,6 +179,25 @@ function QueueCard({ item, isMutating, onApprove, onReject }: QueueCardProps) {
           </TouchableOpacity>
         </View>
       ) : null}
+
+      {/* Approved: Execute button or execution spinner */}
+      {isApproved ? (
+        isExecuting ? (
+          <View style={styles.executingRow}>
+            <ActivityIndicator color={colors.accent} size="small" />
+            <Text style={styles.executingText}>Executing…</Text>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.executeBtn]}
+            onPress={handleExecute}
+            disabled={isMutating}
+            activeOpacity={0.75}
+          >
+            <Text style={styles.executeBtnText}>Execute</Text>
+          </TouchableOpacity>
+        )
+      ) : null}
     </View>
   );
 }
@@ -161,8 +207,17 @@ function QueueCard({ item, isMutating, onApprove, onReject }: QueueCardProps) {
 export default function AutonomyScreen() {
   const insets = useSafeAreaInsets();
   const accessToken = useAuthStore((s) => s.accessToken);
-  const { items, isLoading, isMutating, error, fetchQueue, approveItem, rejectItem } =
-    useAutonomyStore();
+  const {
+    items,
+    isLoading,
+    isMutating,
+    executingItemId,
+    error,
+    fetchQueue,
+    approveItem,
+    rejectItem,
+    executeItem,
+  } = useAutonomyStore();
 
   const load = useCallback(() => {
     if (accessToken) fetchQueue(accessToken);
@@ -186,8 +241,33 @@ export default function AutonomyScreen() {
     [accessToken, rejectItem],
   );
 
+  const handleExecute = useCallback(
+    async (id: string) => {
+      if (!accessToken) return;
+      const result: AutonomyExecuteResult | null = await executeItem(accessToken, id);
+      if (!result) return;
+
+      if (result.action_type === "generate_plan" && result.plan) {
+        const { plan_title, summary, steps } = result.plan;
+        const stepLines = steps
+          .slice(0, 3)
+          .map((s) => `${s.step_number}. ${s.title}`)
+          .join("\n");
+        Alert.alert(
+          `Plan Generated`,
+          `${plan_title}\n\n${summary}\n\nFirst steps:\n${stepLines}`,
+          [{ text: "OK" }],
+        );
+      } else {
+        Alert.alert("Done", result.message, [{ text: "OK" }]);
+      }
+    },
+    [accessToken, executeItem],
+  );
+
   const pending = items.filter((i) => i.status === "pending");
-  const resolved = items.filter((i) => i.status !== "pending");
+  const approved = items.filter((i) => i.status === "approved");
+  const resolved = items.filter((i) => i.status === "rejected" || i.status === "completed");
 
   return (
     <ScrollView
@@ -211,7 +291,9 @@ export default function AutonomyScreen() {
         <Text style={styles.heroTitle}>Action Queue</Text>
         <Text style={styles.heroSubtitle}>
           {pending.length > 0
-            ? `${pending.length} pending ${pending.length === 1 ? "proposal" : "proposals"}`
+            ? `${pending.length} pending ${pending.length === 1 ? "proposal" : "proposals"}${approved.length > 0 ? ` · ${approved.length} ready to execute` : ""}`
+            : approved.length > 0
+            ? `${approved.length} approved — ready to execute`
             : "No pending proposals."}
         </Text>
       </View>
@@ -223,14 +305,14 @@ export default function AutonomyScreen() {
         </View>
       ) : null}
 
-      {/* Loading state (initial) */}
+      {/* Initial loading */}
       {isLoading && items.length === 0 ? (
         <ActivityIndicator color={colors.accent} style={{ marginTop: spacing.xl }} />
       ) : null}
 
-      {/* Pending section */}
       {!isLoading || items.length > 0 ? (
         <>
+          {/* Pending section */}
           <Text style={styles.sectionLabel}>PENDING REVIEW</Text>
 
           {pending.length === 0 ? (
@@ -252,11 +334,33 @@ export default function AutonomyScreen() {
                 key={item.id}
                 item={item}
                 isMutating={isMutating}
+                isExecuting={executingItemId === item.id}
                 onApprove={handleApprove}
                 onReject={handleReject}
+                onExecute={handleExecute}
               />
             ))
           )}
+
+          {/* Approved section */}
+          {approved.length > 0 ? (
+            <>
+              <Text style={[styles.sectionLabel, { marginTop: spacing.xl }]}>
+                APPROVED — READY TO EXECUTE
+              </Text>
+              {approved.map((item) => (
+                <QueueCard
+                  key={item.id}
+                  item={item}
+                  isMutating={isMutating}
+                  isExecuting={executingItemId === item.id}
+                  onApprove={handleApprove}
+                  onReject={handleReject}
+                  onExecute={handleExecute}
+                />
+              ))}
+            </>
+          ) : null}
 
           {/* Resolved section */}
           {resolved.length > 0 ? (
@@ -269,8 +373,10 @@ export default function AutonomyScreen() {
                   key={item.id}
                   item={item}
                   isMutating={isMutating}
+                  isExecuting={false}
                   onApprove={handleApprove}
                   onReject={handleReject}
+                  onExecute={handleExecute}
                 />
               ))}
             </>
@@ -470,6 +576,32 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: "#ef4444",
     fontWeight: "700",
+    letterSpacing: 1,
+  },
+  executeBtn: {
+    backgroundColor: "rgba(124, 58, 237, 0.15)",
+    borderColor: colors.accent,
+    marginTop: spacing.sm,
+  },
+  executeBtnText: {
+    ...typography.caption,
+    color: colors.accent,
+    fontWeight: "700",
+    letterSpacing: 1,
+  },
+
+  // Execution spinner row
+  executingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  executingText: {
+    ...typography.caption,
+    color: colors.accent,
     letterSpacing: 1,
   },
 });
