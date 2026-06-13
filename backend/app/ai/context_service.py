@@ -69,6 +69,8 @@ _SCOPE_SECTIONS: dict[ContextScope, list[str]] = {
         "goals",
         "tasks",
         "memories",
+        "analytics",
+        "calendar",
     ],
     ContextScope.AGENT_DETAIL: [
         "goals",

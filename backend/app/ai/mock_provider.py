@@ -10,6 +10,17 @@ from app.schemas.orchestration import AgentAssessment, OrchestrationResponse
 
 def _detect_intent(message: str) -> str:
     lower = message.lower()
+    # Agenda/schedule checks run first — they overlap with planning/task keywords
+    # and need to resolve as "agenda" so the context-aware response is returned.
+    if any(w in lower for w in [
+        "agenda", "what do i have", "what is on", "what's on",
+        "my schedule", "today's schedule", "schedule for today",
+        "do i have anything", "what should i do", "what should i focus",
+        "focus on today", "what to do today", "priorities",
+        "overdue", "today's tasks", "what do i need",
+        "plan for today", "this week", "this morning",
+    ]):
+        return "agenda"
     if any(w in lower for w in ["hello", " hi ", "hey", "morning", "evening", "afternoon", "greet"]) or lower.strip() in {"hi", "hello", "hey"}:
         return "greeting"
     if any(w in lower for w in ["goal", "objective", "target", "milestone", "achieve", "aspire"]):
@@ -25,6 +36,101 @@ def _detect_intent(message: str) -> str:
     if any(w in lower for w in ["help", "what can you", "capabilities", "feature", "how do you", "what do you"]):
         return "help"
     return "general"
+
+
+def _build_agenda_reply(user_context: str | None) -> str:
+    """
+    Parse the structured context string and build a formatted agenda reply.
+    Returns the empty-state message when no operational data is found.
+    """
+    if not user_context:
+        return (
+            "Your agenda is light right now. I don't see calendar events or open tasks for today. "
+            "Your best move is to create or review one active goal."
+        )
+
+    goals: list[str] = []
+    in_progress: list[str] = []
+    high_priority: list[str] = []
+    overdue: list[str] = []
+    calendar_events: list[str] = []
+
+    current_section: str | None = None
+    for raw_line in user_context.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        # Section headers
+        if line.startswith("ACTIVE GOALS"):
+            current_section = "goals"
+        elif line.startswith("IN-PROGRESS TASKS"):
+            current_section = "in_progress"
+        elif line.startswith("HIGH-PRIORITY OPEN TASKS"):
+            current_section = "high_priority"
+        elif line.startswith("OVERDUE TASKS"):
+            current_section = "overdue"
+        elif line.startswith("UPCOMING CALENDAR EVENTS"):
+            current_section = "calendar"
+        elif line.startswith(("LONG-TERM MEMORY", "ANALYTICS", "OPERATOR:", "OPEN TASKS:")):
+            current_section = None
+        elif line.startswith("- ") and current_section:
+            item = line[2:].strip()
+            if current_section == "goals":
+                goals.append(item)
+            elif current_section == "in_progress":
+                in_progress.append(item)
+            elif current_section == "high_priority":
+                high_priority.append(item)
+            elif current_section == "overdue":
+                overdue.append(item)
+            elif current_section == "calendar":
+                calendar_events.append(item)
+
+    if not any([goals, in_progress, high_priority, overdue, calendar_events]):
+        return (
+            "Your agenda is light right now. I don't see calendar events or open tasks for today. "
+            "Your best move is to create or review one active goal."
+        )
+
+    parts: list[str] = ["Here's today's agenda:"]
+
+    if goals:
+        parts.append("\nPriority Focus:")
+        for g in goals[:3]:
+            parts.append(f"  • {g}")
+
+    parts.append("\nScheduled:")
+    if calendar_events:
+        for ev in calendar_events[:5]:
+            parts.append(f"  • {ev}")
+    else:
+        parts.append("  • No calendar events found for today")
+
+    open_items = in_progress + high_priority
+    parts.append("\nOpen Tasks:")
+    if open_items:
+        for t in open_items[:5]:
+            parts.append(f"  • {t}")
+    else:
+        parts.append("  • No open tasks")
+
+    if overdue:
+        parts.append("\nRisks:")
+        for t in overdue[:3]:
+            parts.append(f"  • Overdue: {t}")
+
+    if in_progress:
+        next_move = f"Continue work on: {in_progress[0].split('[')[0].strip()}"
+    elif high_priority:
+        next_move = f"Start on: {high_priority[0].split('(')[0].strip()}"
+    elif goals:
+        next_move = f"Create an actionable task linked to: {goals[0].split('(')[0].strip()}"
+    else:
+        next_move = "Review your goals and define today's single most important action."
+    parts.append("\nRecommended Next Move:")
+    parts.append(f"  • {next_move}")
+
+    return "\n".join(parts)
 
 
 # ── Canned responses keyed by intent ─────────────────────────────────────────
@@ -558,6 +664,35 @@ class MockAIProvider(AIProvider):
         history: list[dict] | None = None,
     ) -> ChatResponse:
         intent = _detect_intent(message)
+
+        # Agenda queries get a context-aware structured response even in mock mode.
+        if intent == "agenda" or context_type == "agenda":
+            return ChatResponse(
+                reply=_build_agenda_reply(user_context),
+                suggested_actions=[
+                    "Open Tasks tab and start your highest-priority item",
+                    "Review Goals tab for active objectives",
+                    "Check Analytics tab for this week's performance",
+                ],
+                follow_up_questions=[
+                    "What tasks are overdue right now?",
+                    "Which goal should I focus on this week?",
+                    "Help me plan the next 7 days.",
+                ],
+                recommended_actions=[
+                    RecommendedAction(
+                        id=str(uuid.uuid4()),
+                        type="prioritize_tasks",
+                        title="Review Open Task Stack",
+                        description="Surface and reprioritize all open tasks for today's execution.",
+                        confidence=0.82,
+                        payload_preview={"filter": "open", "sort_by": "priority_desc"},
+                    ),
+                ],
+                provider="mock",
+                generated_at=datetime.now(timezone.utc).isoformat(),
+            )
+
         data = _RESPONSES[intent]
         reply = data["reply"]
 

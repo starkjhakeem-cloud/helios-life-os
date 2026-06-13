@@ -202,17 +202,31 @@ def send_message(
         raw = payload.message.strip()
         conv.title = raw[:97] + "..." if len(raw) > 97 else raw
 
-    # Build user context if requested
+    # Agenda/schedule/priority questions always need live context even when the
+    # user hasn't toggled context mode — auto-detect them here.
+    _AGENDA_TRIGGERS = frozenset({
+        "agenda", "schedule", "today", "priority", "priorities",
+        "overdue", "do i have", "what do i have", "what's on",
+        "what is on", "what should i", "my tasks", "my goals",
+        "focus on", "what to do", "what can i", "this week",
+    })
+    _msg_lower = payload.message.lower()
+    _is_agenda = any(t in _msg_lower for t in _AGENDA_TRIGGERS)
+
+    # Build user context when include_context is set OR agenda intent detected.
     user_context: str | None = None
-    if payload.include_context:
+    if payload.include_context or _is_agenda:
         user_context = build_user_context(user_id=current_user.id, db=db)
+
+    # Signal agenda intent to the provider so it knows to format a structured reply.
+    effective_context_type = payload.context_type or ("agenda" if _is_agenda else None)
 
     # Generate AI reply, passing conversation history for multi-turn coherence
     try:
         ai_resp = get_ai_provider().generate_chat_reply(
             message=payload.message,
             user_name=current_user.name,
-            context_type=payload.context_type,
+            context_type=effective_context_type,
             user_context=user_context,
             history=history,
         )
