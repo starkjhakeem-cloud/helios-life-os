@@ -350,19 +350,35 @@ export default function AssistantScreen() {
     }
   }, [historyVisible]);
 
-  const handleSend = useCallback(async () => {
-    const text = input.trim();
-    if (!text || !accessToken || isSending || !currentConversationId) return;
+  // Central send function used by both the input bar and the follow-up chips.
+  // Auto-initialises the conversation if it doesn't exist yet so chips work
+  // even before the backend round-trip on mount completes.
+  const sendText = useCallback(async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || !accessToken || isSending || isInitializing) return;
     setInput("");
+
+    // If there's no conversation yet, create one before sending.
+    if (!currentConversationId) {
+      await initializeConversation(accessToken);
+      // getState() reads the latest Zustand state after the async call.
+      if (!useConversationStore.getState().currentConversationId) return;
+    }
+
     await sendMessage(accessToken, {
-      message: text,
+      message: trimmed,
       include_context: contextMode,
     });
-  }, [input, accessToken, isSending, currentConversationId, contextMode, sendMessage]);
+  }, [accessToken, isSending, isInitializing, currentConversationId, contextMode, initializeConversation, sendMessage]);
 
+  const handleSend = useCallback(() => {
+    sendText(input);
+  }, [input, sendText]);
+
+  // Chip tap: send the question immediately, no extra tap needed.
   const handleFollowUp = useCallback((question: string) => {
-    setInput(question);
-  }, []);
+    sendText(question);
+  }, [sendText]);
 
   const handleReview = useCallback((action: RecommendedAction) => {
     setReviewingAction(action);
@@ -407,7 +423,7 @@ export default function AssistantScreen() {
 
   const keyExtractor = useCallback((item: ChatMessage) => item.id, []);
 
-  const isInputDisabled = isSending || isInitializing || !!initError || !currentConversationId;
+  const isInputDisabled = isSending || isInitializing;
 
   return (
     <KeyboardAvoidingView
@@ -467,37 +483,35 @@ export default function AssistantScreen() {
         </View>
       )}
 
-      {/* Initializing state */}
+      {/* Inline init banner — compact, doesn't hide the chat */}
       {isInitializing && (
-        <View style={styles.centeredState}>
-          <ActivityIndicator color={colors.accentCyan} />
-          <Text style={styles.centeredStateText}>CONNECTING...</Text>
+        <View style={styles.initBanner}>
+          <ActivityIndicator size="small" color={colors.accentCyan} />
+          <Text style={styles.initBannerText}>CONNECTING…</Text>
         </View>
       )}
 
-      {/* Init error state */}
+      {/* Inline init error banner with retry — chat still usable beneath it */}
       {!isInitializing && initError && (
-        <View style={styles.centeredState}>
-          <Text style={styles.centeredErrorText}>{initError}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={handleRetryInit} activeOpacity={0.8}>
-            <Text style={styles.retryButtonText}>RETRY</Text>
+        <View style={styles.initErrorBanner}>
+          <Text style={styles.initErrorText} numberOfLines={2}>{initError}</Text>
+          <TouchableOpacity onPress={handleRetryInit} activeOpacity={0.8}>
+            <Text style={styles.initErrorRetry}>RETRY</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Message list */}
-      {!isInitializing && !initError && (
-        <FlatList
-          ref={listRef}
-          data={displayMessages}
-          keyExtractor={keyExtractor}
-          renderItem={renderItem}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          ListFooterComponent={isSending ? <TypingIndicator /> : null}
-        />
-      )}
+      {/* Message list — always visible so the user can read history and type */}
+      <FlatList
+        ref={listRef}
+        data={displayMessages}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        ListFooterComponent={isSending ? <TypingIndicator /> : null}
+      />
 
       {/* Send error banner */}
       {sendError ? (
@@ -512,7 +526,7 @@ export default function AssistantScreen() {
           style={styles.textInput}
           value={input}
           onChangeText={setInput}
-          placeholder="Ask HELIOS anything..."
+          placeholder="Message HELIOS…"
           placeholderTextColor={colors.textMuted}
           multiline
           maxLength={2000}
@@ -659,40 +673,48 @@ function createStyles(colors: ThemeColors) {
     flex: 1,
   },
 
-  // Centered states (initializing / error)
-  centeredState: {
-    flex: 1,
+  // Inline init/error banners — compact strips that don't hide the chat
+  initBanner: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.md,
-    paddingHorizontal: spacing.xl,
-  },
-
-  centeredStateText: {
-    ...typography.label,
-    color: colors.textMuted,
-    fontSize: 11,
-  },
-
-  centeredErrorText: {
-    ...typography.body,
-    color: "#ef4444",
-    textAlign: "center",
-    lineHeight: 22,
-  },
-
-  retryButton: {
+    gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.accentCyan,
+    backgroundColor: "rgba(34,211,238,0.05)",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(34,211,238,0.15)",
   },
 
-  retryButtonText: {
+  initBannerText: {
     ...typography.label,
     color: colors.accentCyan,
-    fontSize: 11,
+    fontSize: 10,
+    opacity: 0.8,
+  },
+
+  initErrorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    backgroundColor: "rgba(239,68,68,0.08)",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(239,68,68,0.25)",
+  },
+
+  initErrorText: {
+    ...typography.caption,
+    color: "#ef4444",
+    flex: 1,
+  },
+
+  initErrorRetry: {
+    ...typography.label,
+    color: colors.accentCyan,
+    fontSize: 10,
+    flexShrink: 0,
   },
 
   listContent: {
