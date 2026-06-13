@@ -12,15 +12,15 @@ export type ThemeColors = {
 };
 
 export const darkColors: ThemeColors = {
-  background:    "#050816",
-  surface:       "#10172a",
-  surfaceDark:   "#0b1020",
+  background:    "#020617",
+  surface:       "#07111f",
+  surfaceDark:   "#050a18",
   border:        "#263452",
   borderDark:    "#1e2a44",
   textPrimary:   "#ffffff",
-  textSecondary: "#aab4cf",
-  textMuted:     "#8f9bb3",
-  accent:        "#7c3aed",
+  textSecondary: "#c7d2fe",
+  textMuted:     "#8490ab",
+  accent:        "#a855f7",
   accentCyan:    "#22d3ee",
 };
 
@@ -57,8 +57,8 @@ export const radius = {
 };
 
 export const typography = {
-  displayLarge: { fontSize: 40, fontWeight: "900" as const, letterSpacing: -1 },
-  displaySmall: { fontSize: 28, fontWeight: "800" as const, letterSpacing: -0.5 },
+  displayLarge: { fontSize: 40, fontWeight: "900" as const, letterSpacing: 0 },
+  displaySmall: { fontSize: 28, fontWeight: "800" as const, letterSpacing: 0 },
   title:        { fontSize: 20, fontWeight: "700" as const },
   body:         { fontSize: 15, fontWeight: "400" as const, lineHeight: 22 },
   caption:      { fontSize: 13, fontWeight: "400" as const },

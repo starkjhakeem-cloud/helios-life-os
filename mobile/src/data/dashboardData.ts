@@ -13,10 +13,10 @@ export type DashboardSection = {
 };
 
 export const dashboardMetrics: DashboardMetric[] = [
-  { value: "82",     label: "Productivity", icon: "chart.line.uptrend.xyaxis" },
-  { value: "5h 32m", label: "Focus Time",   icon: "timer" },
-  { value: "12",     label: "Tasks Done",   icon: "checkmark.circle.fill" },
-  { value: "68%",    label: "Energy",       icon: "bolt.fill" },
+  { value: "3",   label: "Active Goals",    icon: "target" },
+  { value: "12",  label: "Tasks Done",      icon: "checkmark.circle.fill" },
+  { value: "68%", label: "Completion Rate", icon: "chart.line.uptrend.xyaxis" },
+  { value: "7",   label: "Open Tasks",      icon: "list.bullet.clipboard" },
 ];
 
 export const dashboardSections: DashboardSection[] = [
