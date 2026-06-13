@@ -34,17 +34,27 @@ class OpenAIProvider(AIProvider):
             ) from exc
         self._model = model
 
-    def _call(self, system: str, user: str, max_tokens: int = 1500) -> dict:
-        """Send a chat completion request and return the parsed JSON response dict."""
+    def _call(
+        self,
+        system: str,
+        user: str,
+        max_tokens: int = 1500,
+        history: list[dict] | None = None,
+    ) -> dict:
+        """
+        Send a chat completion request and return the parsed JSON response dict.
+        history entries are {"role": "user"|"assistant", "content": "..."}.
+        """
         import openai
+
+        messages: list[dict] = [{"role": "system", "content": system}]
+        messages.extend(history or [])
+        messages.append({"role": "user", "content": user})
 
         try:
             response = self._client.chat.completions.create(
                 model=self._model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
+                messages=messages,
                 response_format={"type": "json_object"},
                 temperature=0.7,
                 max_tokens=max_tokens,
@@ -131,6 +141,7 @@ class OpenAIProvider(AIProvider):
         user_name: str,
         context_type: str | None,
         user_context: str | None = None,
+        history: list[dict] | None = None,
     ) -> ChatResponse:
         system = build_chat_system(user_context=user_context)
         user_msg = build_chat_user_message(
@@ -139,7 +150,7 @@ class OpenAIProvider(AIProvider):
             context_type=context_type,
         )
         try:
-            data = self._call(system=system, user=user_msg)
+            data = self._call(system=system, user=user_msg, history=history)
             # Parse recommended_actions gracefully — malformed entries are dropped rather
             # than failing the whole response, since the reply is still valid.
             recommended_actions: list[RecommendedAction] = []

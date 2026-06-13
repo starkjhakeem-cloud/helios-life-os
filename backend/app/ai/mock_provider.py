@@ -555,18 +555,19 @@ class MockAIProvider(AIProvider):
         user_name: str,
         context_type: str | None,
         user_context: str | None = None,
+        history: list[dict] | None = None,
     ) -> ChatResponse:
         intent = _detect_intent(message)
         data = _RESPONSES[intent]
         reply = data["reply"]
 
         if user_context and "No active goals" not in user_context:
-            # Mock cannot reason over the context data, but it acknowledges
-            # that context mode is active. The OpenAI provider fully utilises it.
+            # Mock cannot reason over context data — it just acknowledges it.
+            # The Anthropic provider fully utilises context and conversation history.
             reply = (
                 reply
                 + "\n\n[Context mode active — your live goals and tasks were included. "
-                "Enable the OpenAI provider for data-driven, personalised responses.]"
+                "Add your ANTHROPIC_API_KEY to backend/.env for AI-driven, personalised responses.]"
             )
 
         # Assign fresh UUIDs so dismissal on the frontend is per-message, not global.

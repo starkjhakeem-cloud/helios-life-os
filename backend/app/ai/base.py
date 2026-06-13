@@ -26,6 +26,7 @@ class AIProvider(ABC):
         user_name: str,
         context_type: str | None,
         user_context: str | None = None,
+        history: list[dict] | None = None,
     ) -> ChatResponse: ...
 
     @abstractmethod

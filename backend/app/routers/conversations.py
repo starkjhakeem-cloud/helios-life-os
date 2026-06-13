@@ -169,12 +169,22 @@ def send_message(
 
     now = datetime.now(timezone.utc)
 
-    # Auto-title from first user message
-    existing_count = db.execute(
-        select(func.count(ConversationMessage.id)).where(
-            ConversationMessage.conversation_id == conversation_id
-        )
-    ).scalar() or 0
+    # Fetch existing messages BEFORE adding the new one so they form the history
+    # context Claude will receive. Cap at the 20 most recent messages (10 turns)
+    # to stay well within token limits.
+    prior_msgs = db.execute(
+        select(ConversationMessage)
+        .where(ConversationMessage.conversation_id == conversation_id)
+        .order_by(ConversationMessage.created_at.asc())
+    ).scalars().all()
+
+    history: list[dict] = [
+        {"role": m.role, "content": m.content}
+        for m in prior_msgs[-20:]
+    ]
+
+    # Auto-title from first user message (before we add it, so count == 0 means first)
+    existing_count = len(prior_msgs)
 
     # Persist user message
     user_msg = ConversationMessage(
@@ -197,13 +207,14 @@ def send_message(
     if payload.include_context:
         user_context = build_user_context(user_id=current_user.id, db=db)
 
-    # Generate AI reply
+    # Generate AI reply, passing conversation history for multi-turn coherence
     try:
         ai_resp = get_ai_provider().generate_chat_reply(
             message=payload.message,
             user_name=current_user.name,
             context_type=payload.context_type,
             user_context=user_context,
+            history=history,
         )
     except RuntimeError as exc:
         db.rollback()

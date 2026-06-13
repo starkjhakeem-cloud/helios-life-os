@@ -35,17 +35,31 @@ class AnthropicProvider(AIProvider):
             ) from exc
         self._model = model
 
-    def _call(self, system: str, user: str, max_tokens: int = 1500) -> dict:
-        """Send a message to Claude and return the parsed JSON response dict."""
+    def _call(
+        self,
+        system: str,
+        user: str,
+        max_tokens: int = 1500,
+        history: list[dict] | None = None,
+    ) -> dict:
+        """
+        Send a message to Claude and return the parsed JSON response dict.
+
+        If history is provided it is prepended as prior turns so Claude has
+        full conversational context. Each entry must be {"role": ..., "content": ...}.
+        The current user message is always appended as the final turn.
+        """
         import anthropic as anthropic_sdk
+
+        messages: list[dict] = list(history or [])
+        messages.append({"role": "user", "content": user})
 
         try:
             response = self._client.messages.create(
                 model=self._model,
                 max_tokens=max_tokens,
                 system=system,
-                messages=[{"role": "user", "content": user}],
-                temperature=0.7,
+                messages=messages,
             )
             content = response.content[0].text if response.content else ""
             # Strip any accidental markdown fences Claude might include
@@ -136,6 +150,7 @@ class AnthropicProvider(AIProvider):
         user_name: str,
         context_type: str | None,
         user_context: str | None = None,
+        history: list[dict] | None = None,
     ) -> ChatResponse:
         system = build_chat_system(user_context=user_context)
         user_msg = build_chat_user_message(
@@ -144,7 +159,7 @@ class AnthropicProvider(AIProvider):
             context_type=context_type,
         )
         try:
-            data = self._call(system=system, user=user_msg, max_tokens=1200)
+            data = self._call(system=system, user=user_msg, max_tokens=1200, history=history)
             recommended_actions: list[RecommendedAction] = []
             raw_actions = data.get("recommended_actions")
             if isinstance(raw_actions, list):

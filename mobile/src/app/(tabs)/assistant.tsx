@@ -336,11 +336,11 @@ export default function AssistantScreen() {
     }
   }, [accessToken]);
 
-  // Scroll to bottom when messages change or typing indicator appears
+  // Scroll to bottom when messages change or typing indicator appears.
+  // We check currentMessages.length (not displayMessages) since displayMessages
+  // is derived below and always has at least the welcome message.
   useEffect(() => {
-    if (displayMessages.length > 0) {
-      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
-    }
+    setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
   }, [currentMessages.length, isSending]);
 
   // Refresh conversation list when history modal opens
