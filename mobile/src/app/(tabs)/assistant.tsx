@@ -532,7 +532,7 @@ export default function AssistantScreen() {
           style={styles.textInput}
           value={input}
           onChangeText={setInput}
-          placeholder="Message HELIOS…"
+          placeholder="Ask anything"
           placeholderTextColor={colors.textMuted}
           multiline
           maxLength={2000}
