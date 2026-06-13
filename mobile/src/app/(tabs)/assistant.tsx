@@ -15,11 +15,9 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import ActionReviewModal from "../../components/ActionReviewModal";
 import {
   type ChatMessage,
   type ConversationSummary,
-  type RecommendedAction,
   useAuthStore,
   useConversationStore,
 } from "../../store";
@@ -39,11 +37,7 @@ const WELCOME: ChatMessage = {
     "I can assist with goal strategy, task prioritization, execution planning, and performance analytics. " +
     "What would you like to work on?",
   suggested_actions: [],
-  follow_up_questions: [
-    "What should I focus on today?",
-    "Help me plan my next goal.",
-    "How is my progress this week?",
-  ],
+  follow_up_questions: [],
   recommended_actions: [],
   timestamp: new Date().toISOString(),
 };
@@ -52,22 +46,12 @@ const WELCOME: ChatMessage = {
 
 type BubbleProps = {
   message: ChatMessage;
-  onFollowUp: (q: string) => void;
-  onReview: (action: RecommendedAction) => void;
-  acknowledgedIds: Set<string>;
 };
 
-function MessageBubble({ message, onFollowUp, onReview, acknowledgedIds }: BubbleProps) {
+function MessageBubble({ message }: BubbleProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const isUser = message.role === "user";
-  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
-
-  const visibleActions = message.recommended_actions.filter((a) => !dismissedIds.has(a.id));
-
-  const handleDismiss = (id: string) => {
-    setDismissedIds((prev) => new Set(prev).add(id));
-  };
 
   return (
     <View style={[styles.bubbleRow, isUser ? styles.bubbleRowUser : styles.bubbleRowAssistant]}>
@@ -81,91 +65,6 @@ function MessageBubble({ message, onFollowUp, onReview, acknowledgedIds }: Bubbl
         <Text style={[styles.bubbleText, isUser ? styles.bubbleTextUser : styles.bubbleTextAssistant]}>
           {message.content}
         </Text>
-
-        {/* Follow-up question chips */}
-        {message.follow_up_questions.length > 0 && (
-          <View style={styles.chipsSection}>
-            <Text style={styles.chipsLabel}>ASK</Text>
-            <View style={styles.chips}>
-              {message.follow_up_questions.map((q) => (
-                <TouchableOpacity
-                  key={q}
-                  style={styles.followUpChip}
-                  onPress={() => onFollowUp(q)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.followUpChipText}>{q}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* Suggested action chips */}
-        {message.suggested_actions.length > 0 && (
-          <View style={styles.chipsSection}>
-            <Text style={styles.chipsLabel}>SUGGESTED</Text>
-            <View style={styles.chips}>
-              {message.suggested_actions.map((a) => (
-                <View key={a} style={styles.actionChip}>
-                  <Text style={styles.actionChipText}>{a}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* Recommended actions */}
-        {visibleActions.length > 0 && (
-          <View style={styles.recActionsSection}>
-            <Text style={styles.chipsLabel}>RECOMMENDED ACTIONS</Text>
-            {visibleActions.map((action) => {
-              const isAcknowledged = acknowledgedIds.has(action.id);
-              return (
-                <View
-                  key={action.id}
-                  style={[styles.recAction, isAcknowledged && styles.recActionAcknowledged]}
-                >
-                  <View style={styles.recActionHeader}>
-                    <Text style={styles.recActionTitle} numberOfLines={1}>{action.title}</Text>
-                    <View style={styles.confidenceBadge}>
-                      <Text style={styles.confidenceText}>{Math.round(action.confidence * 100)}%</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.recActionDesc}>{action.description}</Text>
-
-                  {isAcknowledged ? (
-                    <View style={styles.acknowledgedRow}>
-                      <Text style={styles.acknowledgedText}>✓ ACKNOWLEDGED</Text>
-                    </View>
-                  ) : (
-                    <View style={styles.recActionButtons}>
-                      <TouchableOpacity
-                        style={styles.reviewButton}
-                        onPress={() => onReview(action)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.reviewButtonText}>REVIEW</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.notNowButton}
-                        onPress={() => handleDismiss(action.id)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.notNowButtonText}>NOT NOW</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
-              );
-            })}
-          </View>
-        )}
-
-        {/* Provider badge — only shown on real OpenAI responses */}
-        {message.provider && message.provider !== "mock" && (
-          <Text style={styles.providerBadge}>via {message.provider}</Text>
-        )}
       </View>
     </View>
   );
@@ -329,8 +228,6 @@ export default function AssistantScreen() {
 
   const [input, setInput] = useState("");
   const [contextMode, setContextMode] = useState(false);
-  const [reviewingAction, setReviewingAction] = useState<RecommendedAction | null>(null);
-  const [acknowledgedIds, setAcknowledgedIds] = useState<Set<string>>(new Set());
   const [historyVisible, setHistoryVisible] = useState(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
 
@@ -380,24 +277,6 @@ export default function AssistantScreen() {
     sendText(input);
   }, [input, sendText]);
 
-  // Chip tap: send the question immediately, no extra tap needed.
-  const handleFollowUp = useCallback((question: string) => {
-    sendText(question);
-  }, [sendText]);
-
-  const handleReview = useCallback((action: RecommendedAction) => {
-    setReviewingAction(action);
-  }, []);
-
-  const handleAcknowledge = useCallback((id: string) => {
-    setAcknowledgedIds((prev) => new Set(prev).add(id));
-    setReviewingAction(null);
-  }, []);
-
-  const handleCancelReview = useCallback(() => {
-    setReviewingAction(null);
-  }, []);
-
   const handleNewConversation = useCallback(() => {
     if (accessToken) createNewConversation(accessToken);
   }, [accessToken, createNewConversation]);
@@ -416,14 +295,9 @@ export default function AssistantScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: ChatMessage }) => (
-      <MessageBubble
-        message={item}
-        onFollowUp={handleFollowUp}
-        onReview={handleReview}
-        acknowledgedIds={acknowledgedIds}
-      />
+      <MessageBubble message={item} />
     ),
-    [handleFollowUp, handleReview, acknowledgedIds],
+    [],
   );
 
   const keyExtractor = useCallback((item: ChatMessage) => item.id, []);
@@ -550,13 +424,6 @@ export default function AssistantScreen() {
           <Text style={styles.sendIcon}>↑</Text>
         </TouchableOpacity>
       </View>
-
-      {/* Action review modal — rendered at screen level so it overlays everything */}
-      <ActionReviewModal
-        action={reviewingAction}
-        onConfirm={handleAcknowledge}
-        onCancel={handleCancelReview}
-      />
 
       {/* Conversation history modal */}
       <HistoryModal
@@ -796,58 +663,6 @@ function createStyles(colors: ThemeColors) {
     color: colors.textPrimary,
   },
 
-  // Chips
-  chipsSection: {
-    marginTop: spacing.sm,
-  },
-
-  chipsLabel: {
-    ...typography.label,
-    color: colors.textMuted,
-    fontSize: 9,
-    marginBottom: spacing.xs,
-  },
-
-  chips: {
-    gap: spacing.xs,
-  },
-
-  followUpChip: {
-    backgroundColor: "rgba(124,58,237,0.15)",
-    borderWidth: 1,
-    borderColor: "rgba(124,58,237,0.4)",
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-
-  followUpChipText: {
-    ...typography.caption,
-    color: "#a78bfa",
-  },
-
-  actionChip: {
-    backgroundColor: colors.surfaceDark,
-    borderWidth: 1,
-    borderColor: colors.borderDark,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-
-  actionChipText: {
-    ...typography.caption,
-    color: colors.textMuted,
-  },
-
-  providerBadge: {
-    ...typography.caption,
-    color: colors.accentCyan,
-    fontSize: 10,
-    marginTop: spacing.xs,
-    opacity: 0.7,
-  },
-
   // Typing
   typingBubble: {
     flexDirection: "row",
@@ -926,104 +741,6 @@ function createStyles(colors: ThemeColors) {
     fontSize: 18,
     fontWeight: "700" as const,
     color: colors.background,
-  },
-
-  // Recommended actions
-  recActionsSection: {
-    marginTop: spacing.sm,
-    gap: spacing.xs,
-  },
-
-  recAction: {
-    backgroundColor: colors.surfaceDark,
-    borderWidth: 1,
-    borderColor: colors.borderDark,
-    borderRadius: radius.sm,
-    padding: spacing.sm,
-    gap: spacing.xs,
-  },
-
-  recActionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.sm,
-  },
-
-  recActionTitle: {
-    ...typography.body,
-    fontWeight: "600" as const,
-    color: colors.textPrimary,
-    flex: 1,
-    fontSize: 13,
-  },
-
-  confidenceBadge: {
-    backgroundColor: "rgba(34,211,238,0.15)",
-    borderRadius: radius.sm,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    flexShrink: 0,
-  },
-
-  confidenceText: {
-    ...typography.label,
-    color: colors.accentCyan,
-    fontSize: 10,
-  },
-
-  recActionDesc: {
-    ...typography.caption,
-    color: colors.textMuted,
-    lineHeight: 17,
-  },
-
-  recActionButtons: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    marginTop: 2,
-  },
-
-  reviewButton: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.sm,
-    backgroundColor: colors.accentCyan,
-  },
-
-  reviewButtonText: {
-    ...typography.label,
-    color: colors.background,
-    fontSize: 10,
-    fontWeight: "700" as const,
-  },
-
-  notNowButton: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-
-  notNowButtonText: {
-    ...typography.label,
-    color: colors.textMuted,
-    fontSize: 10,
-  },
-
-  recActionAcknowledged: {
-    opacity: 0.55,
-  },
-
-  acknowledgedRow: {
-    marginTop: 2,
-  },
-
-  acknowledgedText: {
-    ...typography.label,
-    color: colors.accentCyan,
-    fontSize: 10,
   },
 
   // ── Modal overlay & card ──────────────────────────────────────────────────
