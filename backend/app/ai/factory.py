@@ -18,6 +18,14 @@ def get_ai_provider() -> AIProvider:
         from app.ai.openai_provider import OpenAIProvider
         return OpenAIProvider(api_key=settings.openai_api_key, model=settings.openai_model)
 
+    if provider == "anthropic":
+        if not settings.anthropic_api_key:
+            raise RuntimeError(
+                "AI_PROVIDER=anthropic requires ANTHROPIC_API_KEY to be set in the environment."
+            )
+        from app.ai.anthropic_provider import AnthropicProvider
+        return AnthropicProvider(api_key=settings.anthropic_api_key, model=settings.anthropic_model)
+
     raise RuntimeError(
-        f"Unknown AI_PROVIDER '{settings.ai_provider}'. Supported values: mock, openai"
+        f"Unknown AI_PROVIDER '{settings.ai_provider}'. Supported values: mock, openai, anthropic"
     )

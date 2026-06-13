@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SymbolView } from "expo-symbols";
 
-import { colors, spacing, radius, typography } from "../../theme/theme";
+import { spacing, radius, typography , type ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 import { useAuthStore, useNotificationsStore } from "../../store";
 import type { InboxNotification } from "../../store";
 
@@ -29,8 +30,8 @@ const EVENT_LABELS: Record<string, string> = {
 
 const EVENT_COLORS: Record<string, string> = {
   new_suggestion:      "#6366f1",
-  queue_item_created:  colors.accentCyan,
-  approval_required:   colors.accent,
+  queue_item_created:  "#22d3ee",
+  approval_required:   "#a855f7",
   execution_blocked:   "#f59e0b",
   execution_completed: "#22c55e",
   execution_failed:    "#ef4444",
@@ -70,8 +71,11 @@ type NotificationCardProps = {
   onDelete: (id: string) => void;
 };
 
-function NotificationCard({ item, isMutating, onMarkRead, onDelete }: NotificationCardProps) {
-  const color = EVENT_COLORS[item.event_type] ?? colors.textMuted;
+function NotificationCard({
+item, isMutating, onMarkRead, onDelete }: NotificationCardProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const color = EVENT_COLORS[item.event_type] ?? "#8490ab";
   const label = EVENT_LABELS[item.event_type] ?? item.event_type.replace(/_/g, " ").toUpperCase();
   const icon = (EVENT_ICONS[item.event_type] ?? "bell") as Parameters<typeof SymbolView>[0]["name"];
 
@@ -139,6 +143,8 @@ function NotificationCard({ item, isMutating, onMarkRead, onDelete }: Notificati
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function NotificationsScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const accessToken = useAuthStore((s) => s.accessToken);
   const {
@@ -190,7 +196,7 @@ export default function NotificationsScreen() {
       contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
       showsVerticalScrollIndicator={false}
       refreshControl={
-        <RefreshControl refreshing={isLoading} onRefresh={load} tintColor={colors.accent} />
+        <RefreshControl refreshing={isLoading} onRefresh={load} tintColor={"#a855f7"} />
       }
     >
       {/* Hero */}
@@ -220,7 +226,7 @@ export default function NotificationsScreen() {
 
       {/* Loading */}
       {isLoading && notifications.length === 0 ? (
-        <ActivityIndicator color={colors.accent} style={{ marginTop: spacing.xl }} />
+        <ActivityIndicator color={"#a855f7"} style={{ marginTop: spacing.xl }} />
       ) : null}
 
       {/* Mark all read */}
@@ -272,7 +278,7 @@ export default function NotificationsScreen() {
       {/* Empty state */}
       {!isLoading && notifications.length === 0 ? (
         <View style={styles.emptyState}>
-          <SymbolView name="bell.slash" size={48} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+          <SymbolView name="bell.slash" size={48} tintColor={"#8490ab"} resizeMode="scaleAspectFit" />
           <Text style={styles.emptyText}>No notifications yet.</Text>
           <Text style={styles.emptySubtext}>
             Notifications will appear here when HELIOS generates suggestions, processes queue items, or executes actions.
@@ -287,7 +293,8 @@ export default function NotificationsScreen() {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { paddingHorizontal: spacing.md },
 
@@ -476,3 +483,4 @@ const styles = StyleSheet.create({
   },
   btnDisabled: { opacity: 0.5 },
 });
+}

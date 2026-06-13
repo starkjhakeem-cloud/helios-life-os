@@ -1,22 +1,24 @@
+import { useMemo } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { SymbolView } from "expo-symbols";
 import * as Haptics from "expo-haptics";
 
-import { colors, spacing, radius, typography } from "../theme/theme";
+import { spacing, radius, typography , type ThemeColors } from "../theme/theme";
+import { useTheme } from "../theme/ThemeContext";
 import type { Task } from "../services/tasksService";
 
 const PRIORITY_COLOR: Record<string, string> = {
   critical: "#ef4444",
   high:     "#f97316",
   medium:   "#f59e0b",
-  low:      colors.textMuted,
+  low:      "#8490ab",
 };
 
 const PRIORITY_BG: Record<string, string> = {
   critical: "rgba(239,68,68,0.12)",
   high:     "rgba(249,115,22,0.12)",
   medium:   "rgba(245,158,11,0.12)",
-  low:      colors.surfaceDark,
+  low:      "#050a18",
 };
 
 const STATUS_ICON: Record<string, Parameters<typeof SymbolView>[0]["name"]> = {
@@ -26,8 +28,8 @@ const STATUS_ICON: Record<string, Parameters<typeof SymbolView>[0]["name"]> = {
 };
 
 const STATUS_COLOR: Record<string, string> = {
-  todo:        colors.textMuted,
-  in_progress: colors.accentCyan,
+  todo:        "#8490ab",
+  in_progress: "#22d3ee",
   done:        "#22c55e",
 };
 
@@ -44,9 +46,11 @@ type Props = {
 };
 
 export default function TaskCard({ task, onStatusChange, onDelete }: Props) {
-  const priorityColor = PRIORITY_COLOR[task.priority] ?? colors.textMuted;
-  const priorityBg    = PRIORITY_BG[task.priority]    ?? colors.surfaceDark;
-  const statusColor   = STATUS_COLOR[task.status]     ?? colors.textMuted;
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const priorityColor = PRIORITY_COLOR[task.priority] ?? "#8490ab";
+  const priorityBg    = PRIORITY_BG[task.priority]    ?? "#050a18";
+  const statusColor   = STATUS_COLOR[task.status]     ?? "#8490ab";
   const nextStatus    = STATUS_NEXT[task.status]      ?? "todo";
 
   function handleStatusChange() {
@@ -106,7 +110,7 @@ export default function TaskCard({ task, onStatusChange, onDelete }: Props) {
             <SymbolView
               name="trash"
               size={16}
-              tintColor={colors.textMuted}
+              tintColor={"#8490ab"}
               resizeMode="scaleAspectFit"
             />
           </TouchableOpacity>
@@ -122,14 +126,14 @@ export default function TaskCard({ task, onStatusChange, onDelete }: Props) {
           <View style={styles.metaRow}>
             {task.due_date ? (
               <View style={styles.metaItem}>
-                <SymbolView name="calendar" size={11} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+                <SymbolView name="calendar" size={11} tintColor={"#8490ab"} resizeMode="scaleAspectFit" />
                 <Text style={styles.metaText}>{task.due_date}</Text>
               </View>
             ) : null}
             {task.linked_goal_id ? (
               <View style={styles.metaItem}>
-                <SymbolView name="target" size={11} tintColor={colors.accent} resizeMode="scaleAspectFit" />
-                <Text style={[styles.metaText, { color: colors.accent }]}>Goal linked</Text>
+                <SymbolView name="target" size={11} tintColor={"#a855f7"} resizeMode="scaleAspectFit" />
+                <Text style={[styles.metaText, { color: "#a855f7" }]}>Goal linked</Text>
               </View>
             ) : null}
           </View>
@@ -139,7 +143,8 @@ export default function TaskCard({ task, onStatusChange, onDelete }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -227,3 +232,4 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
 });
+}

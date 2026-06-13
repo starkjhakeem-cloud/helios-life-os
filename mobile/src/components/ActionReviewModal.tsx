@@ -7,7 +7,7 @@
  * Callers only need to provide: the action to review, onConfirm, onCancel.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -21,7 +21,8 @@ import {
 import { ApiError } from "../services/apiClient";
 import { aiService, type RecommendedAction } from "../services/aiService";
 import { useAuthStore, useGoalsStore, useTasksStore } from "../store";
-import { colors, radius, spacing, typography } from "../theme/theme";
+import { radius, spacing, typography , type ThemeColors } from "../theme/theme";
+import { useTheme } from "../theme/ThemeContext";
 
 // ── Exported helpers (used by message bubbles and orchestration card) ─────────
 
@@ -54,6 +55,8 @@ type Props = {
 };
 
 export default function ActionReviewModal({ action, onConfirm, onCancel }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const accessToken = useAuthStore((s) => s.accessToken);
   const fetchGoals   = useGoalsStore((s) => s.fetchGoals);
   const fetchTasks   = useTasksStore((s) => s.fetchTasks);
@@ -133,7 +136,7 @@ export default function ActionReviewModal({ action, onConfirm, onCancel }: Props
               {/* ── Executing ── */}
               {execState === "executing" && (
                 <View style={styles.centeredState}>
-                  <ActivityIndicator size="large" color={colors.accentCyan} />
+                  <ActivityIndicator size="large" color={"#22d3ee"} />
                   <Text style={styles.executingText}>EXECUTING...</Text>
                 </View>
               )}
@@ -265,7 +268,8 @@ export default function ActionReviewModal({ action, onConfirm, onCancel }: Props
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: "rgba(5,8,22,0.85)",
@@ -495,3 +499,4 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 });
+}

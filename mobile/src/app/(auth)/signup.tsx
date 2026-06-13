@@ -1,11 +1,14 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useMemo } from 'react';
 import { View, StyleSheet, TextInput } from "react-native";
 import { Link } from "expo-router";
 import { useAuthStore } from "../../store";
 import { Screen, Text, Button, Input } from "../../components/ui";
-import { colors, spacing } from "../../theme/theme";
+import { spacing , type ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 
 export default function SignupScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -36,9 +39,9 @@ export default function SignupScreen() {
   return (
     <Screen style={styles.screen}>
       <View style={styles.header}>
-        <Text variant="label" color={colors.accentCyan}>HELIOS</Text>
+        <Text variant="label" color={"#22d3ee"}>HELIOS</Text>
         <Text variant="displaySmall" style={styles.centered}>CREATE ACCOUNT</Text>
-        <Text variant="body" color={colors.textMuted} style={styles.centered}>
+        <Text variant="body" color={"#8490ab"} style={styles.centered}>
           Register your operator profile
         </Text>
       </View>
@@ -90,19 +93,21 @@ export default function SignupScreen() {
       </View>
 
       <View style={styles.footer}>
-        <Text variant="body" color={colors.textMuted}>Already registered?  </Text>
+        <Text variant="body" color={"#8490ab"}>Already registered?  </Text>
         <Link href="/(auth)/login">
-          <Text variant="body" color={colors.accentCyan}>Sign in</Text>
+          <Text variant="body" color={"#22d3ee"}>Sign in</Text>
         </Link>
       </View>
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   screen: { justifyContent: "center", paddingBottom: spacing.xl },
   header: { alignItems: "center", marginBottom: spacing.xl, gap: spacing.sm },
   centered: { textAlign: "center" },
   form: { gap: spacing.md },
   footer: { flexDirection: "row", justifyContent: "center", marginTop: spacing.xl },
 });
+}

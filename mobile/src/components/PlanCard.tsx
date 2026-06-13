@@ -1,7 +1,9 @@
+import { useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { SymbolView } from "expo-symbols";
 
-import { colors, spacing, radius, typography } from "../theme/theme";
+import { spacing, radius, typography , type ThemeColors } from "../theme/theme";
+import { useTheme } from "../theme/ThemeContext";
 import type { PlanResponse } from "../services/aiService";
 
 type Props = PlanResponse;
@@ -15,6 +17,8 @@ export default function PlanCard({
   recommendation,
   generated_at,
 }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const time = new Date(generated_at).toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
@@ -29,7 +33,7 @@ export default function PlanCard({
         <SymbolView
           name="sparkles"
           size={15}
-          tintColor={colors.accentCyan}
+          tintColor={"#22d3ee"}
           resizeMode="scaleAspectFit"
         />
         <Text style={styles.headerLabel}>HELIOS PLAN</Text>
@@ -43,7 +47,7 @@ export default function PlanCard({
         <SymbolView
           name="list.number"
           size={13}
-          tintColor={colors.textMuted}
+          tintColor={"#8490ab"}
           resizeMode="scaleAspectFit"
         />
         <Text style={styles.sectionLabel}>EXECUTION STEPS</Text>
@@ -90,7 +94,7 @@ export default function PlanCard({
           <SymbolView
             name="lightbulb.fill"
             size={12}
-            tintColor={colors.accentCyan}
+            tintColor={"#22d3ee"}
             resizeMode="scaleAspectFit"
           />
           <Text style={styles.recommendLabel}>RECOMMENDATION</Text>
@@ -106,7 +110,8 @@ export default function PlanCard({
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -278,3 +283,4 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xs,
   },
 });
+}

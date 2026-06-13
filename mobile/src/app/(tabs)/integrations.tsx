@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,8 @@ import { SymbolView } from "expo-symbols";
 import type { SFSymbol } from "sf-symbols-typescript";
 
 import { useAuthStore, useIntegrationStore } from "../../store";
-import { colors, spacing, radius, typography } from "../../theme/theme";
+import { spacing, radius, typography , type ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 import { integrationService } from "../../services/integrationService";
 import type {
   ConnectUrlResponse,
@@ -108,6 +109,8 @@ function IntegrationCard({
   onSync,
   onGoogleConnect,
 }: CardProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const meta = PROVIDER_META[integration.provider as IntegrationProvider];
   if (!meta) return null;
 
@@ -162,13 +165,13 @@ function IntegrationCard({
             <View
               style={[
                 styles.statusDot,
-                { backgroundColor: isConnected ? "#10b981" : colors.textMuted },
+                { backgroundColor: isConnected ? "#10b981" : "#8490ab" },
               ]}
             />
             <Text
               style={[
                 styles.statusText,
-                { color: isConnected ? "#10b981" : colors.textMuted },
+                { color: isConnected ? "#10b981" : "#8490ab" },
               ]}
             >
               {isConnected ? "CONNECTED" : "DISCONNECTED"}
@@ -210,7 +213,7 @@ function IntegrationCard({
             <SymbolView
               name="lock.shield"
               size={11}
-              tintColor={colors.textMuted}
+              tintColor={"#8490ab"}
               resizeMode="scaleAspectFit"
             />
             <Text style={styles.oauthNoteText}>
@@ -302,7 +305,7 @@ function IntegrationCard({
               activeOpacity={0.8}
             >
               {isMutating ? (
-                <ActivityIndicator size="small" color={colors.textMuted} />
+                <ActivityIndicator size="small" color={"#8490ab"} />
               ) : (
                 <Text style={[styles.actionButtonText, styles.disconnectButtonText]}>
                   DISCONNECT
@@ -325,13 +328,13 @@ function IntegrationCard({
               activeOpacity={0.8}
             >
               {isConnecting ? (
-                <ActivityIndicator size="small" color={colors.background} />
+                <ActivityIndicator size="small" color={"#020617"} />
               ) : (
                 <>
                   <SymbolView
                     name="lock.shield"
                     size={11}
-                    tintColor={colors.background}
+                    tintColor={"#020617"}
                     resizeMode="scaleAspectFit"
                   />
                   <Text style={styles.actionButtonText}>CONNECT GOOGLE</Text>
@@ -349,9 +352,9 @@ function IntegrationCard({
               activeOpacity={0.8}
             >
               {isMutating ? (
-                <ActivityIndicator size="small" color={colors.textMuted} />
+                <ActivityIndicator size="small" color={"#8490ab"} />
               ) : (
-                <Text style={[styles.actionButtonText, { color: colors.textMuted }]}>
+                <Text style={[styles.actionButtonText, { color: "#8490ab" }]}>
                   MOCK
                 </Text>
               )}
@@ -371,7 +374,7 @@ function IntegrationCard({
             activeOpacity={0.8}
           >
             {isMutating ? (
-              <ActivityIndicator size="small" color={colors.background} />
+              <ActivityIndicator size="small" color={"#020617"} />
             ) : (
               <Text style={styles.actionButtonText}>MOCK CONNECT</Text>
             )}
@@ -385,6 +388,8 @@ function IntegrationCard({
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function IntegrationsScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const accessToken = useAuthStore((s) => s.accessToken);
 
@@ -494,7 +499,7 @@ export default function IntegrationsScreen() {
 
   return (
     <ScrollView
-      style={{ backgroundColor: colors.background }}
+      style={{ backgroundColor: "#020617" }}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={[
         styles.container,
@@ -504,7 +509,7 @@ export default function IntegrationsScreen() {
         <RefreshControl
           refreshing={isLoading}
           onRefresh={load}
-          tintColor={colors.accentCyan}
+          tintColor={"#22d3ee"}
         />
       }
     >
@@ -524,7 +529,7 @@ export default function IntegrationsScreen() {
         <SymbolView
           name="antenna.radiowaves.left.and.right"
           size={13}
-          tintColor={colors.accentCyan}
+          tintColor={"#22d3ee"}
           resizeMode="scaleAspectFit"
         />
         <Text style={styles.readinessText}>
@@ -536,7 +541,7 @@ export default function IntegrationsScreen() {
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionLabel}>AVAILABLE INTEGRATIONS</Text>
         {isLoading ? (
-          <ActivityIndicator size="small" color={colors.accentCyan} />
+          <ActivityIndicator size="small" color={"#22d3ee"} />
         ) : null}
       </View>
 
@@ -563,7 +568,7 @@ export default function IntegrationsScreen() {
         <SymbolView
           name="info.circle"
           size={12}
-          tintColor={colors.textMuted}
+          tintColor={"#8490ab"}
           resizeMode="scaleAspectFit"
         />
         <Text style={styles.footerText}>
@@ -576,7 +581,8 @@ export default function IntegrationsScreen() {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   container: {
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxl * 2,
@@ -919,3 +925,4 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
 });
+}

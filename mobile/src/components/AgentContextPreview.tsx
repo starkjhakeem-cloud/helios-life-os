@@ -1,7 +1,9 @@
+import { useMemo } from "react";
 import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
 import { SymbolView } from "expo-symbols";
 
-import { colors, spacing, radius, typography } from "../theme/theme";
+import { spacing, radius, typography , type ThemeColors } from "../theme/theme";
+import { useTheme } from "../theme/ThemeContext";
 import type { AgentContextPackage, AgentContextSection } from "../services/agentsService";
 
 // ── Static maps ───────────────────────────────────────────────────────────────
@@ -15,9 +17,9 @@ const CATEGORY_ICON: Record<string, Parameters<typeof SymbolView>[0]["name"]> = 
 };
 
 const CATEGORY_ACCENT: Record<string, string> = {
-  memory:        colors.accent,
+  memory:        "#a855f7",
   goals:         "#f59e0b",
-  tasks:         colors.accentCyan,
+  tasks:         "#22d3ee",
   analytics:     "#10b981",
   conversations: "#818cf8",
 };
@@ -27,25 +29,27 @@ const CATEGORY_ACCENT: Record<string, string> = {
 type SectionRowProps = { section: AgentContextSection };
 
 function SectionRow({ section }: SectionRowProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { category, label, description, is_active, item_count, items } = section;
 
-  const accent = CATEGORY_ACCENT[category] ?? colors.textMuted;
+  const accent = CATEGORY_ACCENT[category] ?? "#8490ab";
   const icon = CATEGORY_ICON[category] ?? "cpu";
 
   const hasData = item_count > 0;
-  const badgeColor = is_active && hasData ? accent : colors.textMuted;
+  const badgeColor = is_active && hasData ? accent : "#8490ab";
   const badgeLabel = !is_active ? "INACTIVE" : hasData ? `${item_count}` : "NO DATA";
   const badgeBg = is_active && hasData ? `${accent}18` : "transparent";
-  const badgeBorder = is_active && hasData ? `${accent}50` : colors.borderDark;
+  const badgeBorder = is_active && hasData ? `${accent}50` : "#1e2a44";
 
   return (
     <View style={styles.sectionRow}>
       {/* Left: icon + label + description */}
-      <View style={[styles.iconWrap, { borderColor: is_active ? `${accent}40` : colors.borderDark }]}>
+      <View style={[styles.iconWrap, { borderColor: is_active ? `${accent}40` : "#1e2a44" }]}>
         <SymbolView
           name={icon}
           size={14}
-          tintColor={is_active ? accent : colors.textMuted}
+          tintColor={is_active ? accent : "#8490ab"}
           resizeMode="scaleAspectFit"
         />
       </View>
@@ -92,10 +96,12 @@ type Props = {
 };
 
 export default function AgentContextPreview({ contextPackage, isLoading, accentColor }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   if (isLoading) {
     return (
       <View style={styles.loadingRow}>
-        <ActivityIndicator size="small" color={colors.accentCyan} />
+        <ActivityIndicator size="small" color={"#22d3ee"} />
         <Text style={styles.loadingText}>Loading context...</Text>
       </View>
     );
@@ -110,7 +116,7 @@ export default function AgentContextPreview({ contextPackage, isLoading, accentC
 
   return (
     <View style={styles.container}>
-      <Text style={[styles.header, { color: accentColor ?? colors.textMuted }]}>
+      <Text style={[styles.header, { color: accentColor ?? "#8490ab" }]}>
         DATA SOURCES
       </Text>
 
@@ -136,7 +142,8 @@ export default function AgentContextPreview({ contextPackage, isLoading, accentC
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   container: {
     gap: spacing.sm,
   },
@@ -275,3 +282,4 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 });
+}

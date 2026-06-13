@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -18,7 +18,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SymbolView } from "expo-symbols";
 
-import { colors, spacing, radius, typography } from "../../theme/theme";
+import { spacing, radius, typography , type ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 import { useAuthStore, useMemoryStore } from "../../store";
 import type { Memory, MemoryType } from "../../store";
 
@@ -34,8 +35,8 @@ const TYPE_LABELS: Record<MemoryType, string> = {
 };
 
 const TYPE_COLORS: Record<MemoryType, string> = {
-  preference: colors.accent,
-  important_fact: colors.accentCyan,
+  preference: "#a855f7",
+  important_fact: "#22d3ee",
   goal_context: "#f59e0b",
   recurring_interest: "#10b981",
 };
@@ -49,12 +50,15 @@ type FilterChipProps = {
   onPress: () => void;
 };
 
-function FilterChip({ label, active, color, onPress }: FilterChipProps) {
+function FilterChip({
+label, active, color, onPress }: FilterChipProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <TouchableOpacity
       style={[
         styles.chip,
-        active && { backgroundColor: color ?? colors.accent, borderColor: color ?? colors.accent },
+        active && { backgroundColor: color ?? "#a855f7", borderColor: color ?? "#a855f7" },
       ]}
       onPress={onPress}
       activeOpacity={0.7}
@@ -69,8 +73,11 @@ type MemoryCardProps = {
   onDelete: () => void;
 };
 
-function MemoryCard({ memory, onDelete }: MemoryCardProps) {
-  const typeColor = TYPE_COLORS[memory.memory_type as MemoryType] ?? colors.textMuted;
+function MemoryCard({
+memory, onDelete }: MemoryCardProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const typeColor = TYPE_COLORS[memory.memory_type as MemoryType] ?? "#8490ab";
   const typeLabel = TYPE_LABELS[memory.memory_type as MemoryType] ?? memory.memory_type.toUpperCase();
 
   const formattedDate = (() => {
@@ -111,7 +118,10 @@ type AddMemoryModalProps = {
   isMutating: boolean;
 };
 
-function AddMemoryModal({ visible, onClose, onSubmit, isMutating }: AddMemoryModalProps) {
+function AddMemoryModal({
+visible, onClose, onSubmit, isMutating }: AddMemoryModalProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [selectedType, setSelectedType] = useState<MemoryType>("preference");
   const [content, setContent] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
@@ -192,7 +202,7 @@ function AddMemoryModal({ visible, onClose, onSubmit, isMutating }: AddMemoryMod
                 ? "e.g. My career goal is to become an engineering manager"
                 : "e.g. I am interested in stoic philosophy and productivity systems"
             }
-            placeholderTextColor={colors.textMuted}
+            placeholderTextColor={"#8490ab"}
             multiline
             maxLength={2000}
             autoFocus
@@ -216,7 +226,7 @@ function AddMemoryModal({ visible, onClose, onSubmit, isMutating }: AddMemoryMod
               activeOpacity={0.8}
             >
               {isMutating ? (
-                <ActivityIndicator size="small" color={colors.background} />
+                <ActivityIndicator size="small" color={"#020617"} />
               ) : (
                 <Text style={styles.createButtonText}>SAVE</Text>
               )}
@@ -231,6 +241,8 @@ function AddMemoryModal({ visible, onClose, onSubmit, isMutating }: AddMemoryMod
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function MemoryScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const accessToken = useAuthStore((s) => s.accessToken);
   const { memories, isLoading, isMutating, error, fetchMemories, createMemory, deleteMemory } =
@@ -279,7 +291,7 @@ export default function MemoryScreen() {
   return (
     <>
       <ScrollView
-        style={{ backgroundColor: colors.background }}
+        style={{ backgroundColor: "#020617" }}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.container,
@@ -289,7 +301,7 @@ export default function MemoryScreen() {
           <RefreshControl
             refreshing={isLoading}
             onRefresh={loadMemories}
-            tintColor={colors.accentCyan}
+            tintColor={"#22d3ee"}
           />
         }
       >
@@ -323,7 +335,7 @@ export default function MemoryScreen() {
           <Text style={styles.sectionLabel}>MEMORIES</Text>
           <View style={styles.headerRight}>
             {(isLoading || isMutating) ? (
-              <ActivityIndicator size="small" color={colors.accentCyan} />
+              <ActivityIndicator size="small" color={"#22d3ee"} />
             ) : null}
             <TouchableOpacity
               style={styles.addButton}
@@ -344,7 +356,7 @@ export default function MemoryScreen() {
           <FilterChip
             label="ALL"
             active={activeFilter === null}
-            color={colors.textMuted}
+            color={"#8490ab"}
             onPress={() => setActiveFilter(null)}
           />
           {MEMORY_TYPES.map((t) => (
@@ -368,7 +380,7 @@ export default function MemoryScreen() {
             <SymbolView
               name="brain.head.profile"
               size={36}
-              tintColor={colors.textMuted}
+              tintColor={"#8490ab"}
               resizeMode="scaleAspectFit"
             />
             <Text style={styles.emptyTitle}>
@@ -412,7 +424,8 @@ export default function MemoryScreen() {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   container: {
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxl * 2,
@@ -760,3 +773,4 @@ const styles = StyleSheet.create({
     fontWeight: "700" as const,
   },
 });
+}

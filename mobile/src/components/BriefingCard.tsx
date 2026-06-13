@@ -1,7 +1,9 @@
+import { useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { SymbolView } from "expo-symbols";
 
-import { colors, spacing, radius, typography } from "../theme/theme";
+import { spacing, radius, typography , type ThemeColors } from "../theme/theme";
+import { useTheme } from "../theme/ThemeContext";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -25,9 +27,9 @@ type Props = {
 // ── Agent accent colours matching AgentCard ───────────────────────────────────
 
 const AGENT_ACCENT: Record<string, string> = {
-  "Strategy Agent": colors.accent,
+  "Strategy Agent": "#a855f7",
   "Finance Agent":  "#10b981",
-  "Study Agent":    colors.accentCyan,
+  "Study Agent":    "#22d3ee",
   "Health Agent":   "#ef4444",
   "Career Agent":   "#f59e0b",
 };
@@ -68,12 +70,14 @@ export default function BriefingCard({
   context_sources = [],
   generated_at,
 }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const time = new Date(generated_at).toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
   });
 
-  const agentAccent = AGENT_ACCENT[recommended_agent] ?? colors.textMuted;
+  const agentAccent = AGENT_ACCENT[recommended_agent] ?? "#8490ab";
   const agentIcon = AGENT_ICON[recommended_agent] ?? "cpu";
 
   const hasEmailData = !!email_summary || important_emails.length > 0;
@@ -91,7 +95,7 @@ export default function BriefingCard({
           <SymbolView
             name="brain.head.profile"
             size={14}
-            tintColor={colors.accentCyan}
+            tintColor={"#22d3ee"}
             resizeMode="scaleAspectFit"
           />
           <Text style={styles.headerLabel}>DAILY COMMAND</Text>
@@ -205,7 +209,7 @@ export default function BriefingCard({
           <SymbolView
             name="bolt.fill"
             size={12}
-            tintColor={colors.accentCyan}
+            tintColor={"#22d3ee"}
             resizeMode="scaleAspectFit"
           />
           <Text style={styles.focusLabel}>FOCUS BLOCK</Text>
@@ -250,7 +254,8 @@ export default function BriefingCard({
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -580,3 +585,4 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
 });
+}

@@ -17,12 +17,16 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 60
 
-    # AI provider: "mock" (default) or "openai"
+    # AI provider: "mock" (default), "openai", or "anthropic"
     ai_provider: str = "mock"
     # Required only when ai_provider=openai — never hardcode this value
     openai_api_key: str | None = None
     # Model used when ai_provider=openai. gpt-4o-mini is cheap and fast.
     openai_model: str = "gpt-4o-mini"
+    # Required only when ai_provider=anthropic — never hardcode this value
+    anthropic_api_key: str | None = None
+    # Model used when ai_provider=anthropic.
+    anthropic_model: str = "claude-sonnet-4-6"
 
     # CORS — comma-separated list of allowed origins.
     # Default "*" is acceptable for a native mobile API (no browser same-origin

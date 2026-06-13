@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { SymbolView } from "expo-symbols";
 
-import { colors, spacing, radius, typography } from "../theme/theme";
+import { spacing, radius, typography , type ThemeColors } from "../theme/theme";
+import { useTheme } from "../theme/ThemeContext";
 import type { OrchestrationResponse } from "../services/orchestrationService";
 import type { RecommendedAction } from "../store";
 import { ACTION_TYPE_LABELS } from "./ActionReviewModal";
@@ -10,9 +11,9 @@ import { ACTION_TYPE_LABELS } from "./ActionReviewModal";
 // ── Agent accent colours (keyed by agent id) ─────────────────────────────────
 
 const AGENT_ACCENT: Record<string, string> = {
-  strategy: colors.accent,
+  strategy: "#a855f7",
   finance:  "#10b981",
-  study:    colors.accentCyan,
+  study:    "#22d3ee",
   health:   "#ef4444",
   career:   "#f59e0b",
 };
@@ -29,6 +30,8 @@ export default function OrchestrationResultCard({
   acknowledgedIds: Set<string>;
 }) {
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const time = new Date(result.generated_at).toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
@@ -45,7 +48,7 @@ export default function OrchestrationResultCard({
           <SymbolView
             name="cpu"
             size={13}
-            tintColor={colors.accent}
+            tintColor={"#a855f7"}
             resizeMode="scaleAspectFit"
           />
           <Text style={styles.headerLabel}>COMMAND RESULT</Text>
@@ -61,7 +64,7 @@ export default function OrchestrationResultCard({
       <Text style={styles.sectionLabel}>AGENT ASSESSMENTS</Text>
 
       {result.agent_assessments.map((assessment) => {
-        const accent = AGENT_ACCENT[assessment.agent_id] ?? colors.textMuted;
+        const accent = AGENT_ACCENT[assessment.agent_id] ?? "#8490ab";
         const confPct = Math.round(assessment.confidence * 100);
         return (
           <View key={assessment.agent_id} style={styles.assessmentRow}>
@@ -142,7 +145,7 @@ export default function OrchestrationResultCard({
           <SymbolView
             name="bolt.fill"
             size={12}
-            tintColor={colors.accent}
+            tintColor={"#a855f7"}
             resizeMode="scaleAspectFit"
           />
           <Text style={styles.planLabel}>COORDINATED PLAN</Text>
@@ -243,7 +246,8 @@ export default function OrchestrationResultCard({
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -670,3 +674,4 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 });
+}

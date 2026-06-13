@@ -1,4 +1,4 @@
-import { Component, ReactNode } from "react";
+import { Component, ReactNode } from 'react';
 import { View, Text, Pressable } from "react-native";
 import { colors } from "../theme/theme";
 import { reportError } from "../services/errorReporter";

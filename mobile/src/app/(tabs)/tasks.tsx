@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -19,18 +19,12 @@ import { SymbolView } from "expo-symbols";
 import TaskCard from "../../components/TaskCard";
 import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
-import { colors, spacing, radius, typography } from "../../theme/theme";
+import { spacing, radius, typography, type ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 import { useTasksStore, useGoalsStore, useAuthStore } from "../../store";
 
 const PRIORITIES = ["low", "medium", "high", "critical"] as const;
 type Priority = (typeof PRIORITIES)[number];
-
-const PRIORITY_COLOR: Record<Priority, string> = {
-  critical: "#ef4444",
-  high:     "#f97316",
-  medium:   "#f59e0b",
-  low:      colors.textMuted,
-};
 
 type FormState = {
   title: string;
@@ -49,6 +43,14 @@ const EMPTY_FORM: FormState = {
 };
 
 export default function TasksScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const PRIORITY_COLOR: Record<Priority, string> = {
+    critical: "#ef4444",
+    high:     "#f97316",
+    medium:   "#f59e0b",
+    low:      colors.textMuted,
+  };
   const insets = useSafeAreaInsets();
   const accessToken = useAuthStore((s) => s.accessToken);
   const { tasks, isLoading, isMutating, error, fetchTasks, createTask, updateTask, deleteTask } =
@@ -310,7 +312,8 @@ export default function TasksScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   container: {
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxl * 2,
@@ -509,4 +512,5 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginTop: spacing.md,
   },
-});
+  });
+}

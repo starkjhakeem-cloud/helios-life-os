@@ -1,13 +1,13 @@
 import { useEffect } from "react";
 import { Tabs, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
+import type { SymbolViewProps } from "expo-symbols";
 import type { SFSymbol } from "sf-symbols-typescript";
 
 import { useAuthStore, useNotificationsStore } from "../../store";
-import { useTheme } from "../../theme/ThemeContext";
 
 type TabIconProps = {
-  name: SFSymbol;
+  name: SymbolViewProps["name"];
   color: string;
 };
 
@@ -15,7 +15,7 @@ function TabIcon({ name, color }: TabIconProps) {
   return (
     <SymbolView
       name={name}
-      size={25}
+      size={29}
       tintColor={color}
       resizeMode="scaleAspectFit"
     />
@@ -23,7 +23,6 @@ function TabIcon({ name, color }: TabIconProps) {
 }
 
 export default function TabsLayout() {
-  const { colors } = useTheme();
   const isAuthenticated = useAuthStore((s) => s.accessToken !== null);
   const accessToken = useAuthStore((s) => s.accessToken);
   const router = useRouter();
@@ -47,33 +46,33 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarStyle: {
           position: "absolute",
-          left: 12,
-          right: 12,
-          bottom: 10,
-          backgroundColor: `${colors.surfaceDark}f4`,
-          borderTopColor: `${colors.accent}20`,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "#061121f2",
+          borderTopColor: "rgba(92, 120, 170, 0.22)",
           borderTopWidth: 1,
-          borderColor: `${colors.accentCyan}18`,
-          borderWidth: 1,
-          borderRadius: 28,
-          height: 88,
-          paddingBottom: 18,
-          paddingTop: 10,
-          paddingHorizontal: 4,
-          shadowColor: colors.accent,
-          shadowOffset: { width: 0, height: -8 },
-          shadowOpacity: 0.22,
-          shadowRadius: 22,
+          borderColor: "transparent",
+          borderWidth: 0,
+          borderRadius: 0,
+          height: 106,
+          paddingBottom: 28,
+          paddingTop: 13,
+          paddingHorizontal: 10,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: -10 },
+          shadowOpacity: 0.28,
+          shadowRadius: 18,
         },
-        tabBarActiveTintColor: colors.accent,
-        tabBarInactiveTintColor: colors.textMuted,
+        tabBarActiveTintColor: "#8B5CF6",
+        tabBarInactiveTintColor: "#9AA8C5",
         tabBarLabelStyle: {
-          fontSize: 11,
+          fontSize: 11.5,
           fontWeight: "800",
-          marginTop: 4,
+          marginTop: 6,
         },
         tabBarItemStyle: {
-          paddingVertical: 3,
+          paddingVertical: 2,
         },
       }}
     >
@@ -82,7 +81,7 @@ export default function TabsLayout() {
         options={{
           title: "Home",
           tabBarIcon: ({ color }) => (
-            <TabIcon name="square.grid.2x2" color={color} />
+            <TabIcon name="house" color={color} />
           ),
         }}
       />
@@ -92,7 +91,10 @@ export default function TabsLayout() {
         options={{
           title: "Autonomy",
           tabBarIcon: ({ color }) => (
-            <TabIcon name="sparkles" color={color} />
+            <TabIcon
+              name={{ ios: "robot" as SFSymbol, android: "robot", web: "robot" }}
+              color={color}
+            />
           ),
         }}
       />

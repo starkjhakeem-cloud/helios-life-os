@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -19,7 +19,8 @@ import { SymbolView } from "expo-symbols";
 import EventCard from "../../components/EventCard";
 import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
-import { colors, spacing, radius, typography } from "../../theme/theme";
+import { spacing, radius, typography , type ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 import { useCalendarStore, useAuthStore } from "../../store";
 import type { CalendarEvent, CalendarEventCreate } from "../../store";
 
@@ -64,6 +65,8 @@ function isUpcoming(event: CalendarEvent): boolean {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function CalendarScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const accessToken = useAuthStore((s) => s.accessToken);
   const { events, isLoading, isMutating, error, fetchEvents, createEvent, updateEvent, deleteEvent } =
@@ -162,14 +165,14 @@ export default function CalendarScreen() {
   return (
     <>
       <ScrollView
-        style={{ backgroundColor: colors.background }}
+        style={{ backgroundColor: "#020617" }}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}
         refreshControl={
           <RefreshControl
             refreshing={isLoading}
             onRefresh={onRefresh}
-            tintColor={colors.accentCyan}
+            tintColor={"#22d3ee"}
           />
         }
       >
@@ -189,7 +192,7 @@ export default function CalendarScreen() {
           <Text style={styles.sectionLabel}>UPCOMING</Text>
           <View style={styles.headerRight}>
             {(isLoading || isMutating) ? (
-              <ActivityIndicator size="small" color={colors.accentCyan} />
+              <ActivityIndicator size="small" color={"#22d3ee"} />
             ) : null}
             <TouchableOpacity style={styles.addButton} onPress={openCreate}>
               <Text style={styles.addButtonText}>+ NEW EVENT</Text>
@@ -207,7 +210,7 @@ export default function CalendarScreen() {
             <SymbolView
               name="calendar"
               size={36}
-              tintColor={colors.textMuted}
+              tintColor={"#8490ab"}
               resizeMode="scaleAspectFit"
             />
             <Text style={styles.emptyTitle}>No events scheduled</Text>
@@ -321,7 +324,8 @@ export default function CalendarScreen() {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   container: {
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxl * 2,
@@ -476,3 +480,4 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
 });
+}

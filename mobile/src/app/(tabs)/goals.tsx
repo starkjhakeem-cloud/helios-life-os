@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -19,7 +19,8 @@ import { SymbolView } from "expo-symbols";
 import GoalCard from "../../components/GoalCard";
 import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
-import { colors, spacing, radius, typography } from "../../theme/theme";
+import { spacing, radius, typography, type ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 import { useGoalsStore, useAuthStore } from "../../store";
 
 type FormState = {
@@ -31,6 +32,8 @@ type FormState = {
 const EMPTY_FORM: FormState = { title: "", description: "", target_date: "" };
 
 export default function GoalsScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const accessToken = useAuthStore((s) => s.accessToken);
   const { goals, isLoading, isMutating, error, fetchGoals, createGoal, updateGoal, deleteGoal } =
@@ -228,7 +231,8 @@ export default function GoalsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   container: {
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxl * 2,
@@ -361,4 +365,5 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginTop: spacing.md,
   },
-});
+  });
+}

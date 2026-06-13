@@ -1,12 +1,14 @@
+import { useMemo } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { SymbolView } from "expo-symbols";
 import * as Haptics from "expo-haptics";
 
-import { colors, spacing, radius, typography } from "../theme/theme";
+import { spacing, radius, typography , type ThemeColors } from "../theme/theme";
+import { useTheme } from "../theme/ThemeContext";
 import type { Goal } from "../services/goalsService";
 
 const STATUS_COLOR: Record<string, string> = {
-  active: colors.accentCyan,
+  active: "#22d3ee",
   completed: "#22c55e",
   paused: "#f59e0b",
 };
@@ -30,7 +32,9 @@ type Props = {
 };
 
 export default function GoalCard({ goal, onStatusChange, onDelete }: Props) {
-  const dotColor = STATUS_COLOR[goal.status] ?? colors.textMuted;
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const dotColor = STATUS_COLOR[goal.status] ?? "#8490ab";
   const nextStatus = STATUS_NEXT[goal.status] ?? "active";
 
   function handleStatusChange() {
@@ -80,7 +84,7 @@ export default function GoalCard({ goal, onStatusChange, onDelete }: Props) {
           <SymbolView
             name="trash"
             size={16}
-            tintColor={colors.textMuted}
+            tintColor={"#8490ab"}
             resizeMode="scaleAspectFit"
           />
         </TouchableOpacity>
@@ -97,7 +101,7 @@ export default function GoalCard({ goal, onStatusChange, onDelete }: Props) {
           <SymbolView
             name="calendar"
             size={12}
-            tintColor={colors.textMuted}
+            tintColor={"#8490ab"}
             resizeMode="scaleAspectFit"
           />
           <Text style={styles.dateText}>{goal.target_date}</Text>
@@ -107,7 +111,8 @@ export default function GoalCard({ goal, onStatusChange, onDelete }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -165,3 +170,4 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
 });
+}

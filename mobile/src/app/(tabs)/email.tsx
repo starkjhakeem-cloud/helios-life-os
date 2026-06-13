@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -19,7 +19,8 @@ import { SymbolView } from "expo-symbols";
 import EmailCard from "../../components/EmailCard";
 import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
-import { colors, spacing, radius, typography } from "../../theme/theme";
+import { spacing, radius, typography , type ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 import { useEmailStore, useAuthStore } from "../../store";
 import type { EmailMessage, EmailMessageCreate, MessageImportance } from "../../store";
 
@@ -61,8 +62,8 @@ const EMPTY_FORM = (): FormState => ({
 
 const IMPORTANCE_OPTIONS: MessageImportance[] = ["low", "normal", "high", "urgent"];
 const IMPORTANCE_COLOR: Record<string, string> = {
-  low:    colors.textMuted,
-  normal: colors.accentCyan,
+  low:    "#8490ab",
+  normal: "#22d3ee",
   high:   "#f59e0b",
   urgent: "#ef4444",
 };
@@ -70,6 +71,8 @@ const IMPORTANCE_COLOR: Record<string, string> = {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function EmailScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const accessToken = useAuthStore((s) => s.accessToken);
   const { messages, isLoading, isMutating, error, fetchMessages, createMessage, updateMessage, deleteMessage } =
@@ -160,14 +163,14 @@ export default function EmailScreen() {
   return (
     <>
       <ScrollView
-        style={{ backgroundColor: colors.background }}
+        style={{ backgroundColor: "#020617" }}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}
         refreshControl={
           <RefreshControl
             refreshing={isLoading}
             onRefresh={onRefresh}
-            tintColor={colors.accentCyan}
+            tintColor={"#22d3ee"}
           />
         }
       >
@@ -198,7 +201,7 @@ export default function EmailScreen() {
 
           <View style={styles.toolbarRight}>
             {(isLoading || isMutating) ? (
-              <ActivityIndicator size="small" color={colors.accentCyan} />
+              <ActivityIndicator size="small" color={"#22d3ee"} />
             ) : null}
             <TouchableOpacity style={styles.addButton} onPress={openCreate}>
               <Text style={styles.addButtonText}>+ NEW</Text>
@@ -216,7 +219,7 @@ export default function EmailScreen() {
             <SymbolView
               name="envelope"
               size={36}
-              tintColor={colors.textMuted}
+              tintColor={"#8490ab"}
               resizeMode="scaleAspectFit"
             />
             <Text style={styles.emptyTitle}>No messages</Text>
@@ -334,7 +337,8 @@ export default function EmailScreen() {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   container: {
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxl * 2,
@@ -545,3 +549,4 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
 });
+}

@@ -1,17 +1,18 @@
-import { useState } from "react";
+import { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { SymbolView } from "expo-symbols";
 
-import { colors, spacing, radius, typography } from "../theme/theme";
+import { spacing, radius, typography , type ThemeColors } from "../theme/theme";
+import { useTheme } from "../theme/ThemeContext";
 import type { AgentContextPackage, AgentProfile } from "../services/agentsService";
 import AgentContextPreview from "./AgentContextPreview";
 
 // ── Static lookups ────────────────────────────────────────────────────────────
 
 const STATUS_COLOR: Record<string, string> = {
-  active: colors.accentCyan,
+  active: "#22d3ee",
   standby: "#f59e0b",
-  offline: colors.textMuted,
+  offline: "#8490ab",
 };
 
 const AGENT_ICON: Record<string, string> = {
@@ -23,9 +24,9 @@ const AGENT_ICON: Record<string, string> = {
 };
 
 const AGENT_ACCENT: Record<string, string> = {
-  strategy: colors.accent,
+  strategy: "#a855f7",
   finance: "#10b981",
-  study: colors.accentCyan,
+  study: "#22d3ee",
   health: "#ef4444",
   career: "#f59e0b",
 };
@@ -42,13 +43,15 @@ type Props = {
 // ── AgentCard ─────────────────────────────────────────────────────────────────
 
 export default function AgentCard({ agent, agentContext, isContextLoading, onExpand }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { id, name, role, status, description, priority, capabilities, memory_context_enabled } =
     agent;
 
   const [expanded, setExpanded] = useState(false);
 
-  const dotColor = STATUS_COLOR[status] ?? colors.textMuted;
-  const accentColor = AGENT_ACCENT[id] ?? colors.accent;
+  const dotColor = STATUS_COLOR[status] ?? "#8490ab";
+  const accentColor = AGENT_ACCENT[id] ?? "#a855f7";
   const iconName = (AGENT_ICON[id] ?? "cpu") as Parameters<typeof SymbolView>[0]["name"];
 
   function handleToggle() {
@@ -86,7 +89,7 @@ export default function AgentCard({ agent, agentContext, isContextLoading, onExp
           <SymbolView
             name={expanded ? "chevron.up" : "chevron.down"}
             size={12}
-            tintColor={colors.textMuted}
+            tintColor={"#8490ab"}
             resizeMode="scaleAspectFit"
           />
         </View>
@@ -108,13 +111,13 @@ export default function AgentCard({ agent, agentContext, isContextLoading, onExp
             <SymbolView
               name={memory_context_enabled ? "brain.head.profile" : "brain"}
               size={10}
-              tintColor={memory_context_enabled ? colors.accent : colors.textMuted}
+              tintColor={memory_context_enabled ? "#a855f7" : "#8490ab"}
               resizeMode="scaleAspectFit"
             />
             <Text
               style={[
                 styles.memoryBadgeText,
-                { color: memory_context_enabled ? colors.accent : colors.textMuted },
+                { color: memory_context_enabled ? "#a855f7" : "#8490ab" },
               ]}
             >
               {memory_context_enabled ? "MEMORY ON" : "MEMORY OFF"}
@@ -139,9 +142,9 @@ export default function AgentCard({ agent, agentContext, isContextLoading, onExp
               style={[
                 styles.memoryContextBadge,
                 {
-                  borderColor: memory_context_enabled ? `${colors.accent}50` : colors.borderDark,
+                  borderColor: memory_context_enabled ? `${"#a855f7"}50` : "#1e2a44",
                   backgroundColor: memory_context_enabled
-                    ? `${colors.accent}12`
+                    ? `${"#a855f7"}12`
                     : "transparent",
                 },
               ]}
@@ -149,13 +152,13 @@ export default function AgentCard({ agent, agentContext, isContextLoading, onExp
               <SymbolView
                 name={memory_context_enabled ? "brain.head.profile" : "brain"}
                 size={11}
-                tintColor={memory_context_enabled ? colors.accent : colors.textMuted}
+                tintColor={memory_context_enabled ? "#a855f7" : "#8490ab"}
                 resizeMode="scaleAspectFit"
               />
               <Text
                 style={[
                   styles.memoryContextText,
-                  { color: memory_context_enabled ? colors.accent : colors.textMuted },
+                  { color: memory_context_enabled ? "#a855f7" : "#8490ab" },
                 ]}
               >
                 {memory_context_enabled ? "MEMORY CONTEXT: ENABLED" : "MEMORY CONTEXT: DISABLED"}
@@ -195,7 +198,8 @@ export default function AgentCard({ agent, agentContext, isContextLoading, onExp
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -373,3 +377,4 @@ const styles = StyleSheet.create({
   },
 
 });
+}

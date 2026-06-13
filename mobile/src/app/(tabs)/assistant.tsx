@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -23,7 +23,7 @@ import {
   useAuthStore,
   useConversationStore,
 } from "../../store";
-import { colors, radius, spacing, typography } from "../../theme/theme";
+import { radius, spacing, typography, type ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 
 const WELCOME: ChatMessage = {
@@ -53,6 +53,8 @@ type BubbleProps = {
 };
 
 function MessageBubble({ message, onFollowUp, onReview, acknowledgedIds }: BubbleProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const isUser = message.role === "user";
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 
@@ -167,6 +169,8 @@ function MessageBubble({ message, onFollowUp, onReview, acknowledgedIds }: Bubbl
 // ── Typing indicator ──────────────────────────────────────────────────────────
 
 function TypingIndicator() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={[styles.bubbleRow, styles.bubbleRowAssistant]}>
       <View style={styles.avatarDot}>
@@ -201,6 +205,8 @@ function HistoryModal({
   onSelect,
   onNew,
 }: HistoryModalProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const formatDate = (iso: string) => {
     const d = new Date(iso);
     const now = new Date();
@@ -295,6 +301,7 @@ function HistoryModal({
 
 export default function AssistantScreen() {
   const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const accessToken = useAuthStore((s) => s.accessToken);
 
@@ -547,7 +554,8 @@ export default function AssistantScreen() {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.background,
@@ -1103,4 +1111,5 @@ const styles = StyleSheet.create({
     marginLeft: spacing.sm,
     flexShrink: 0,
   },
-});
+  });
+}

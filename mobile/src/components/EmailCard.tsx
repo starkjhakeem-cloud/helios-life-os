@@ -1,20 +1,22 @@
+import { useMemo } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { SymbolView } from "expo-symbols";
 
-import { colors, spacing, radius, typography } from "../theme/theme";
+import { spacing, radius, typography , type ThemeColors } from "../theme/theme";
+import { useTheme } from "../theme/ThemeContext";
 import type { EmailMessage } from "../services/emailService";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const IMPORTANCE_COLOR: Record<string, string> = {
-  low:    colors.textMuted,
-  normal: colors.accentCyan,
+  low:    "#8490ab",
+  normal: "#22d3ee",
   high:   "#f59e0b",
   urgent: "#ef4444",
 };
 
 const SOURCE_COLOR: Record<string, string> = {
-  manual:  colors.textMuted,
+  manual:  "#8490ab",
   gmail:   "#EA4335",
   outlook: "#0078D4",
 };
@@ -44,8 +46,10 @@ type Props = {
 };
 
 export default function EmailCard({ message, onToggleRead, onArchive, onDelete }: Props) {
-  const importanceColor = IMPORTANCE_COLOR[message.importance] ?? colors.accentCyan;
-  const sourceColor     = SOURCE_COLOR[message.source] ?? colors.textMuted;
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const importanceColor = IMPORTANCE_COLOR[message.importance] ?? "#22d3ee";
+  const sourceColor     = SOURCE_COLOR[message.source] ?? "#8490ab";
   const isUnread        = message.status === "unread";
   const isArchived      = message.status === "archived";
 
@@ -94,8 +98,8 @@ export default function EmailCard({ message, onToggleRead, onArchive, onDelete }
 
             {/* Status badge */}
             {isArchived ? (
-              <View style={[styles.badge, { borderColor: `${colors.textMuted}40` }]}>
-                <Text style={[styles.badgeText, { color: colors.textMuted }]}>ARCHIVED</Text>
+              <View style={[styles.badge, { borderColor: `${"#8490ab"}40` }]}>
+                <Text style={[styles.badgeText, { color: "#8490ab" }]}>ARCHIVED</Text>
               </View>
             ) : null}
           </View>
@@ -108,7 +112,7 @@ export default function EmailCard({ message, onToggleRead, onArchive, onDelete }
                 <SymbolView
                   name={isUnread ? "envelope.open" : "envelope"}
                   size={14}
-                  tintColor={isUnread ? colors.accentCyan : colors.textMuted}
+                  tintColor={isUnread ? "#22d3ee" : "#8490ab"}
                   resizeMode="scaleAspectFit"
                 />
               </TouchableOpacity>
@@ -120,7 +124,7 @@ export default function EmailCard({ message, onToggleRead, onArchive, onDelete }
                 <SymbolView
                   name="archivebox"
                   size={14}
-                  tintColor={colors.textMuted}
+                  tintColor={"#8490ab"}
                   resizeMode="scaleAspectFit"
                 />
               </TouchableOpacity>
@@ -146,7 +150,8 @@ export default function EmailCard({ message, onToggleRead, onArchive, onDelete }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -251,3 +256,4 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
 });
+}

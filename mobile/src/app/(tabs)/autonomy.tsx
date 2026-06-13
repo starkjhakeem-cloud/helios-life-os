@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SymbolView } from "expo-symbols";
 
-import { colors, spacing, radius, typography } from "../../theme/theme";
+import { spacing, radius, typography , type ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 import { useAuthStore, useAutonomyStore, useNotificationsStore, useBackgroundJobsStore } from "../../store";
 import type {
   AutonomyAuditLogEntry,
@@ -31,16 +32,16 @@ import type {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const ENERGY_COLORS: Record<"high" | "medium" | "low", string> = {
-  high:   colors.accent,
+  high:   "#a855f7",
   medium: "#f59e0b",
-  low:    colors.textMuted,
+  low:    "#8490ab",
 };
 
 const PRIORITY_COLORS: Record<string, string> = {
   critical: "#ef4444",
   high:     "#f59e0b",
-  medium:   colors.accentCyan,
-  low:      colors.textMuted,
+  medium:   "#22d3ee",
+  low:      "#8490ab",
 };
 
 const RISK_COLORS: Record<RiskLevel, string> = {
@@ -50,10 +51,10 @@ const RISK_COLORS: Record<RiskLevel, string> = {
 };
 
 const STATUS_COLORS: Record<QueueStatus, string> = {
-  pending: colors.accentCyan,
+  pending: "#22d3ee",
   approved: "#22c55e",
-  rejected: colors.textMuted,
-  completed: colors.textMuted,
+  rejected: "#8490ab",
+  completed: "#8490ab",
 };
 
 const AGENT_LABELS: Record<string, string> = {
@@ -72,7 +73,10 @@ function agentLabel(name: string): string {
 
 type BadgeProps = { label: string; color: string };
 
-function Badge({ label, color }: BadgeProps) {
+function Badge({
+label, color }: BadgeProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={[styles.badge, { borderColor: color }]}>
       <Text style={[styles.badgeText, { color }]}>{label}</Text>
@@ -89,7 +93,10 @@ type SuggestionCardProps = {
   onAddToQueue: (suggestion: SuggestionItem) => void;
 };
 
-function SuggestionCard({ item, isQueued, isMutating, onAddToQueue }: SuggestionCardProps) {
+function SuggestionCard({
+item, isQueued, isMutating, onAddToQueue }: SuggestionCardProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const handleAdd = () => {
     Alert.alert(
       "Add to Queue",
@@ -106,12 +113,12 @@ function SuggestionCard({ item, isQueued, isMutating, onAddToQueue }: Suggestion
       {/* Header row */}
       <View style={styles.cardHeader}>
         <View style={styles.cardMeta}>
-          <Badge label={agentLabel(item.source_agent)} color={colors.accent} />
+          <Badge label={agentLabel(item.source_agent)} color={"#a855f7"} />
           <Badge label={item.risk_level.toUpperCase()} color={RISK_COLORS[item.risk_level as RiskLevel]} />
         </View>
         <Badge
           label={item.suggested_action_type.replace(/_/g, " ").toUpperCase()}
-          color={colors.accentCyan}
+          color={"#22d3ee"}
         />
       </View>
 
@@ -170,6 +177,8 @@ function QueueCard({
   onReject,
   onExecute,
 }: QueueCardProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const isPending  = item.status === "pending";
   const isApproved = item.status === "approved";
 
@@ -279,7 +288,7 @@ function QueueCard({
           </View>
         ) : isExecuting ? (
           <View style={styles.executingRow}>
-            <ActivityIndicator color={colors.accent} size="small" />
+            <ActivityIndicator color={"#a855f7"} size="small" />
             <Text style={styles.executingText}>Executing…</Text>
           </View>
         ) : (
@@ -318,6 +327,8 @@ function DailyPlanSection({
   onGenerate,
   onAddToQueue,
 }: DailyPlanSectionProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const handleAdd = (item: SuggestionItem) => {
     Alert.alert(
       "Add to Queue",
@@ -341,7 +352,7 @@ function DailyPlanSection({
           style={[styles.generateBtn, isLoading && styles.btnDisabled]}
         >
           {isLoading ? (
-            <ActivityIndicator color={colors.accent} size="small" />
+            <ActivityIndicator color={"#a855f7"} size="small" />
           ) : (
             <Text style={styles.generateBtnText}>{plan ? "Regenerate" : "Generate"}</Text>
           )}
@@ -354,7 +365,7 @@ function DailyPlanSection({
         </View>
       ) : !plan && !isLoading ? (
         <View style={styles.emptyState}>
-          <SymbolView name="calendar.badge.clock" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+          <SymbolView name="calendar.badge.clock" size={36} tintColor={"#8490ab"} resizeMode="scaleAspectFit" />
           <Text style={styles.emptyText}>No plan generated yet.</Text>
           <Text style={styles.emptySubtext}>Tap Generate to build today&apos;s operational plan.</Text>
         </View>
@@ -374,7 +385,7 @@ function DailyPlanSection({
                 <Text style={styles.focusTimeRange}>{block.time_range}</Text>
                 <Text style={styles.focusActivity}>{block.activity}</Text>
               </View>
-              <View style={[styles.energyDot, { backgroundColor: ENERGY_COLORS[block.energy_level] ?? colors.textMuted }]} />
+              <View style={[styles.energyDot, { backgroundColor: ENERGY_COLORS[block.energy_level] ?? "#8490ab" }]} />
             </View>
           ))}
 
@@ -386,7 +397,7 @@ function DailyPlanSection({
                 <Text style={styles.priorityRank}>#{task.rank}</Text>
                 <Badge
                   label={task.priority.toUpperCase()}
-                  color={PRIORITY_COLORS[task.priority] ?? colors.textMuted}
+                  color={PRIORITY_COLORS[task.priority] ?? "#8490ab"}
                 />
                 <Text style={styles.priorityDuration}>{task.estimated_duration}</Text>
               </View>
@@ -405,12 +416,12 @@ function DailyPlanSection({
                   <View key={item.id} style={[styles.card, isQueued && styles.cardQueued]}>
                     <View style={styles.cardHeader}>
                       <View style={styles.cardMeta}>
-                        <Badge label={agentLabel(item.source_agent)} color={colors.accent} />
+                        <Badge label={agentLabel(item.source_agent)} color={"#a855f7"} />
                         <Badge label={item.risk_level.toUpperCase()} color={RISK_COLORS[item.risk_level as RiskLevel]} />
                       </View>
                       <Badge
                         label={item.suggested_action_type.replace(/_/g, " ").toUpperCase()}
-                        color={colors.accentCyan}
+                        color={"#22d3ee"}
                       />
                     </View>
                     <Text style={styles.cardTitle}>{item.title}</Text>
@@ -520,7 +531,10 @@ type AddRuleFormProps = {
   isMutating: boolean;
 };
 
-function AddRuleForm({ onSave, onCancel, isMutating }: AddRuleFormProps) {
+function AddRuleForm({
+onSave, onCancel, isMutating }: AddRuleFormProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [actionType, setActionType] = useState<string>(SAFE_ACTION_TYPES[0]);
   const [riskLevel, setRiskLevel] = useState<"any" | RiskLevel>("any");
   const [allowExecution, setAllowExecution] = useState(true);
@@ -619,7 +633,10 @@ type RuleCardProps = {
   onDelete: (id: string) => void;
 };
 
-function RuleCard({ rule, isMutating, onToggleExecution, onDelete }: RuleCardProps) {
+function RuleCard({
+rule, isMutating, onToggleExecution, onDelete }: RuleCardProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const handleToggle = () => {
     const newAllow = !rule.allow_execution;
     Alert.alert(
@@ -649,11 +666,11 @@ function RuleCard({ rule, isMutating, onToggleExecution, onDelete }: RuleCardPro
         <View style={styles.cardMeta}>
           <Badge
             label={(ACTION_LABELS[rule.action_type] ?? rule.action_type).toUpperCase()}
-            color={colors.accentCyan}
+            color={"#22d3ee"}
           />
           <Badge
             label={rule.risk_level ? rule.risk_level.toUpperCase() : "ANY RISK"}
-            color={rule.risk_level ? (RISK_COLORS[rule.risk_level as RiskLevel] ?? colors.textMuted) : colors.textMuted}
+            color={rule.risk_level ? (RISK_COLORS[rule.risk_level as RiskLevel] ?? "#8490ab") : "#8490ab"}
           />
         </View>
         <Badge
@@ -714,9 +731,9 @@ const AUDIT_EVENT_LABELS: Record<string, string> = {
 
 const AUDIT_EVENT_COLORS: Record<string, string> = {
   suggestion_created:      "#6366f1",
-  queue_item_created:      colors.accentCyan,
+  queue_item_created:      "#22d3ee",
   queue_item_approved:     "#22c55e",
-  queue_item_rejected:     colors.textMuted,
+  queue_item_rejected:     "#8490ab",
   queue_item_executed:     "#22c55e",
   execution_blocked_by_rule: "#f59e0b",
   execution_failed:        "#ef4444",
@@ -737,8 +754,11 @@ function formatAuditTime(iso: string): string {
 
 type AuditEntryRowProps = { entry: AutonomyAuditLogEntry };
 
-function AuditEntryRow({ entry }: AuditEntryRowProps) {
-  const color = AUDIT_EVENT_COLORS[entry.event_type] ?? colors.textMuted;
+function AuditEntryRow({
+entry }: AuditEntryRowProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const color = AUDIT_EVENT_COLORS[entry.event_type] ?? "#8490ab";
   const label = AUDIT_EVENT_LABELS[entry.event_type] ?? entry.event_type.replace(/_/g, " ").toUpperCase();
   return (
     <View style={styles.auditRow}>
@@ -763,10 +783,13 @@ type AuditLogSectionProps = {
   error: string | null;
 };
 
-function AuditLogSection({ entries, isLoading, error }: AuditLogSectionProps) {
+function AuditLogSection({
+entries, isLoading, error }: AuditLogSectionProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <>
-      <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.lg }} />
+      <View style={{ height: 1, backgroundColor: "#263452", marginVertical: spacing.lg }} />
       <Text style={styles.sectionLabel}>AUDIT LOG</Text>
       <Text style={styles.rulesDescription}>
         Recent autonomy decisions — approvals, executions, blocks, and failures.
@@ -774,7 +797,7 @@ function AuditLogSection({ entries, isLoading, error }: AuditLogSectionProps) {
 
       {isLoading && entries.length === 0 ? (
         <View style={styles.loadingRow}>
-          <ActivityIndicator color={colors.accent} size="small" />
+          <ActivityIndicator color={"#a855f7"} size="small" />
           <Text style={styles.loadingText}>Loading audit log…</Text>
         </View>
       ) : error ? (
@@ -783,7 +806,7 @@ function AuditLogSection({ entries, isLoading, error }: AuditLogSectionProps) {
         </View>
       ) : entries.length === 0 ? (
         <View style={styles.emptyState}>
-          <SymbolView name="doc.text.magnifyingglass" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+          <SymbolView name="doc.text.magnifyingglass" size={36} tintColor={"#8490ab"} resizeMode="scaleAspectFit" />
           <Text style={styles.emptyText}>No audit events yet.</Text>
           <Text style={styles.emptySubtext}>
             Events appear here as you review, approve, and execute autonomy queue items.
@@ -808,6 +831,8 @@ function AuditLogSection({ entries, isLoading, error }: AuditLogSectionProps) {
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function AutonomyScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const accessToken = useAuthStore((s) => s.accessToken);
   const {
@@ -963,7 +988,7 @@ export default function AutonomyScreen() {
       contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
       showsVerticalScrollIndicator={false}
       refreshControl={
-        <RefreshControl refreshing={isRefreshing} onRefresh={loadAll} tintColor={colors.accent} />
+        <RefreshControl refreshing={isRefreshing} onRefresh={loadAll} tintColor={"#a855f7"} />
       }
     >
       {/* Hero */}
@@ -986,7 +1011,7 @@ export default function AutonomyScreen() {
         </View>
         <View style={styles.ccDivider} />
         <View style={styles.ccStat}>
-          <Text style={[styles.ccStatValue, unreadCount > 0 && { color: colors.accent }]}>
+          <Text style={[styles.ccStatValue, unreadCount > 0 && { color: "#a855f7" }]}>
             {unreadCount}
           </Text>
           <Text style={styles.ccStatLabel}>INBOX</Text>
@@ -1001,7 +1026,7 @@ export default function AutonomyScreen() {
       {/* ── Background Jobs Panel ─────────────────────────────────────── */}
       {bgJobs.length > 0 ? (
         <>
-          <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.lg }} />
+          <View style={{ height: 1, backgroundColor: "#263452", marginVertical: spacing.lg }} />
           <Text style={styles.sectionLabel}>SCHEDULED JOBS</Text>
           <Text style={styles.rulesDescription}>
             Manually trigger any job below. Created items enter the review queue — no auto-execution.
@@ -1018,7 +1043,7 @@ export default function AutonomyScreen() {
                 <View key={job.id}>
                   {idx > 0 ? <View style={styles.auditDivider} /> : null}
                   <View style={styles.bgJobRow}>
-                    <View style={[styles.bgJobDot, { backgroundColor: job.enabled ? "#22c55e" : colors.textMuted }]} />
+                    <View style={[styles.bgJobDot, { backgroundColor: job.enabled ? "#22c55e" : "#8490ab" }]} />
                     <View style={styles.bgJobInfo}>
                       <Text style={styles.bgJobName}>{JOB_LABELS[job.job_type] ?? job.job_type}</Text>
                       <Text style={styles.bgJobSchedule}>{job.schedule_label}</Text>
@@ -1058,7 +1083,7 @@ export default function AutonomyScreen() {
 
       {/* Initial queue loading */}
       {isLoading && items.length === 0 ? (
-        <ActivityIndicator color={colors.accent} style={{ marginTop: spacing.xl }} />
+        <ActivityIndicator color={"#a855f7"} style={{ marginTop: spacing.xl }} />
       ) : null}
 
       {/* ── Daily Plan ───────────────────────────────────────────────── */}
@@ -1072,14 +1097,14 @@ export default function AutonomyScreen() {
         onAddToQueue={handleAddDailyPlanItemToQueue}
       />
 
-      <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.lg }} />
+      <View style={{ height: 1, backgroundColor: "#263452", marginVertical: spacing.lg }} />
 
       {/* ── Proactive Suggestions ─────────────────────────────────────── */}
       <Text style={styles.sectionLabel}>PROACTIVE SUGGESTIONS</Text>
 
       {isSuggestionsLoading && suggestions.length === 0 ? (
         <View style={styles.loadingRow}>
-          <ActivityIndicator color={colors.accent} size="small" />
+          <ActivityIndicator color={"#a855f7"} size="small" />
           <Text style={styles.loadingText}>Generating suggestions…</Text>
         </View>
       ) : suggestionsError ? (
@@ -1088,7 +1113,7 @@ export default function AutonomyScreen() {
         </View>
       ) : suggestions.length === 0 ? (
         <View style={styles.emptyState}>
-          <SymbolView name="lightbulb" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+          <SymbolView name="lightbulb" size={36} tintColor={"#8490ab"} resizeMode="scaleAspectFit" />
           <Text style={styles.emptyText}>No suggestions right now.</Text>
           <Text style={styles.emptySubtext}>Pull to refresh for fresh recommendations.</Text>
         </View>
@@ -1110,7 +1135,7 @@ export default function AutonomyScreen() {
           <Text style={[styles.sectionLabel, { marginTop: spacing.xl }]}>PENDING REVIEW</Text>
           {pending.length === 0 ? (
             <View style={styles.emptyState}>
-              <SymbolView name="tray" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+              <SymbolView name="tray" size={36} tintColor={"#8490ab"} resizeMode="scaleAspectFit" />
               <Text style={styles.emptyText}>No pending proposals.</Text>
               <Text style={styles.emptySubtext}>Add a suggestion to the queue to get started.</Text>
             </View>
@@ -1172,7 +1197,7 @@ export default function AutonomyScreen() {
       ) : null}
 
       {/* ── Approval Rules ───────────────────────────────────────────── */}
-      <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.lg }} />
+      <View style={{ height: 1, backgroundColor: "#263452", marginVertical: spacing.lg }} />
       <View style={styles.planSectionHeader}>
         <Text style={styles.sectionLabel}>APPROVAL RULES</Text>
         <TouchableOpacity
@@ -1204,12 +1229,12 @@ export default function AutonomyScreen() {
 
       {isRulesLoading && rules.length === 0 ? (
         <View style={styles.loadingRow}>
-          <ActivityIndicator color={colors.accent} size="small" />
+          <ActivityIndicator color={"#a855f7"} size="small" />
           <Text style={styles.loadingText}>Loading rules…</Text>
         </View>
       ) : rules.length === 0 && !showAddRuleForm ? (
         <View style={styles.emptyState}>
-          <SymbolView name="slider.horizontal.3" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+          <SymbolView name="slider.horizontal.3" size={36} tintColor={"#8490ab"} resizeMode="scaleAspectFit" />
           <Text style={styles.emptyText}>No rules configured.</Text>
           <Text style={styles.emptySubtext}>
             Default: all approved actions require explicit execution. Add a rule to block specific types.
@@ -1241,7 +1266,8 @@ export default function AutonomyScreen() {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content:   { paddingHorizontal: spacing.md },
 
@@ -1769,3 +1795,4 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
 });
+}

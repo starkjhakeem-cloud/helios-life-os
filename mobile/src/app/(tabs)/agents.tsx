@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import ActionReviewModal from "../../components/ActionReviewModal";
 import AgentCard from "../../components/AgentCard";
 import OrchestrationResultCard from "../../components/OrchestrationResultCard";
 import PlanCard from "../../components/PlanCard";
-import { colors, spacing, radius, typography } from "../../theme/theme";
+import { spacing, radius, typography , type ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 import {
   useAgentsStore,
@@ -43,6 +43,7 @@ const ORCH_ACCENT: Record<string, string> = {
 
 export default function AgentsScreen() {
   const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const accessToken = useAuthStore((s) => s.accessToken);
 
@@ -155,7 +156,7 @@ export default function AgentsScreen() {
   const activeGoals = goals.filter((g) => g.status === "active");
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
+    <View style={{ flex: 1, backgroundColor: "#020617" }}>
     <ScrollView
       style={{ flex: 1 }}
       showsVerticalScrollIndicator={false}
@@ -168,7 +169,7 @@ export default function AgentsScreen() {
         <RefreshControl
           refreshing={agentsLoading}
           onRefresh={load}
-          tintColor={colors.accentCyan}
+          tintColor={"#22d3ee"}
         />
       }
     >
@@ -187,7 +188,7 @@ export default function AgentsScreen() {
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionLabel}>ACTIVE AGENTS</Text>
         {agentsLoading ? (
-          <ActivityIndicator size="small" color={colors.accentCyan} />
+          <ActivityIndicator size="small" color={"#22d3ee"} />
         ) : null}
       </View>
 
@@ -240,7 +241,7 @@ export default function AgentsScreen() {
         <TextInput
           style={[styles.promptInput, promptError ? styles.promptInputError : null]}
           placeholder="e.g. Build and launch a mobile app in 30 days"
-          placeholderTextColor={colors.textMuted}
+          placeholderTextColor={"#8490ab"}
           value={prompt}
           onChangeText={(t) => { setPrompt(t); setPromptError(null); }}
           multiline
@@ -307,7 +308,7 @@ export default function AgentsScreen() {
           disabled={isPlanLoading}
         >
           {isPlanLoading ? (
-            <ActivityIndicator size="small" color={colors.textPrimary} />
+            <ActivityIndicator size="small" color={"#ffffff"} />
           ) : null}
           <Text style={styles.generateButtonText}>
             {isPlanLoading ? "GENERATING..." : "GENERATE PLAN"}
@@ -335,7 +336,7 @@ export default function AgentsScreen() {
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionLabel}>AGENT ORCHESTRATION</Text>
         {isOrchLoading ? (
-          <ActivityIndicator size="small" color={colors.accent} />
+          <ActivityIndicator size="small" color={"#a855f7"} />
         ) : null}
       </View>
 
@@ -352,7 +353,7 @@ export default function AgentsScreen() {
             orchObjectiveError ? styles.promptInputError : null,
           ]}
           placeholder="e.g. Launch a freelance consulting practice in 60 days"
-          placeholderTextColor={colors.textMuted}
+          placeholderTextColor={"#8490ab"}
           value={orchObjective}
           onChangeText={(t) => {
             setOrchObjective(t);
@@ -374,7 +375,7 @@ export default function AgentsScreen() {
                 const isSelected =
                   orchSelectedIds === null ||
                   orchSelectedIds.includes(agent.id);
-                const accent = ORCH_ACCENT[agent.id] ?? colors.textMuted;
+                const accent = ORCH_ACCENT[agent.id] ?? "#8490ab";
                 return (
                   <TouchableOpacity
                     key={agent.id}
@@ -412,7 +413,7 @@ export default function AgentsScreen() {
           disabled={isOrchLoading}
         >
           {isOrchLoading ? (
-            <ActivityIndicator size="small" color={colors.textPrimary} />
+            <ActivityIndicator size="small" color={"#ffffff"} />
           ) : null}
           <Text style={styles.generateButtonText}>
             {isOrchLoading ? "ORCHESTRATING..." : "ORCHESTRATE"}
@@ -448,7 +449,8 @@ export default function AgentsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   container: {
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxl * 2,
@@ -672,3 +674,4 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
 });
+}
