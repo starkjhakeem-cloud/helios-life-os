@@ -205,10 +205,13 @@ def send_message(
     # Agenda/schedule/priority questions always need live context even when the
     # user hasn't toggled context mode — auto-detect them here.
     _AGENDA_TRIGGERS = frozenset({
-        "agenda", "schedule", "today", "priority", "priorities",
-        "overdue", "do i have", "what do i have", "what's on",
-        "what is on", "what should i", "my tasks", "my goals",
-        "focus on", "what to do", "what can i", "this week",
+        "agenda", "my schedule", "today's schedule", "today's agenda",
+        "my priorities", "priorities for today", "priorities today",
+        "overdue", "do i have", "what do i have",
+        "what should i do", "what should i focus",
+        "my tasks", "my goals", "focus on today",
+        "plan for today", "today's tasks", "this morning",
+        "what do i need to do", "how am i doing",
     })
     _msg_lower = payload.message.lower()
     _is_agenda = any(t in _msg_lower for t in _AGENDA_TRIGGERS)

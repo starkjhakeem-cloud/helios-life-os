@@ -1,3 +1,6 @@
+import ast as _ast
+import operator as _op
+import re as _re
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
@@ -6,36 +9,154 @@ from app.schemas.ai import BriefingPriority, ChatResponse, DailyBriefing, PlanRe
 from app.schemas.autonomy import DailyPlan, FocusBlock, PriorityTask, SuggestionItem
 from app.schemas.orchestration import AgentAssessment, OrchestrationResponse
 
+# ── Safe math evaluator ───────────────────────────────────────────────────────
+
+_MATH_OPS: dict = {
+    _ast.Add:  _op.add,
+    _ast.Sub:  _op.sub,
+    _ast.Mult: _op.mul,
+    _ast.Div:  _op.truediv,
+    _ast.Pow:  _op.pow,
+    _ast.Mod:  _op.mod,
+    _ast.USub: _op.neg,
+    _ast.UAdd: _op.pos,
+}
+
+
+def _ast_eval(node: _ast.expr) -> float:
+    """Recursively evaluate an AST containing only numeric constants and safe ops."""
+    if isinstance(node, _ast.Constant) and isinstance(node.value, (int, float)):
+        return float(node.value)
+    if isinstance(node, _ast.BinOp) and type(node.op) in _MATH_OPS:
+        return _MATH_OPS[type(node.op)](_ast_eval(node.left), _ast_eval(node.right))
+    if isinstance(node, _ast.UnaryOp) and type(node.op) in _MATH_OPS:
+        return _MATH_OPS[type(node.op)](_ast_eval(node.operand))
+    raise ValueError("unsupported node")
+
+
+def _try_math(message: str) -> str | None:
+    """
+    If the message contains a simple arithmetic question, evaluate it and return
+    a formatted answer ("expr = result"). Returns None if no math is found.
+    Supports +, -, *, /, **, %, and natural-language words (times, divided by, etc.)
+    and "N percent of M".
+    """
+    text = message.lower()
+
+    # "N percent of M" → evaluate directly to avoid confusing the regex
+    pm = _re.search(
+        r'(\d+(?:\.\d+)?)\s*(?:percent|%)\s+of\s+(\d+(?:\.\d+)?)', text
+    )
+    if pm:
+        try:
+            pct, of_ = float(pm.group(1)), float(pm.group(2))
+            result = pct / 100 * of_
+            rfmt = str(int(result)) if result == int(result) else f"{result:.6g}"
+            return f"{pm.group(1)}% of {pm.group(2)} = {rfmt}"
+        except Exception:
+            return None
+
+    # Normalise natural-language words → operators
+    text = _re.sub(r'\btimes\b',       '*', text)
+    text = _re.sub(r'\bdivided\s+by\b','/', text)
+    text = _re.sub(r'\bplus\b',        '+', text)
+    text = _re.sub(r'\bminus\b',       '-', text)
+    text = text.replace('^', '**')
+
+    # Extract the first arithmetic expression (at least one operator)
+    m = _re.search(
+        r'-?\d+(?:\.\d+)?(?:\s*[+\-*/%]\s*-?\d+(?:\.\d+)?)+',
+        text,
+    )
+    if not m:
+        return None
+
+    expr = _re.sub(r'\s+', '', m.group(0))
+    try:
+        result = _ast_eval(_ast.parse(expr, mode='eval').body)
+    except Exception:
+        return None
+
+    rfmt = str(int(result)) if result == int(result) else f"{result:.6g}"
+    return f"{expr} = {rfmt}"
+
+
 # ── Intent detection ──────────────────────────────────────────────────────────
 
 def _detect_intent(message: str) -> str:
+    """
+    Classify the user's message into an intent bucket.
+
+    Priority order matters — more specific checks run first:
+      simple_math  → arithmetic expression detected
+      agenda       → question about the user's own HELIOS schedule/priorities
+      greeting     → salutation
+      goals/tasks/planning/analytics/agents → HELIOS domain questions
+      help         → explicit HELIOS capability inquiry
+      general_question → anything else (factual, technical, coding, etc.)
+    """
+    # Math wins unconditionally
+    if _try_math(message):
+        return "simple_math"
+
     lower = message.lower()
-    # Agenda/schedule checks run first — they overlap with planning/task keywords
-    # and need to resolve as "agenda" so the context-aware response is returned.
-    if any(w in lower for w in [
-        "agenda", "what do i have", "what is on", "what's on",
-        "my schedule", "today's schedule", "schedule for today",
-        "do i have anything", "what should i do", "what should i focus",
-        "focus on today", "what to do today", "priorities",
-        "overdue", "today's tasks", "what do i need",
-        "plan for today", "this week", "this morning",
-    ]):
+
+    # HELIOS context queries about the user's OWN data.
+    # The "my" possessive and today-anchored phrases distinguish these from
+    # generic questions like "how do goals work?" or "what is a schedule?"
+    _AGENDA_PATTERNS = (
+        "my agenda", "today's agenda", "my schedule", "today's schedule",
+        "what do i have today", "do i have anything",
+        "what's on my", "what is on my",
+        "what should i do today", "what should i focus",
+        "focus on today", "my priorities today", "priorities for today",
+        "overdue", "today's tasks", "plan for today", "this morning",
+        "how am i doing", "how have i been doing",
+    )
+    if any(p in lower for p in _AGENDA_PATTERNS):
         return "agenda"
-    if any(w in lower for w in ["hello", " hi ", "hey", "morning", "evening", "afternoon", "greet"]) or lower.strip() in {"hi", "hello", "hey"}:
+    if "this week" in lower and any(w in lower for w in ["my", "i ", "am i", "do i", "i have"]):
+        return "agenda"
+
+    # Greetings
+    if lower.strip() in {"hi", "hello", "hey", "hi!", "hello!", "hey!"}:
         return "greeting"
-    if any(w in lower for w in ["goal", "objective", "target", "milestone", "achieve", "aspire"]):
+    if any(w in lower for w in [" hi ", "hey ", "hello ", "good morning", "good evening", "good afternoon"]):
+        return "greeting"
+
+    # HELIOS-specific data queries (possessive "my" differentiates from generic)
+    if any(p in lower for p in ["my goal", "my goals", "my objective"]):
         return "goals"
-    if any(w in lower for w in ["task", "todo", "to-do", "action item", "checklist", "doing", "working on"]):
+    if any(p in lower for p in ["my task", "my tasks", "my todo", "my to-do"]):
         return "tasks"
-    if any(w in lower for w in ["plan", "planning", "schedule", "roadmap", "strategy", "sprint", "timeline"]):
-        return "planning"
-    if any(w in lower for w in ["analytic", "progress", "metric", "stat", "performance", "trend", "data", "report"]):
+    if any(p in lower for p in [
+        "my progress", "my analytics",
+        "my performance", "my stats", "my completion",
+    ]):
         return "analytics"
-    if any(w in lower for w in ["agent", "monitor", "intelligence", "system status", "helios"]):
+
+    # Generic HELIOS domain keywords (knowledge questions about HELIOS features)
+    if any(w in lower for w in ["goal", "objective", "milestone", "achieve"]):
+        return "goals"
+    if any(w in lower for w in ["task", "todo", "to-do", "action item", "checklist"]):
+        return "tasks"
+    if any(w in lower for w in ["plan", "planning", "roadmap", "strategy", "sprint"]):
+        return "planning"
+    if any(w in lower for w in ["analytic", "metric", "performance", "trend"]):
+        return "analytics"
+    if any(w in lower for w in ["agent", "monitor", "system status"]):
         return "agents"
-    if any(w in lower for w in ["help", "what can you", "capabilities", "feature", "how do you", "what do you"]):
+
+    # Help / HELIOS capability questions — narrowed so general "how do you X?" doesn't match
+    if any(p in lower for p in [
+        "what can helios", "what can you do", "how do you work",
+        "what are you", "who are you", "your capabilities", "helios features",
+        "what does helios",
+    ]):
         return "help"
-    return "general"
+
+    # Everything else: general knowledge, factual, coding, math — answer directly
+    return "general_question"
 
 
 def _build_agenda_reply(user_context: str | None) -> str:
@@ -342,33 +463,9 @@ _RESPONSES: dict[str, dict] = {
             },
         ],
     },
-    "general": {
-        "reply": (
-            "Acknowledged. I am processing your query through the HELIOS intelligence layer. "
-            "For the most precise guidance, try framing your question around a specific domain: "
-            "goals, tasks, planning, analytics, or system status. "
-            "I perform best with direct, operational questions."
-        ),
-        "suggested_actions": [
-            "Check the Home tab for your daily intelligence briefing",
-            "Review the Goals and Tasks tabs for pending items",
-        ],
-        "follow_up_questions": [
-            "What should I focus on today?",
-            "How do I plan my next 30 days?",
-            "Show me my analytics summary.",
-        ],
-        "recommended_actions": [
-            {
-                "type": "prioritize_tasks",
-                "title": "Review and Reprioritize Tasks",
-                "description": "Surface your most impactful open tasks and set clear daily priorities.",
-                "confidence": 0.68,
-                "payload_preview": {"filter": "open", "sort_by": "priority_desc"},
-            },
-        ],
-    },
 }
+# NOTE: "general_question" and "simple_math" are handled directly in
+# generate_chat_reply — they are NOT canned _RESPONSES entries.
 
 
 # ── Provider ──────────────────────────────────────────────────────────────────
@@ -664,8 +761,25 @@ class MockAIProvider(AIProvider):
         history: list[dict] | None = None,
     ) -> ChatResponse:
         intent = _detect_intent(message)
+        now = datetime.now(timezone.utc).isoformat()
 
-        # Agenda queries get a context-aware structured response even in mock mode.
+        # ── Simple math — compute and answer directly ─────────────────────────
+        if intent == "simple_math":
+            answer = _try_math(message) or "I couldn't evaluate that expression."
+            return ChatResponse(
+                reply=answer,
+                suggested_actions=[],
+                follow_up_questions=[
+                    "What is today's agenda?",
+                    "What should I focus on today?",
+                    "How are my goals progressing?",
+                ],
+                recommended_actions=[],
+                provider="mock",
+                generated_at=now,
+            )
+
+        # ── Agenda / schedule — context-aware structured reply ────────────────
         if intent == "agenda" or context_type == "agenda":
             return ChatResponse(
                 reply=_build_agenda_reply(user_context),
@@ -690,10 +804,35 @@ class MockAIProvider(AIProvider):
                     ),
                 ],
                 provider="mock",
-                generated_at=datetime.now(timezone.utc).isoformat(),
+                generated_at=now,
             )
 
-        data = _RESPONSES[intent]
+        # ── General knowledge / factual questions ─────────────────────────────
+        # Mock mode has no language model — be honest rather than redirecting.
+        if intent == "general_question":
+            return ChatResponse(
+                reply=(
+                    "HELIOS is running in mock mode and can answer HELIOS-specific "
+                    "questions (goals, tasks, calendar, agenda, planning, analytics) "
+                    "using your live app data. For general knowledge questions, "
+                    "add ANTHROPIC_API_KEY to backend/.env to enable full AI responses."
+                ),
+                suggested_actions=[
+                    "Ask: 'What's on today's agenda?'",
+                    "Ask: 'How are my goals progressing?'",
+                ],
+                follow_up_questions=[
+                    "What should I focus on today?",
+                    "What are my active goals?",
+                    "What tasks are overdue?",
+                ],
+                recommended_actions=[],
+                provider="mock",
+                generated_at=now,
+            )
+
+        # ── HELIOS domain canned responses ────────────────────────────────────
+        data = _RESPONSES.get(intent, _RESPONSES["help"])
         reply = data["reply"]
 
         if user_context and "No active goals" not in user_context:
@@ -717,7 +856,7 @@ class MockAIProvider(AIProvider):
             follow_up_questions=data["follow_up_questions"],
             recommended_actions=recommended_actions,
             provider="mock",
-            generated_at=datetime.now(timezone.utc).isoformat(),
+            generated_at=now,
         )
 
     def generate_suggestions(
