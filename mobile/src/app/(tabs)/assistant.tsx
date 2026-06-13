@@ -26,6 +26,11 @@ import {
 import { radius, spacing, typography, type ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 
+// Must match tabBarStyle.height in (tabs)/_layout.tsx.
+// The tab bar is position:absolute so it overlays screen content —
+// we shift the composer up by this amount so it sits above the bar.
+const TAB_BAR_HEIGHT = 106;
+
 const WELCOME: ChatMessage = {
   id: "helios-welcome",
   role: "assistant",
@@ -429,7 +434,7 @@ export default function AssistantScreen() {
     <KeyboardAvoidingView
       style={[styles.root, { paddingTop: insets.top }]}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={0}
+      keyboardVerticalOffset={Platform.OS === "ios" ? TAB_BAR_HEIGHT : 0}
     >
       {/* Header */}
       <View style={styles.header}>
@@ -507,6 +512,7 @@ export default function AssistantScreen() {
         data={displayMessages}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
+        style={styles.messageList}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -520,8 +526,8 @@ export default function AssistantScreen() {
         </View>
       ) : null}
 
-      {/* Input bar */}
-      <View style={[styles.inputBar, { paddingBottom: insets.bottom + spacing.sm }]}>
+      {/* Input bar — sits above the absolute-positioned tab bar via marginBottom */}
+      <View style={styles.inputBar}>
         <TextInput
           style={styles.textInput}
           value={input}
@@ -717,9 +723,16 @@ function createStyles(colors: ThemeColors) {
     flexShrink: 0,
   },
 
+  // flex:1 ensures the list takes exactly the remaining space, letting the
+  // input bar stay at the bottom rather than being pushed off screen.
+  messageList: {
+    flex: 1,
+  },
+
   listContent: {
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xl,
     gap: spacing.md,
   },
 
@@ -865,24 +878,28 @@ function createStyles(colors: ThemeColors) {
     color: "#ef4444",
   },
 
-  // Input bar
+  // Input bar — marginBottom lifts it above the absolute-positioned tab bar (106px).
+  // keyboardVerticalOffset on the KAV is set to the same value so that when the
+  // keyboard opens, the bar lands exactly at the keyboard top (no gap, no overlap).
   inputBar: {
     flexDirection: "row",
     alignItems: "flex-end",
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.background,
+    marginBottom: TAB_BAR_HEIGHT,
   },
 
   textInput: {
     flex: 1,
-    backgroundColor: colors.surfaceDark,
-    borderRadius: radius.md,
+    backgroundColor: "rgba(6, 17, 33, 0.92)",
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: colors.borderDark,
+    borderColor: "rgba(139, 92, 246, 0.55)",
     color: colors.textPrimary,
     ...typography.body,
     paddingHorizontal: spacing.md,
@@ -895,7 +912,7 @@ function createStyles(colors: ThemeColors) {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.accentCyan,
+    backgroundColor: "#8B5CF6",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
