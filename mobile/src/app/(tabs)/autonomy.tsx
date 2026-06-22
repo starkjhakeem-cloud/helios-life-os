@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
+  Animated,
   View,
   Text,
   ActivityIndicator,
@@ -9,10 +10,12 @@ import {
   TouchableOpacity,
   Alert,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SymbolView } from "expo-symbols";
+import * as Haptics from "expo-haptics";
 
-import { spacing, radius, typography , type ThemeColors } from "../../theme/theme";
+import { spacing, radius, typography, type ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 import { useAuthStore, useAutonomyStore, useNotificationsStore, useBackgroundJobsStore } from "../../store";
 import type {
@@ -21,6 +24,8 @@ import type {
   AutonomyQueueItem,
   AutonomyRule,
   AutonomyRuleCreate,
+  BackgroundJob,
+  BackgroundJobTriggerResult,
   DailyPlan,
   FocusBlock,
   PriorityTask,
@@ -30,6 +35,27 @@ import type {
 } from "../../store";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
+
+const JOB_LABELS: Record<string, string> = {
+  daily_briefing_generation:   "Daily Briefing",
+  proactive_suggestion_scan:   "Proactive Scan",
+  reminder_check:              "Reminder Check",
+  integration_sync_simulation: "Integration Sync",
+};
+
+const JOB_ICONS: Record<string, Parameters<typeof SymbolView>[0]["name"]> = {
+  daily_briefing_generation:   "doc.text.fill",
+  proactive_suggestion_scan:   "lightbulb.fill",
+  reminder_check:              "bell.fill",
+  integration_sync_simulation: "arrow.triangle.2.circlepath",
+};
+
+const ACTION_DURATION: Record<string, string> = {
+  create_task:        "~10 min",
+  create_goal:        "~15 min",
+  generate_plan:      "~5 min",
+  update_task_status: "~5 min",
+};
 
 function getEnergyColors(c: ThemeColors): Record<string, string> {
   return { high: c.accent, medium: c.warning, low: c.textMuted };
@@ -45,11 +71,11 @@ function getStatusColors(c: ThemeColors): Record<string, string> {
 }
 
 const AGENT_LABELS: Record<string, string> = {
-  strategy_agent:       "STRATEGY",
-  task_manager:         "TASKS",
-  analytics_engine:     "ANALYTICS",
+  strategy_agent:        "STRATEGY",
+  task_manager:          "TASKS",
+  analytics_engine:      "ANALYTICS",
   calendar_intelligence: "CALENDAR",
-  email_intelligence:   "EMAIL",
+  email_intelligence:    "EMAIL",
 };
 
 function agentLabel(name: string): string {
@@ -60,14 +86,202 @@ function agentLabel(name: string): string {
 
 type BadgeProps = { label: string; color: string };
 
-function Badge({
-label, color }: BadgeProps) {
+function Badge({ label, color }: BadgeProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={[styles.badge, { borderColor: color }]}>
       <Text style={[styles.badgeText, { color }]}>{label}</Text>
     </View>
+  );
+}
+
+// ── Today's Mission card ──────────────────────────────────────────────────────
+
+type TodaysMissionProps = {
+  suggestion: SuggestionItem | null;
+  anim: Animated.Value;
+  onStartSession: () => void;
+};
+
+function TodaysMissionCard({ suggestion, anim, onStartSession }: TodaysMissionProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
+  if (!suggestion) return null;
+
+  const riskColor =
+    suggestion.risk_level === "high"   ? colors.danger :
+    suggestion.risk_level === "medium" ? colors.warning : colors.accentCyan;
+  const priorityLabel =
+    suggestion.risk_level === "high"   ? "HIGH PRIORITY" :
+    suggestion.risk_level === "medium" ? "MEDIUM PRIORITY" : "STANDARD";
+  const duration = ACTION_DURATION[suggestion.suggested_action_type] ?? "~20 min";
+
+  const slideStyle = {
+    opacity: anim,
+    transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
+  };
+
+  return (
+    <Animated.View style={[styles.missionCard, slideStyle]}>
+      <View style={styles.missionAccentBar} />
+      <View style={styles.missionContent}>
+        <View style={styles.missionHeader}>
+          <View style={styles.missionHeaderLeft}>
+            <SymbolView name="sparkles" size={12} tintColor={colors.accent} resizeMode="scaleAspectFit" />
+            <Text style={styles.missionLabel}>TODAY'S MISSION</Text>
+          </View>
+          <View style={[styles.missionPriorityBadge, { borderColor: `${riskColor}55`, backgroundColor: `${riskColor}15` }]}>
+            <Text style={[styles.missionPriorityText, { color: riskColor }]}>{priorityLabel}</Text>
+          </View>
+        </View>
+
+        <Text style={styles.missionTitle} numberOfLines={2}>{suggestion.title}</Text>
+        <Text style={styles.missionDescription} numberOfLines={2}>{suggestion.description}</Text>
+
+        <View style={styles.missionFooter}>
+          <View style={styles.missionMeta}>
+            <SymbolView name="clock" size={11} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+            <Text style={styles.missionMetaText}>{duration}</Text>
+            <View style={styles.missionMetaDot} />
+            <Text style={styles.missionMetaText}>{agentLabel(suggestion.source_agent)}</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.missionStartBtn}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              onStartSession();
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.missionStartBtnText}>Start Session</Text>
+            <SymbolView name="arrow.right" size={11} tintColor={colors.background} resizeMode="scaleAspectFit" />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
+// ── Job card ──────────────────────────────────────────────────────────────────
+
+type JobCardProps = {
+  job: BackgroundJob;
+  isMutating: boolean;
+  onTrigger: (id: string) => Promise<BackgroundJobTriggerResult | null>;
+};
+
+function JobCard({ job, isMutating, onTrigger }: JobCardProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const [runPhase, setRunPhase] = useState<"idle" | "running" | "done">("idle");
+
+  const healthStatus =
+    job.status === "failed"  ? "FAILED"   :
+    !job.enabled             ? "DISABLED" :
+    job.status === "running" ? "RUNNING"  : "HEALTHY";
+  const healthColor =
+    job.status === "failed"  ? colors.danger  :
+    !job.enabled             ? colors.textMuted :
+    job.status === "running" ? colors.warning : colors.success;
+
+  const formatTime = (iso: string | null) => {
+    if (!iso) return "Never";
+    return new Date(iso).toLocaleString("en-US", {
+      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+    });
+  };
+
+  const handleRun = async () => {
+    if (isMutating || runPhase === "running") return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setRunPhase("running");
+    const result = await onTrigger(job.id);
+    setRunPhase("done");
+    setTimeout(() => setRunPhase("idle"), 2500);
+    if (result) Alert.alert("Job Triggered", result.result_summary, [{ text: "OK" }]);
+  };
+
+  const handleCardPress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const iconName = JOB_ICONS[job.job_type] ?? "gearshape.fill";
+
+  return (
+    <TouchableOpacity
+      style={styles.jobCard}
+      onPress={handleCardPress}
+      activeOpacity={0.88}
+    >
+      {/* Header row */}
+      <View style={styles.jobCardHeader}>
+        <View style={styles.jobCardHeaderLeft}>
+          <View style={[styles.jobIconWrap, { backgroundColor: `${healthColor}18` }]}>
+            <SymbolView name={iconName} size={14} tintColor={healthColor} resizeMode="scaleAspectFit" />
+          </View>
+          <View style={styles.jobCardInfo}>
+            <Text style={styles.jobName}>{JOB_LABELS[job.job_type] ?? job.job_type}</Text>
+            <Text style={styles.jobSchedule}>{job.schedule_label}</Text>
+          </View>
+        </View>
+        <View style={[styles.jobHealthBadge, { borderColor: `${healthColor}55`, backgroundColor: `${healthColor}15` }]}>
+          <View style={[styles.jobHealthDot, { backgroundColor: healthColor }]} />
+          <Text style={[styles.jobHealthText, { color: healthColor }]}>{healthStatus}</Text>
+        </View>
+      </View>
+
+      {/* Last / Next run row */}
+      <View style={styles.jobMetaRow}>
+        <View style={styles.jobMetaItem}>
+          <Text style={styles.jobMetaLabel}>LAST RUN</Text>
+          <Text style={styles.jobMetaValue}>{formatTime(job.last_run_at)}</Text>
+        </View>
+        <View style={styles.jobMetaDivider} />
+        <View style={styles.jobMetaItem}>
+          <Text style={styles.jobMetaLabel}>NEXT RUN</Text>
+          <Text style={styles.jobMetaValue}>{formatTime(job.next_run_at)}</Text>
+        </View>
+      </View>
+
+      {/* Run button */}
+      {job.enabled ? (
+        <TouchableOpacity
+          style={[
+            styles.jobRunBtn,
+            runPhase === "running" && styles.jobRunBtnRunning,
+            runPhase === "done"    && styles.jobRunBtnDone,
+            (isMutating || runPhase === "running") && styles.btnDisabled,
+          ]}
+          onPress={handleRun}
+          disabled={isMutating || runPhase === "running"}
+          activeOpacity={0.75}
+        >
+          {runPhase === "running" ? (
+            <>
+              <ActivityIndicator size="small" color={colors.warning} style={{ width: 12, height: 12 }} />
+              <Text style={[styles.jobRunBtnText, { color: colors.warning }]}>RUNNING…</Text>
+            </>
+          ) : runPhase === "done" ? (
+            <>
+              <SymbolView name="checkmark.circle.fill" size={12} tintColor={colors.success} resizeMode="scaleAspectFit" />
+              <Text style={[styles.jobRunBtnText, { color: colors.success }]}>COMPLETED</Text>
+            </>
+          ) : (
+            <>
+              <SymbolView name="play.fill" size={10} tintColor={colors.success} resizeMode="scaleAspectFit" />
+              <Text style={styles.jobRunBtnText}>Run Now</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.jobDisabledRow}>
+          <SymbolView name="pause.circle" size={12} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+          <Text style={styles.jobDisabledText}>JOB DISABLED — enable in settings</Text>
+        </View>
+      )}
+    </TouchableOpacity>
   );
 }
 
@@ -80,14 +294,13 @@ type SuggestionCardProps = {
   onAddToQueue: (suggestion: SuggestionItem) => void;
 };
 
-function SuggestionCard({
-item, isQueued, isMutating, onAddToQueue }: SuggestionCardProps) {
+function SuggestionCard({ item, isQueued, isMutating, onAddToQueue }: SuggestionCardProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const handleAdd = () => {
     Alert.alert(
-      "Add to Queue",
-      `Add "${item.title}" to the autonomy queue for review?\n\nYou can approve and execute it from the queue.`,
+      "Add to Review Queue",
+      `Queue "${item.title}" for review?\n\nYou can approve and execute it from the queue below.`,
       [
         { text: "Cancel", style: "cancel" },
         { text: "Add to Queue", onPress: () => onAddToQueue(item) },
@@ -97,7 +310,6 @@ item, isQueued, isMutating, onAddToQueue }: SuggestionCardProps) {
 
   return (
     <View style={[styles.card, isQueued && styles.cardQueued]}>
-      {/* Header row */}
       <View style={styles.cardHeader}>
         <View style={styles.cardMeta}>
           <Badge label={agentLabel(item.source_agent)} color={colors.accent} />
@@ -112,22 +324,15 @@ item, isQueued, isMutating, onAddToQueue }: SuggestionCardProps) {
       <Text style={styles.cardTitle}>{item.title}</Text>
       <Text style={styles.cardDescription}>{item.description}</Text>
 
-      {/* Reason */}
       <View style={styles.reasonBox}>
-        <Text style={styles.reasonLabel}>WHY HELIOS SUGGESTS THIS</Text>
+        <Text style={styles.reasonLabel}>HELIOS INSIGHT</Text>
         <Text style={styles.reasonText}>{item.reason}</Text>
       </View>
 
-      {/* Add to Queue button */}
       {isQueued ? (
         <View style={styles.queuedRow}>
-          <SymbolView
-            name="checkmark.circle.fill"
-            size={14}
-            tintColor={colors.success}
-            resizeMode="scaleAspectFit"
-          />
-          <Text style={styles.queuedText}>Added to Queue</Text>
+          <SymbolView name="checkmark.circle.fill" size={14} tintColor={colors.success} resizeMode="scaleAspectFit" />
+          <Text style={styles.queuedText}>Added to Review Queue</Text>
         </View>
       ) : (
         <TouchableOpacity
@@ -156,13 +361,7 @@ type QueueCardProps = {
 };
 
 function QueueCard({
-  item,
-  isMutating,
-  isExecuting,
-  isBlocked,
-  onApprove,
-  onReject,
-  onExecute,
+  item, isMutating, isExecuting, isBlocked, onApprove, onReject, onExecute,
 }: QueueCardProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -206,14 +405,8 @@ function QueueCard({
     <View style={styles.card}>
       <View style={styles.cardHeader}>
         <View style={styles.cardMeta}>
-          <Badge
-            label={item.risk_level.toUpperCase()}
-            color={getRiskColors(colors)[item.risk_level] ?? colors.textMuted}
-          />
-          <Badge
-            label={item.status.toUpperCase()}
-            color={getStatusColors(colors)[item.status] ?? colors.textMuted}
-          />
+          <Badge label={item.risk_level.toUpperCase()} color={getRiskColors(colors)[item.risk_level] ?? colors.textMuted} />
+          <Badge label={item.status.toUpperCase()} color={getStatusColors(colors)[item.status] ?? colors.textMuted} />
         </View>
         <Text style={styles.cardAgent}>{agentLabel(item.source_agent)}</Text>
       </View>
@@ -306,13 +499,7 @@ type DailyPlanSectionProps = {
 };
 
 function DailyPlanSection({
-  plan,
-  isLoading,
-  error,
-  isMutating,
-  queuedIds,
-  onGenerate,
-  onAddToQueue,
+  plan, isLoading, error, isMutating, queuedIds, onGenerate, onAddToQueue,
 }: DailyPlanSectionProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -329,9 +516,8 @@ function DailyPlanSection({
 
   return (
     <>
-      {/* Section header with generate button */}
       <View style={styles.planSectionHeader}>
-        <Text style={styles.sectionLabel}>DAILY PLAN</Text>
+        <Text style={styles.sectionLabel}>TODAY'S EXECUTION PLAN</Text>
         <TouchableOpacity
           onPress={onGenerate}
           disabled={isLoading}
@@ -341,7 +527,9 @@ function DailyPlanSection({
           {isLoading ? (
             <ActivityIndicator color={colors.accent} size="small" />
           ) : (
-            <Text style={styles.generateBtnText}>{plan ? "Regenerate" : "Generate"}</Text>
+            <Text style={styles.generateBtnText}>
+              {plan ? "Regenerate Plan" : "Generate Today's Plan"}
+            </Text>
           )}
         </TouchableOpacity>
       </View>
@@ -353,18 +541,18 @@ function DailyPlanSection({
       ) : !plan && !isLoading ? (
         <View style={styles.emptyState}>
           <SymbolView name="calendar.badge.clock" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
-          <Text style={styles.emptyText}>No plan generated yet.</Text>
-          <Text style={styles.emptySubtext}>Tap Generate to build today&apos;s operational plan.</Text>
+          <Text style={styles.emptyText}>No execution plan yet.</Text>
+          <Text style={styles.emptySubtext}>
+            Tap "Generate Today's Plan" and HELIOS will build your full operational schedule.
+          </Text>
         </View>
       ) : plan ? (
         <>
-          {/* Overview */}
           <View style={styles.planOverviewCard}>
             <Text style={styles.planDate}>{plan.plan_date}</Text>
             <Text style={styles.planOverview}>{plan.overview}</Text>
           </View>
 
-          {/* Focus Blocks */}
           <Text style={styles.planSubLabel}>FOCUS BLOCKS</Text>
           {plan.focus_blocks.map((block: FocusBlock, idx: number) => (
             <View key={idx} style={styles.focusBlockRow}>
@@ -376,7 +564,6 @@ function DailyPlanSection({
             </View>
           ))}
 
-          {/* Priority Tasks */}
           <Text style={[styles.planSubLabel, { marginTop: spacing.md }]}>PRIORITY TASKS</Text>
           {plan.priority_tasks.map((task: PriorityTask) => (
             <View key={task.rank} style={styles.priorityTaskRow}>
@@ -393,7 +580,6 @@ function DailyPlanSection({
             </View>
           ))}
 
-          {/* Suggested Queue Items */}
           {plan.suggested_queue_items.length > 0 ? (
             <>
               <Text style={[styles.planSubLabel, { marginTop: spacing.md }]}>SUGGESTED ACTIONS</Text>
@@ -406,10 +592,7 @@ function DailyPlanSection({
                         <Badge label={agentLabel(item.source_agent)} color={colors.accent} />
                         <Badge label={item.risk_level.toUpperCase()} color={getRiskColors(colors)[item.risk_level] ?? colors.textMuted} />
                       </View>
-                      <Badge
-                        label={item.suggested_action_type.replace(/_/g, " ").toUpperCase()}
-                        color={colors.accentCyan}
-                      />
+                      <Badge label={item.suggested_action_type.replace(/_/g, " ").toUpperCase()} color={colors.accentCyan} />
                     </View>
                     <Text style={styles.cardTitle}>{item.title}</Text>
                     <Text style={styles.cardDescription}>{item.description}</Text>
@@ -438,7 +621,6 @@ function DailyPlanSection({
             </>
           ) : null}
 
-          {/* Risks */}
           {plan.risks.length > 0 ? (
             <>
               <Text style={[styles.planSubLabel, { marginTop: spacing.md }]}>RISKS</Text>
@@ -452,7 +634,6 @@ function DailyPlanSection({
             </>
           ) : null}
 
-          {/* Agent recommendations */}
           {plan.recommended_agent_actions.length > 0 ? (
             <>
               <Text style={[styles.planSubLabel, { marginTop: spacing.md }]}>AGENT RECOMMENDATIONS</Text>
@@ -466,7 +647,6 @@ function DailyPlanSection({
             </>
           ) : null}
 
-          {/* Schedule conflicts */}
           {plan.schedule_conflicts.length > 0 ? (
             <>
               <Text style={[styles.planSubLabel, { marginTop: spacing.md }]}>SCHEDULE CONFLICTS</Text>
@@ -518,8 +698,7 @@ type AddRuleFormProps = {
   isMutating: boolean;
 };
 
-function AddRuleForm({
-onSave, onCancel, isMutating }: AddRuleFormProps) {
+function AddRuleForm({ onSave, onCancel, isMutating }: AddRuleFormProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [actionType, setActionType] = useState<string>(SAFE_ACTION_TYPES[0]);
@@ -537,7 +716,6 @@ onSave, onCancel, isMutating }: AddRuleFormProps) {
 
   return (
     <View style={styles.addRuleForm}>
-      {/* Action type */}
       <Text style={styles.formLabel}>ACTION TYPE</Text>
       <View style={styles.formOptionGrid}>
         {SAFE_ACTION_TYPES.map((at) => (
@@ -554,7 +732,6 @@ onSave, onCancel, isMutating }: AddRuleFormProps) {
         ))}
       </View>
 
-      {/* Risk level */}
       <Text style={[styles.formLabel, { marginTop: spacing.sm }]}>RISK LEVEL</Text>
       <View style={styles.formOptionRow}>
         {(["any", "low", "medium", "high"] as const).map((rl) => (
@@ -571,7 +748,6 @@ onSave, onCancel, isMutating }: AddRuleFormProps) {
         ))}
       </View>
 
-      {/* Execution permission */}
       <Text style={[styles.formLabel, { marginTop: spacing.sm }]}>EXECUTION</Text>
       <View style={styles.formOptionRow}>
         <TouchableOpacity
@@ -620,8 +796,7 @@ type RuleCardProps = {
   onDelete: (id: string) => void;
 };
 
-function RuleCard({
-rule, isMutating, onToggleExecution, onDelete }: RuleCardProps) {
+function RuleCard({ rule, isMutating, onToggleExecution, onDelete }: RuleCardProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const handleToggle = () => {
@@ -651,10 +826,7 @@ rule, isMutating, onToggleExecution, onDelete }: RuleCardProps) {
     <View style={styles.ruleCard}>
       <View style={styles.cardHeader}>
         <View style={styles.cardMeta}>
-          <Badge
-            label={(ACTION_LABELS[rule.action_type] ?? rule.action_type).toUpperCase()}
-            color={colors.accentCyan}
-          />
+          <Badge label={(ACTION_LABELS[rule.action_type] ?? rule.action_type).toUpperCase()} color={colors.accentCyan} />
           <Badge
             label={rule.risk_level ? rule.risk_level.toUpperCase() : "ANY RISK"}
             color={rule.risk_level ? (getRiskColors(colors)[rule.risk_level] ?? colors.textMuted) : colors.textMuted}
@@ -666,9 +838,7 @@ rule, isMutating, onToggleExecution, onDelete }: RuleCardProps) {
         />
       </View>
 
-      {rule.notes ? (
-        <Text style={styles.cardDescription}>{rule.notes}</Text>
-      ) : null}
+      {rule.notes ? <Text style={styles.cardDescription}>{rule.notes}</Text> : null}
 
       <Text style={styles.ruleIndicatorText}>
         {rule.requires_manual_approval
@@ -678,11 +848,7 @@ rule, isMutating, onToggleExecution, onDelete }: RuleCardProps) {
 
       <View style={styles.actionRow}>
         <TouchableOpacity
-          style={[
-            styles.actionBtn,
-            rule.allow_execution ? styles.rejectBtn : styles.approveBtn,
-            isMutating && styles.btnDisabled,
-          ]}
+          style={[styles.actionBtn, rule.allow_execution ? styles.rejectBtn : styles.approveBtn, isMutating && styles.btnDisabled]}
           onPress={handleToggle}
           disabled={isMutating}
           activeOpacity={0.75}
@@ -707,34 +873,31 @@ rule, isMutating, onToggleExecution, onDelete }: RuleCardProps) {
 // ── Audit log section ─────────────────────────────────────────────────────────
 
 const AUDIT_EVENT_LABELS: Record<string, string> = {
-  suggestion_created:      "Suggestions generated",
-  queue_item_created:      "Item added to queue",
-  queue_item_approved:     "Item approved",
-  queue_item_rejected:     "Item rejected",
-  queue_item_executed:     "Execution succeeded",
+  suggestion_created:        "Suggestions generated",
+  queue_item_created:        "Item added to queue",
+  queue_item_approved:       "Item approved",
+  queue_item_rejected:       "Item rejected",
+  queue_item_executed:       "Execution succeeded",
   execution_blocked_by_rule: "Execution blocked",
-  execution_failed:        "Execution failed",
+  execution_failed:          "Execution failed",
 };
 
 function getAuditEventColors(c: ThemeColors): Record<string, string> {
   return {
-    suggestion_created:       c.info,
-    queue_item_created:       c.accentCyan,
-    queue_item_approved:      c.success,
-    queue_item_rejected:      c.textMuted,
-    queue_item_executed:      c.success,
+    suggestion_created:        c.info,
+    queue_item_created:        c.accentCyan,
+    queue_item_approved:       c.success,
+    queue_item_rejected:       c.textMuted,
+    queue_item_executed:       c.success,
     execution_blocked_by_rule: c.warning,
-    execution_failed:         c.danger,
+    execution_failed:          c.danger,
   };
 }
 
 function formatAuditTime(iso: string): string {
   try {
     return new Date(iso).toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
+      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
     });
   } catch {
     return iso;
@@ -743,8 +906,7 @@ function formatAuditTime(iso: string): string {
 
 type AuditEntryRowProps = { entry: AutonomyAuditLogEntry };
 
-function AuditEntryRow({
-entry }: AuditEntryRowProps) {
+function AuditEntryRow({ entry }: AuditEntryRowProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const color = getAuditEventColors(colors)[entry.event_type] ?? colors.textMuted;
@@ -772,8 +934,7 @@ type AuditLogSectionProps = {
   error: string | null;
 };
 
-function AuditLogSection({
-entries, isLoading, error }: AuditLogSectionProps) {
+function AuditLogSection({ entries, isLoading, error }: AuditLogSectionProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   return (
@@ -796,9 +957,9 @@ entries, isLoading, error }: AuditLogSectionProps) {
       ) : entries.length === 0 ? (
         <View style={styles.emptyState}>
           <SymbolView name="doc.text.magnifyingglass" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
-          <Text style={styles.emptyText}>No audit events yet.</Text>
+          <Text style={styles.emptyText}>No activity recorded yet.</Text>
           <Text style={styles.emptySubtext}>
-            Events appear here as you review, approve, and execute autonomy queue items.
+            Your full decision history — approvals, rejections, and executions — appears here.
           </Text>
         </View>
       ) : (
@@ -806,9 +967,7 @@ entries, isLoading, error }: AuditLogSectionProps) {
           {entries.map((entry, i) => (
             <View key={entry.id}>
               <AuditEntryRow entry={entry} />
-              {i < entries.length - 1 ? (
-                <View style={styles.auditDivider} />
-              ) : null}
+              {i < entries.length - 1 ? <View style={styles.auditDivider} /> : null}
             </View>
           ))}
         </View>
@@ -823,53 +982,54 @@ export default function AutonomyScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const accessToken = useAuthStore((s) => s.accessToken);
+
   const {
-    items,
-    isLoading,
-    isMutating,
-    executingItemId,
-    error,
-    suggestions,
-    isSuggestionsLoading,
-    suggestionsError,
-    queuedSuggestionIds,
-    dailyPlan,
-    isDailyPlanLoading,
-    dailyPlanError,
-    dailyPlanQueuedIds,
-    rules,
-    isRulesLoading,
-    rulesError,
-    isRulesMutating,
-    auditLog,
-    isAuditLogLoading,
-    auditLogError,
-    fetchQueue,
-    fetchSuggestions,
-    approveItem,
-    rejectItem,
-    executeItem,
-    addSuggestionToQueue,
-    generateDailyPlan,
-    addDailyPlanItemToQueue,
-    fetchRules,
-    createRule,
-    updateRule,
-    deleteRule,
-    fetchAuditLog,
+    items, isLoading, isMutating, executingItemId, error,
+    suggestions, isSuggestionsLoading, suggestionsError, queuedSuggestionIds,
+    dailyPlan, isDailyPlanLoading, dailyPlanError, dailyPlanQueuedIds,
+    rules, isRulesLoading, rulesError, isRulesMutating,
+    auditLog, isAuditLogLoading, auditLogError,
+    fetchQueue, fetchSuggestions, approveItem, rejectItem, executeItem,
+    addSuggestionToQueue, generateDailyPlan, addDailyPlanItemToQueue,
+    fetchRules, createRule, updateRule, deleteRule, fetchAuditLog,
   } = useAutonomyStore();
 
   const [showAddRuleForm, setShowAddRuleForm] = useState(false);
 
   const { unreadCount } = useNotificationsStore();
-  const {
-    jobs: bgJobs,
-    isMutating: bgJobsMutating,
-    fetchJobs,
-    triggerJob,
-  } = useBackgroundJobsStore();
+  const { jobs: bgJobs, isMutating: bgJobsMutating, fetchJobs, triggerJob } = useBackgroundJobsStore();
 
+  // ── Entrance animations ──────────────────────────────────────────────────────
+  const fadeAnims = useRef(
+    Array.from({ length: 5 }, () => new Animated.Value(0))
+  ).current;
+
+  useEffect(() => {
+    Animated.stagger(
+      80,
+      fadeAnims.map((a) =>
+        Animated.timing(a, { toValue: 1, duration: 380, useNativeDriver: true })
+      )
+    ).start();
+  }, []);
+
+  const slideStyle = (idx: number) => ({
+    opacity: fadeAnims[idx],
+    transform: [{ translateY: fadeAnims[idx].interpolate({ inputRange: [0, 1], outputRange: [22, 0] }) }],
+  });
+
+  // ── Scroll navigation ────────────────────────────────────────────────────────
+  const scrollRef = useRef<ScrollView>(null);
+  const jobsY     = useRef(0);
+  const pendingY  = useRef(0);
+  const approvedY = useRef(0);
+
+  const scrollTo = (y: number) =>
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - spacing.md), animated: true });
+
+  // ── Data ─────────────────────────────────────────────────────────────────────
   const loadAll = useCallback(() => {
     if (!accessToken) return;
     fetchQueue(accessToken);
@@ -879,20 +1039,16 @@ export default function AutonomyScreen() {
     fetchJobs(accessToken);
   }, [accessToken, fetchQueue, fetchSuggestions, fetchRules, fetchAuditLog, fetchJobs]);
 
-  useEffect(() => {
-    loadAll();
-  }, [loadAll]);
+  useEffect(() => { loadAll(); }, [loadAll]);
 
   const handleApprove = useCallback(
     (id: string) => { if (accessToken) approveItem(accessToken, id); },
     [accessToken, approveItem],
   );
-
   const handleReject = useCallback(
     (id: string) => { if (accessToken) rejectItem(accessToken, id); },
     [accessToken, rejectItem],
   );
-
   const handleExecute = useCallback(
     async (id: string) => {
       if (!accessToken) return;
@@ -908,25 +1064,18 @@ export default function AutonomyScreen() {
     },
     [accessToken, executeItem],
   );
-
   const handleAddToQueue = useCallback(
-    (suggestion: SuggestionItem) => {
-      if (accessToken) addSuggestionToQueue(accessToken, suggestion);
-    },
+    (suggestion: SuggestionItem) => { if (accessToken) addSuggestionToQueue(accessToken, suggestion); },
     [accessToken, addSuggestionToQueue],
   );
-
-  const handleGenerateDailyPlan = useCallback(() => {
-    if (accessToken) generateDailyPlan(accessToken);
-  }, [accessToken, generateDailyPlan]);
-
+  const handleGenerateDailyPlan = useCallback(
+    () => { if (accessToken) generateDailyPlan(accessToken); },
+    [accessToken, generateDailyPlan],
+  );
   const handleAddDailyPlanItemToQueue = useCallback(
-    (item: SuggestionItem) => {
-      if (accessToken) addDailyPlanItemToQueue(accessToken, item);
-    },
+    (item: SuggestionItem) => { if (accessToken) addDailyPlanItemToQueue(accessToken, item); },
     [accessToken, addDailyPlanItemToQueue],
   );
-
   const handleCreateRule = useCallback(
     (data: AutonomyRuleCreate) => {
       if (!accessToken) return;
@@ -934,18 +1083,12 @@ export default function AutonomyScreen() {
     },
     [accessToken, createRule],
   );
-
   const handleToggleRuleExecution = useCallback(
-    (id: string, newValue: boolean) => {
-      if (accessToken) updateRule(accessToken, id, { allow_execution: newValue });
-    },
+    (id: string, newValue: boolean) => { if (accessToken) updateRule(accessToken, id, { allow_execution: newValue }); },
     [accessToken, updateRule],
   );
-
   const handleDeleteRule = useCallback(
-    (id: string) => {
-      if (accessToken) deleteRule(accessToken, id);
-    },
+    (id: string) => { if (accessToken) deleteRule(accessToken, id); },
     [accessToken, deleteRule],
   );
 
@@ -954,25 +1097,22 @@ export default function AutonomyScreen() {
   const resolved = items.filter((i) => i.status === "rejected" || i.status === "completed");
   const isRefreshing = isLoading || isSuggestionsLoading || isRulesLoading || isAuditLogLoading;
   const enabledBgJobs = bgJobs.filter((j) => j.enabled);
+  const topSuggestion = suggestions[0] ?? null;
 
   const getIsBlocked = useCallback(
     (item: AutonomyQueueItem) => isBlockedByRules(item, rules),
     [rules],
   );
 
-  const heroSubtitle =
-    suggestions.length > 0 || pending.length > 0
-      ? [
-          pending.length > 0 ? `${pending.length} pending` : null,
-          approved.length > 0 ? `${approved.length} approved` : null,
-          suggestions.length > 0 ? `${suggestions.length} suggestion${suggestions.length !== 1 ? "s" : ""}` : null,
-        ]
-          .filter(Boolean)
-          .join(" · ")
-      : "All clear.";
+  const heroSubtitle = suggestions.length > 0
+    ? `${suggestions.length} Recommendation${suggestions.length !== 1 ? "s" : ""} Ready`
+    : pending.length > 0
+      ? `${pending.length} Pending Review`
+      : "All systems clear.";
 
   return (
     <ScrollView
+      ref={scrollRef}
       style={styles.container}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
       showsVerticalScrollIndicator={false}
@@ -980,273 +1120,323 @@ export default function AutonomyScreen() {
         <RefreshControl refreshing={isRefreshing} onRefresh={loadAll} tintColor={colors.accent} />
       }
     >
-      {/* Hero */}
-      <View style={styles.heroCard}>
-        <Text style={styles.heroLabel}>HELIOS V3</Text>
-        <Text style={styles.heroTitle}>Command Center</Text>
-        <Text style={styles.heroSubtitle}>{heroSubtitle}</Text>
-      </View>
+      {/* ── Hero ────────────────────────────────────────────────────────── */}
+      <Animated.View style={slideStyle(0)}>
+        <View style={styles.heroCard}>
+          <View style={styles.heroAccentBar} />
+          <View style={styles.heroInner}>
+            <View style={styles.heroTop}>
+              <View>
+                <Text style={styles.heroLabel}>HELIOS AUTONOMY</Text>
+                <Text style={styles.heroTitle}>Command Center</Text>
+              </View>
+              <View style={styles.heroStatusDot}>
+                <View style={[styles.heroPulseDot, { backgroundColor: suggestions.length > 0 ? colors.accent : colors.success }]} />
+              </View>
+            </View>
+            <Text style={styles.heroSubtitle}>{heroSubtitle}</Text>
+          </View>
+        </View>
+      </Animated.View>
 
-      {/* ── Command Center Status Row ─────────────────────────────────── */}
-      <View style={styles.ccRow}>
-        <View style={styles.ccStat}>
-          <Text style={styles.ccStatValue}>{pending.length}</Text>
+      {/* ── Today's Mission ─────────────────────────────────────────────── */}
+      {topSuggestion ? (
+        <TodaysMissionCard
+          suggestion={topSuggestion}
+          anim={fadeAnims[1]}
+          onStartSession={() => router.push("/(tabs)/assistant")}
+        />
+      ) : null}
+
+      {/* ── Stats row ───────────────────────────────────────────────────── */}
+      <Animated.View style={[styles.ccRow, slideStyle(2)]}>
+        <TouchableOpacity
+          style={styles.ccStat}
+          activeOpacity={0.7}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            scrollTo(pendingY.current);
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={`${pending.length} pending items. Tap to review.`}
+        >
+          <Text style={[styles.ccStatValue, pending.length > 0 && { color: colors.accentCyan }]}>
+            {pending.length}
+          </Text>
           <Text style={styles.ccStatLabel}>PENDING</Text>
-        </View>
+        </TouchableOpacity>
+
         <View style={styles.ccDivider} />
-        <View style={styles.ccStat}>
-          <Text style={styles.ccStatValue}>{approved.length}</Text>
+
+        <TouchableOpacity
+          style={styles.ccStat}
+          activeOpacity={0.7}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            scrollTo(approvedY.current);
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={`${approved.length} approved items awaiting execution.`}
+        >
+          <Text style={[styles.ccStatValue, approved.length > 0 && { color: colors.success }]}>
+            {approved.length}
+          </Text>
           <Text style={styles.ccStatLabel}>APPROVED</Text>
-        </View>
+        </TouchableOpacity>
+
         <View style={styles.ccDivider} />
-        <View style={styles.ccStat}>
+
+        <TouchableOpacity
+          style={styles.ccStat}
+          activeOpacity={0.7}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.push("/(tabs)/notifications");
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={`${unreadCount} unread notifications. Tap to view inbox.`}
+        >
           <Text style={[styles.ccStatValue, unreadCount > 0 && { color: colors.accent }]}>
             {unreadCount}
           </Text>
           <Text style={styles.ccStatLabel}>INBOX</Text>
-        </View>
+        </TouchableOpacity>
+
         <View style={styles.ccDivider} />
-        <View style={styles.ccStat}>
+
+        <TouchableOpacity
+          style={styles.ccStat}
+          activeOpacity={0.7}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            scrollTo(jobsY.current);
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={`${enabledBgJobs.length} scheduled jobs active. Tap to view.`}
+        >
           <Text style={styles.ccStatValue}>{enabledBgJobs.length}</Text>
           <Text style={styles.ccStatLabel}>JOBS</Text>
-        </View>
-      </View>
+        </TouchableOpacity>
+      </Animated.View>
 
-      {/* ── Background Jobs Panel ─────────────────────────────────────── */}
+      {/* ── Scheduled Jobs ──────────────────────────────────────────────── */}
       {bgJobs.length > 0 ? (
-        <>
-          <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.lg }} />
+        <Animated.View style={slideStyle(3)}>
+          <View
+            style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.lg }}
+            onLayout={(e) => { jobsY.current = e.nativeEvent.layout.y; }}
+          />
           <Text style={styles.sectionLabel}>SCHEDULED JOBS</Text>
           <Text style={styles.rulesDescription}>
-            Manually trigger any job below. Created items enter the review queue — no auto-execution.
+            Tap "Run Now" to trigger a job manually. Created items enter the review queue.
           </Text>
           <View style={styles.bgJobsCard}>
-            {bgJobs.map((job, idx) => {
-              const JOB_LABELS: Record<string, string> = {
-                daily_briefing_generation: "Daily Briefing",
-                proactive_suggestion_scan: "Proactive Scan",
-                reminder_check:            "Reminder Check",
-                integration_sync_simulation: "Integration Sync",
-              };
-              return (
-                <View key={job.id}>
-                  {idx > 0 ? <View style={styles.auditDivider} /> : null}
-                  <View style={styles.bgJobRow}>
-                    <View style={[styles.bgJobDot, { backgroundColor: job.enabled ? colors.success : colors.textMuted }]} />
-                    <View style={styles.bgJobInfo}>
-                      <Text style={styles.bgJobName}>{JOB_LABELS[job.job_type] ?? job.job_type}</Text>
-                      <Text style={styles.bgJobSchedule}>{job.schedule_label}</Text>
-                    </View>
-                    {job.enabled ? (
-                      <TouchableOpacity
-                        style={[styles.bgJobRunBtn, bgJobsMutating && styles.btnDisabled]}
-                        onPress={() => {
-                          if (!accessToken) return;
-                          triggerJob(accessToken, job.id).then((result) => {
-                            if (result) Alert.alert("Job Triggered", result.result_summary, [{ text: "OK" }]);
-                          });
-                        }}
-                        disabled={bgJobsMutating}
-                        activeOpacity={0.7}
-                      >
-                        <SymbolView name="play.fill" size={10} tintColor={colors.success} resizeMode="scaleAspectFit" />
-                        <Text style={styles.bgJobRunBtnText}>RUN</Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <Text style={styles.bgJobDisabled}>DISABLED</Text>
-                    )}
-                  </View>
-                </View>
-              );
-            })}
+            {bgJobs.map((job) => (
+              <JobCard
+                key={job.id}
+                job={job}
+                isMutating={bgJobsMutating}
+                onTrigger={async (id) => {
+                  if (!accessToken) return null;
+                  return triggerJob(accessToken, id);
+                }}
+              />
+            ))}
           </View>
-        </>
+        </Animated.View>
       ) : null}
 
-      {/* Global error */}
+      {/* ── Global error + initial load ──────────────────────────────────── */}
       {error ? (
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>{error}</Text>
         </View>
       ) : null}
-
-      {/* Initial queue loading */}
       {isLoading && items.length === 0 ? (
         <ActivityIndicator color={colors.accent} style={{ marginTop: spacing.xl }} />
       ) : null}
 
-      {/* ── Daily Plan ───────────────────────────────────────────────── */}
-      <DailyPlanSection
-        plan={dailyPlan}
-        isLoading={isDailyPlanLoading}
-        error={dailyPlanError}
-        isMutating={isMutating}
-        queuedIds={dailyPlanQueuedIds}
-        onGenerate={handleGenerateDailyPlan}
-        onAddToQueue={handleAddDailyPlanItemToQueue}
-      />
-
-      <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.lg }} />
-
-      {/* ── Proactive Suggestions ─────────────────────────────────────── */}
-      <Text style={styles.sectionLabel}>PROACTIVE SUGGESTIONS</Text>
-
-      {isSuggestionsLoading && suggestions.length === 0 ? (
-        <View style={styles.loadingRow}>
-          <ActivityIndicator color={colors.accent} size="small" />
-          <Text style={styles.loadingText}>Generating suggestions…</Text>
-        </View>
-      ) : suggestionsError ? (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{suggestionsError}</Text>
-        </View>
-      ) : suggestions.length === 0 ? (
-        <View style={styles.emptyState}>
-          <SymbolView name="lightbulb" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
-          <Text style={styles.emptyText}>No suggestions right now.</Text>
-          <Text style={styles.emptySubtext}>Pull to refresh for fresh recommendations.</Text>
-        </View>
-      ) : (
-        suggestions.map((s) => (
-          <SuggestionCard
-            key={s.id}
-            item={s}
-            isQueued={queuedSuggestionIds.includes(s.id)}
-            isMutating={isMutating}
-            onAddToQueue={handleAddToQueue}
-          />
-        ))
-      )}
-
-      {/* ── Pending Review ────────────────────────────────────────────── */}
-      {(!isLoading || items.length > 0) ? (
-        <>
-          <Text style={[styles.sectionLabel, { marginTop: spacing.xl }]}>PENDING REVIEW</Text>
-          {pending.length === 0 ? (
-            <View style={styles.emptyState}>
-              <SymbolView name="tray" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
-              <Text style={styles.emptyText}>No pending proposals.</Text>
-              <Text style={styles.emptySubtext}>Add a suggestion to the queue to get started.</Text>
-            </View>
-          ) : (
-            pending.map((item) => (
-              <QueueCard
-                key={item.id}
-                item={item}
-                isMutating={isMutating}
-                isExecuting={executingItemId === item.id}
-                isBlocked={getIsBlocked(item)}
-                onApprove={handleApprove}
-                onReject={handleReject}
-                onExecute={handleExecute}
-              />
-            ))
-          )}
-
-          {/* ── Approved ─────────────────────────────────────────────── */}
-          {approved.length > 0 ? (
-            <>
-              <Text style={[styles.sectionLabel, { marginTop: spacing.xl }]}>
-                APPROVED — READY TO EXECUTE
-              </Text>
-              {approved.map((item) => (
-                <QueueCard
-                  key={item.id}
-                  item={item}
-                  isMutating={isMutating}
-                  isExecuting={executingItemId === item.id}
-                  isBlocked={getIsBlocked(item)}
-                  onApprove={handleApprove}
-                  onReject={handleReject}
-                  onExecute={handleExecute}
-                />
-              ))}
-            </>
-          ) : null}
-
-          {/* ── Resolved ─────────────────────────────────────────────── */}
-          {resolved.length > 0 ? (
-            <>
-              <Text style={[styles.sectionLabel, { marginTop: spacing.xl }]}>RESOLVED</Text>
-              {resolved.map((item) => (
-                <QueueCard
-                  key={item.id}
-                  item={item}
-                  isMutating={isMutating}
-                  isExecuting={false}
-                  isBlocked={false}
-                  onApprove={handleApprove}
-                  onReject={handleReject}
-                  onExecute={handleExecute}
-                />
-              ))}
-            </>
-          ) : null}
-        </>
-      ) : null}
-
-      {/* ── Approval Rules ───────────────────────────────────────────── */}
-      <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.lg }} />
-      <View style={styles.planSectionHeader}>
-        <Text style={styles.sectionLabel}>APPROVAL RULES</Text>
-        <TouchableOpacity
-          onPress={() => setShowAddRuleForm((v) => !v)}
-          style={styles.generateBtn}
-          activeOpacity={0.75}
-        >
-          <Text style={styles.generateBtnText}>{showAddRuleForm ? "Cancel" : "Add Rule"}</Text>
-        </TouchableOpacity>
-      </View>
-
-      <Text style={styles.rulesDescription}>
-        Configure which action types require extra review or are blocked from execution entirely.
-      </Text>
-
-      {rulesError ? (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{rulesError}</Text>
-        </View>
-      ) : null}
-
-      {showAddRuleForm ? (
-        <AddRuleForm
-          onSave={handleCreateRule}
-          onCancel={() => setShowAddRuleForm(false)}
-          isMutating={isRulesMutating}
+      {/* ── Today's Execution Plan ───────────────────────────────────────── */}
+      <Animated.View style={slideStyle(4)}>
+        <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.lg }} />
+        <DailyPlanSection
+          plan={dailyPlan}
+          isLoading={isDailyPlanLoading}
+          error={dailyPlanError}
+          isMutating={isMutating}
+          queuedIds={dailyPlanQueuedIds}
+          onGenerate={handleGenerateDailyPlan}
+          onAddToQueue={handleAddDailyPlanItemToQueue}
         />
-      ) : null}
 
-      {isRulesLoading && rules.length === 0 ? (
-        <View style={styles.loadingRow}>
-          <ActivityIndicator color={colors.accent} size="small" />
-          <Text style={styles.loadingText}>Loading rules…</Text>
+        <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.lg }} />
+
+        {/* ── Proactive Suggestions ──────────────────────────────────────── */}
+        <Text style={styles.sectionLabel}>PROACTIVE RECOMMENDATIONS</Text>
+        {isSuggestionsLoading && suggestions.length === 0 ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator color={colors.accent} size="small" />
+            <Text style={styles.loadingText}>HELIOS is analyzing your priorities…</Text>
+          </View>
+        ) : suggestionsError ? (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>{suggestionsError}</Text>
+          </View>
+        ) : suggestions.length === 0 ? (
+          <View style={styles.emptyState}>
+            <SymbolView name="sparkles" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+            <Text style={styles.emptyText}>Quiet briefing — no recommendations queued.</Text>
+            <Text style={styles.emptySubtext}>
+              HELIOS is monitoring your goals and tasks. Pull to refresh for the latest analysis.
+            </Text>
+          </View>
+        ) : (
+          suggestions.map((s) => (
+            <SuggestionCard
+              key={s.id}
+              item={s}
+              isQueued={queuedSuggestionIds.includes(s.id)}
+              isMutating={isMutating}
+              onAddToQueue={handleAddToQueue}
+            />
+          ))
+        )}
+
+        {/* ── Pending Review ─────────────────────────────────────────────── */}
+        {(!isLoading || items.length > 0) ? (
+          <>
+            <View
+              onLayout={(e) => { pendingY.current = e.nativeEvent.layout.y; }}
+            >
+              <Text style={[styles.sectionLabel, { marginTop: spacing.xl }]}>PENDING REVIEW</Text>
+              {pending.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <SymbolView name="checkmark.seal" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+                  <Text style={styles.emptyText}>Queue is clear.</Text>
+                  <Text style={styles.emptySubtext}>
+                    All proposals have been reviewed. Add a recommendation to the queue to continue.
+                  </Text>
+                </View>
+              ) : (
+                pending.map((item) => (
+                  <QueueCard
+                    key={item.id}
+                    item={item}
+                    isMutating={isMutating}
+                    isExecuting={executingItemId === item.id}
+                    isBlocked={getIsBlocked(item)}
+                    onApprove={handleApprove}
+                    onReject={handleReject}
+                    onExecute={handleExecute}
+                  />
+                ))
+              )}
+            </View>
+
+            {/* ── Approved ─────────────────────────────────────────────────── */}
+            {approved.length > 0 ? (
+              <View onLayout={(e) => { approvedY.current = e.nativeEvent.layout.y; }}>
+                <Text style={[styles.sectionLabel, { marginTop: spacing.xl }]}>
+                  APPROVED — READY TO EXECUTE
+                </Text>
+                {approved.map((item) => (
+                  <QueueCard
+                    key={item.id}
+                    item={item}
+                    isMutating={isMutating}
+                    isExecuting={executingItemId === item.id}
+                    isBlocked={getIsBlocked(item)}
+                    onApprove={handleApprove}
+                    onReject={handleReject}
+                    onExecute={handleExecute}
+                  />
+                ))}
+              </View>
+            ) : null}
+
+            {/* ── Resolved ─────────────────────────────────────────────────── */}
+            {resolved.length > 0 ? (
+              <>
+                <Text style={[styles.sectionLabel, { marginTop: spacing.xl }]}>RESOLVED</Text>
+                {resolved.map((item) => (
+                  <QueueCard
+                    key={item.id}
+                    item={item}
+                    isMutating={isMutating}
+                    isExecuting={false}
+                    isBlocked={false}
+                    onApprove={handleApprove}
+                    onReject={handleReject}
+                    onExecute={handleExecute}
+                  />
+                ))}
+              </>
+            ) : null}
+          </>
+        ) : null}
+
+        {/* ── Approval Rules ───────────────────────────────────────────────── */}
+        <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.lg }} />
+        <View style={styles.planSectionHeader}>
+          <Text style={styles.sectionLabel}>APPROVAL RULES</Text>
+          <TouchableOpacity
+            onPress={() => setShowAddRuleForm((v) => !v)}
+            style={styles.generateBtn}
+            activeOpacity={0.75}
+          >
+            <Text style={styles.generateBtnText}>{showAddRuleForm ? "Cancel" : "Add Rule"}</Text>
+          </TouchableOpacity>
         </View>
-      ) : rules.length === 0 && !showAddRuleForm ? (
-        <View style={styles.emptyState}>
-          <SymbolView name="slider.horizontal.3" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
-          <Text style={styles.emptyText}>No rules configured.</Text>
-          <Text style={styles.emptySubtext}>
-            Default: all approved actions require explicit execution. Add a rule to block specific types.
-          </Text>
-        </View>
-      ) : (
-        rules.map((rule) => (
-          <RuleCard
-            key={rule.id}
-            rule={rule}
+        <Text style={styles.rulesDescription}>
+          Configure which action types require extra review or are blocked from execution entirely.
+        </Text>
+
+        {rulesError ? (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>{rulesError}</Text>
+          </View>
+        ) : null}
+
+        {showAddRuleForm ? (
+          <AddRuleForm
+            onSave={handleCreateRule}
+            onCancel={() => setShowAddRuleForm(false)}
             isMutating={isRulesMutating}
-            onToggleExecution={handleToggleRuleExecution}
-            onDelete={handleDeleteRule}
           />
-        ))
-      )}
+        ) : null}
 
-      {/* ── Audit Log ───────────────────────────────────────────────── */}
-      <AuditLogSection
-        entries={auditLog}
-        isLoading={isAuditLogLoading}
-        error={auditLogError}
-      />
+        {isRulesLoading && rules.length === 0 ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator color={colors.accent} size="small" />
+            <Text style={styles.loadingText}>Loading rules…</Text>
+          </View>
+        ) : rules.length === 0 && !showAddRuleForm ? (
+          <View style={styles.emptyState}>
+            <SymbolView name="slider.horizontal.3" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+            <Text style={styles.emptyText}>No rules configured.</Text>
+            <Text style={styles.emptySubtext}>
+              HELIOS defaults to requiring your explicit approval before any execution. Add a rule to restrict specific action types.
+            </Text>
+          </View>
+        ) : (
+          rules.map((rule) => (
+            <RuleCard
+              key={rule.id}
+              rule={rule}
+              isMutating={isRulesMutating}
+              onToggleExecution={handleToggleRuleExecution}
+              onDelete={handleDeleteRule}
+            />
+          ))
+        )}
+
+        {/* ── Audit Log ────────────────────────────────────────────────────── */}
+        <AuditLogSection
+          entries={auditLog}
+          isLoading={isAuditLogLoading}
+          error={auditLogError}
+        />
+      </Animated.View>
 
       <View style={{ height: spacing.xl * 2 }} />
     </ScrollView>
@@ -1260,14 +1450,28 @@ function createStyles(colors: ThemeColors) {
   container: { flex: 1, backgroundColor: colors.background },
   content:   { paddingHorizontal: spacing.md },
 
-  // Hero
+  // ── Hero ───────────────────────────────────────────────────────────────────
   heroCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
+    marginBottom: spacing.md,
+    overflow: "hidden",
+  },
+  heroAccentBar: {
+    height: 3,
+    backgroundColor: colors.accent,
+  },
+  heroInner: {
     padding: spacing.lg,
-    marginBottom: spacing.lg,
+    gap: spacing.xs,
+  },
+  heroTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: spacing.xs,
   },
   heroLabel: {
     ...typography.caption,
@@ -1278,11 +1482,120 @@ function createStyles(colors: ThemeColors) {
   heroTitle: {
     ...typography.displaySmall,
     color: colors.textPrimary,
-    marginBottom: spacing.xs,
   },
   heroSubtitle: { ...typography.body, color: colors.textSecondary },
+  heroStatusDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.surfaceDark,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroPulseDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
 
-  // Section labels
+  // ── Today's Mission ────────────────────────────────────────────────────────
+  missionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: `${colors.accent}40`,
+    marginBottom: spacing.md,
+    overflow: "hidden",
+  },
+  missionAccentBar: {
+    height: 3,
+    backgroundColor: colors.accent,
+  },
+  missionContent: {
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  missionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  missionHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  missionLabel: {
+    fontSize: 9,
+    fontWeight: "700" as const,
+    letterSpacing: 2,
+    color: colors.accent,
+  },
+  missionPriorityBadge: {
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  missionPriorityText: {
+    fontSize: 8,
+    fontWeight: "700" as const,
+    letterSpacing: 0.8,
+  },
+  missionTitle: {
+    fontSize: 18,
+    fontWeight: "700" as const,
+    color: colors.textPrimary,
+    lineHeight: 24,
+  },
+  missionDescription: {
+    ...typography.body,
+    color: colors.textSecondary,
+    lineHeight: 21,
+  },
+  missionFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: spacing.xs,
+  },
+  missionMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    flex: 1,
+  },
+  missionMetaText: {
+    fontSize: 11,
+    color: colors.textMuted,
+    fontWeight: "500" as const,
+  },
+  missionMetaDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: colors.textMuted,
+    opacity: 0.5,
+  },
+  missionStartBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: colors.accent,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  missionStartBtnText: {
+    fontSize: 12,
+    fontWeight: "700" as const,
+    color: colors.background,
+    letterSpacing: 0.3,
+  },
+
+  // ── Section labels ─────────────────────────────────────────────────────────
   sectionLabel: {
     ...typography.caption,
     color: colors.textMuted,
@@ -1291,7 +1604,7 @@ function createStyles(colors: ThemeColors) {
     marginTop: spacing.sm,
   },
 
-  // Inline loading row (for suggestions)
+  // ── Loading row ────────────────────────────────────────────────────────────
   loadingRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1300,7 +1613,7 @@ function createStyles(colors: ThemeColors) {
   },
   loadingText: { ...typography.caption, color: colors.textMuted },
 
-  // Error
+  // ── Error ──────────────────────────────────────────────────────────────────
   errorBox: {
     backgroundColor: `${colors.danger}1a`,
     borderRadius: radius.md,
@@ -1311,7 +1624,7 @@ function createStyles(colors: ThemeColors) {
   },
   errorText: { ...typography.body, color: colors.danger },
 
-  // Empty state
+  // ── Empty state ────────────────────────────────────────────────────────────
   emptyState: {
     alignItems: "center",
     paddingVertical: spacing.xl,
@@ -1321,15 +1634,17 @@ function createStyles(colors: ThemeColors) {
     ...typography.body,
     color: colors.textSecondary,
     marginTop: spacing.xs,
+    textAlign: "center",
   },
   emptySubtext: {
     ...typography.caption,
     color: colors.textMuted,
     textAlign: "center",
     paddingHorizontal: spacing.lg,
+    lineHeight: 18,
   },
 
-  // Cards (shared base)
+  // ── Cards (shared base) ────────────────────────────────────────────────────
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -1349,14 +1664,14 @@ function createStyles(colors: ThemeColors) {
     alignItems: "center",
     marginBottom: spacing.xs,
   },
-  cardMeta: { flexDirection: "row", gap: spacing.xs },
-  cardAgent: { ...typography.caption, color: colors.textMuted, letterSpacing: 1 },
-  cardTitle: { ...typography.title, color: colors.textPrimary },
-  cardActionType: { ...typography.caption, color: colors.accentCyan, letterSpacing: 1 },
+  cardMeta:        { flexDirection: "row", gap: spacing.xs },
+  cardAgent:       { ...typography.caption, color: colors.textMuted, letterSpacing: 1 },
+  cardTitle:       { ...typography.title, color: colors.textPrimary },
+  cardActionType:  { ...typography.caption, color: colors.accentCyan, letterSpacing: 1 },
   cardDescription: { ...typography.body, color: colors.textSecondary, marginTop: spacing.xs },
-  cardTimestamp: { ...typography.caption, color: colors.textMuted, marginTop: spacing.xs },
+  cardTimestamp:   { ...typography.caption, color: colors.textMuted, marginTop: spacing.xs },
 
-  // Reason box (suggestions only)
+  // ── Reason box ─────────────────────────────────────────────────────────────
   reasonBox: {
     backgroundColor: colors.surfaceDark,
     borderRadius: radius.sm,
@@ -1374,7 +1689,7 @@ function createStyles(colors: ThemeColors) {
   },
   reasonText: { ...typography.caption, color: colors.textSecondary, lineHeight: 18 },
 
-  // Payload preview box (queue items)
+  // ── Payload preview ────────────────────────────────────────────────────────
   payloadBox: {
     backgroundColor: colors.surfaceDark,
     borderRadius: radius.sm,
@@ -1385,10 +1700,10 @@ function createStyles(colors: ThemeColors) {
     gap: 2,
   },
   payloadRow: { ...typography.caption, color: colors.textSecondary },
-  payloadKey: { color: colors.textMuted },
-  payloadVal: { color: colors.textSecondary },
+  payloadKey:  { color: colors.textMuted },
+  payloadVal:  { color: colors.textSecondary },
 
-  // Badges
+  // ── Badges ─────────────────────────────────────────────────────────────────
   badge: {
     borderWidth: 1,
     borderRadius: radius.sm,
@@ -1397,7 +1712,7 @@ function createStyles(colors: ThemeColors) {
   },
   badgeText: { fontSize: 9, fontWeight: "700" as const, letterSpacing: 0.8 },
 
-  // Action buttons
+  // ── Action buttons ─────────────────────────────────────────────────────────
   actionRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
   actionBtn: {
     flex: 1,
@@ -1408,20 +1723,16 @@ function createStyles(colors: ThemeColors) {
   },
   btnDisabled: { opacity: 0.5 },
 
-  approveBtn: { backgroundColor: `${colors.success}1a`, borderColor: colors.success },
+  approveBtn:     { backgroundColor: `${colors.success}1a`, borderColor: colors.success },
   approveBtnText: { ...typography.caption, color: colors.success, fontWeight: "700" as const, letterSpacing: 1 },
 
-  rejectBtn: { backgroundColor: `${colors.danger}1a`, borderColor: colors.danger },
-  rejectBtnText: { ...typography.caption, color: colors.danger, fontWeight: "700" as const, letterSpacing: 1 },
+  rejectBtn:      { backgroundColor: `${colors.danger}1a`, borderColor: colors.danger },
+  rejectBtnText:  { ...typography.caption, color: colors.danger, fontWeight: "700" as const, letterSpacing: 1 },
 
-  executeBtn: { backgroundColor: `${colors.accent}26`, borderColor: colors.accent, marginTop: spacing.sm },
+  executeBtn:     { backgroundColor: `${colors.accent}26`, borderColor: colors.accent, marginTop: spacing.sm },
   executeBtnText: { ...typography.caption, color: colors.accent, fontWeight: "700" as const, letterSpacing: 1 },
 
-  addToQueueBtn: {
-    backgroundColor: `${colors.accentCyan}1a`,
-    borderColor: colors.accentCyan,
-    marginTop: spacing.sm,
-  },
+  addToQueueBtn:     { backgroundColor: `${colors.accentCyan}1a`, borderColor: colors.accentCyan, marginTop: spacing.sm },
   addToQueueBtnText: { ...typography.caption, color: colors.accentCyan, fontWeight: "700" as const, letterSpacing: 1 },
 
   queuedRow: {
@@ -1444,7 +1755,7 @@ function createStyles(colors: ThemeColors) {
   },
   executingText: { ...typography.caption, color: colors.accent, letterSpacing: 1 },
 
-  // Daily plan
+  // ── Daily plan ─────────────────────────────────────────────────────────────
   planSectionHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -1477,12 +1788,7 @@ function createStyles(colors: ThemeColors) {
     marginBottom: spacing.sm,
     gap: spacing.xs,
   },
-  planDate: {
-    ...typography.caption,
-    color: colors.accent,
-    letterSpacing: 1.5,
-    marginBottom: spacing.xs,
-  },
+  planDate:     { ...typography.caption, color: colors.accent, letterSpacing: 1.5, marginBottom: spacing.xs },
   planOverview: { ...typography.body, color: colors.textSecondary, lineHeight: 22 },
   planSubLabel: {
     fontSize: 9,
@@ -1511,12 +1817,7 @@ function createStyles(colors: ThemeColors) {
     fontWeight: "700" as const,
   },
   focusActivity: { ...typography.body, color: colors.textPrimary },
-  energyDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginLeft: spacing.sm,
-  },
+  energyDot: { width: 8, height: 8, borderRadius: 4, marginLeft: spacing.sm },
   priorityTaskRow: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,
@@ -1532,13 +1833,8 @@ function createStyles(colors: ThemeColors) {
     gap: spacing.sm,
     marginBottom: 2,
   },
-  priorityRank: {
-    ...typography.caption,
-    color: colors.textMuted,
-    fontWeight: "700" as const,
-    minWidth: 20,
-  },
-  priorityDuration: { ...typography.caption, color: colors.textMuted, marginLeft: "auto" },
+  priorityRank:      { ...typography.caption, color: colors.textMuted, fontWeight: "700" as const, minWidth: 20 },
+  priorityDuration:  { ...typography.caption, color: colors.textMuted, marginLeft: "auto" },
   priorityTaskTitle: { ...typography.title, color: colors.textPrimary },
   priorityTaskReason: { ...typography.caption, color: colors.textSecondary, lineHeight: 18 },
   planListCard: {
@@ -1551,9 +1847,9 @@ function createStyles(colors: ThemeColors) {
   },
   conflictCard: { borderColor: `${colors.warning}59` },
   planListItem: { ...typography.body, color: colors.textSecondary, lineHeight: 22 },
-  planBullet: { color: colors.textMuted },
+  planBullet:   { color: colors.textMuted },
 
-  // Blocked by rule indicator
+  // ── Blocked by rule ────────────────────────────────────────────────────────
   blockedRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1566,14 +1862,9 @@ function createStyles(colors: ThemeColors) {
     borderWidth: 1,
     borderColor: `${colors.danger}40`,
   },
-  blockedText: {
-    ...typography.caption,
-    color: colors.danger,
-    letterSpacing: 0.5,
-    flex: 1,
-  },
+  blockedText: { ...typography.caption, color: colors.danger, letterSpacing: 0.5, flex: 1 },
 
-  // Rules section
+  // ── Rules section ──────────────────────────────────────────────────────────
   rulesDescription: {
     ...typography.caption,
     color: colors.textMuted,
@@ -1589,14 +1880,9 @@ function createStyles(colors: ThemeColors) {
     marginBottom: spacing.md,
     gap: spacing.xs,
   },
-  ruleIndicatorText: {
-    ...typography.caption,
-    color: colors.textMuted,
-    marginTop: 2,
-    lineHeight: 16,
-  },
+  ruleIndicatorText: { ...typography.caption, color: colors.textMuted, marginTop: 2, lineHeight: 16 },
 
-  // Add rule form
+  // ── Add rule form ──────────────────────────────────────────────────────────
   addRuleForm: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -1612,15 +1898,8 @@ function createStyles(colors: ThemeColors) {
     color: colors.textMuted,
     marginBottom: spacing.xs,
   },
-  formOptionGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.xs,
-  },
-  formOptionRow: {
-    flexDirection: "row",
-    gap: spacing.xs,
-  },
+  formOptionGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
+  formOptionRow:  { flexDirection: "row", gap: spacing.xs },
   formOption: {
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
@@ -1629,27 +1908,13 @@ function createStyles(colors: ThemeColors) {
     borderColor: colors.border,
     backgroundColor: colors.surfaceDark,
   },
-  formOptionActive: {
-    borderColor: colors.accentCyan,
-    backgroundColor: `${colors.accentCyan}1a`,
-  },
-  formOptionAllowed: {
-    borderColor: colors.success,
-    backgroundColor: `${colors.success}1a`,
-  },
-  formOptionBlocked: {
-    borderColor: colors.danger,
-    backgroundColor: `${colors.danger}1a`,
-  },
-  formOptionText: {
-    fontSize: 9,
-    fontWeight: "700" as const,
-    letterSpacing: 0.8,
-    color: colors.textMuted,
-  },
+  formOptionActive:  { borderColor: colors.accentCyan, backgroundColor: `${colors.accentCyan}1a` },
+  formOptionAllowed: { borderColor: colors.success, backgroundColor: `${colors.success}1a` },
+  formOptionBlocked: { borderColor: colors.danger, backgroundColor: `${colors.danger}1a` },
+  formOptionText:       { fontSize: 9, fontWeight: "700" as const, letterSpacing: 0.8, color: colors.textMuted },
   formOptionActiveText: { color: colors.accentCyan },
 
-  // Audit log
+  // ── Audit log ──────────────────────────────────────────────────────────────
   auditCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -1665,13 +1930,7 @@ function createStyles(colors: ThemeColors) {
     paddingHorizontal: spacing.md,
     gap: spacing.sm,
   },
-  auditDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginTop: 5,
-    flexShrink: 0,
-  },
+  auditDot:       { width: 8, height: 8, borderRadius: 4, marginTop: 5, flexShrink: 0 },
   auditRowContent: { flex: 1, gap: 2 },
   auditRowHeader: {
     flexDirection: "row",
@@ -1679,14 +1938,9 @@ function createStyles(colors: ThemeColors) {
     alignItems: "center",
     gap: spacing.xs,
   },
-  auditEventLabel: {
-    fontSize: 9,
-    fontWeight: "700" as const,
-    letterSpacing: 1.2,
-    flex: 1,
-  },
-  auditTimestamp: { ...typography.caption, color: colors.textMuted },
-  auditMessage: { ...typography.body, color: colors.textSecondary, lineHeight: 20 },
+  auditEventLabel: { fontSize: 9, fontWeight: "700" as const, letterSpacing: 1.2, flex: 1 },
+  auditTimestamp:  { ...typography.caption, color: colors.textMuted },
+  auditMessage:    { ...typography.body, color: colors.textSecondary, lineHeight: 20 },
   auditActionType: {
     fontSize: 9,
     fontWeight: "700" as const,
@@ -1694,13 +1948,9 @@ function createStyles(colors: ThemeColors) {
     color: colors.textMuted,
     marginTop: 2,
   },
-  auditDivider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginHorizontal: spacing.md,
-  },
+  auditDivider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.md },
 
-  // ── Command Center ──────────────────────────────────────────────────────────
+  // ── Stats row ──────────────────────────────────────────────────────────────
   ccRow: {
     flexDirection: "row",
     backgroundColor: colors.surface,
@@ -1714,6 +1964,7 @@ function createStyles(colors: ThemeColors) {
     flex: 1,
     alignItems: "center",
     paddingVertical: spacing.md,
+    gap: 2,
   },
   ccStatValue: {
     fontSize: 22,
@@ -1728,60 +1979,93 @@ function createStyles(colors: ThemeColors) {
     color: colors.textMuted,
     marginTop: 2,
   },
-  ccDivider: {
-    width: 1,
-    backgroundColor: colors.border,
-    marginVertical: spacing.sm,
-  },
+  ccDivider: { width: 1, backgroundColor: colors.border, marginVertical: spacing.sm },
 
-  // ── Background jobs (command center panel) ─────────────────────────────────
+  // ── Job cards ──────────────────────────────────────────────────────────────
   bgJobsCard: {
+    gap: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  jobCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.md,
-    overflow: "hidden",
-  },
-  bgJobRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: spacing.md,
+    padding: spacing.md,
     gap: spacing.sm,
   },
-  bgJobDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  jobCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  jobCardHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    flex: 1,
+  },
+  jobIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
     flexShrink: 0,
   },
-  bgJobInfo: { flex: 1 },
-  bgJobName: { ...typography.body, color: colors.textPrimary, fontWeight: "600" as const, fontSize: 14 },
-  bgJobSchedule: { ...typography.caption, color: colors.textMuted, marginTop: 1 },
-  bgJobRunBtn: {
+  jobCardInfo: { flex: 1, gap: 2 },
+  jobName:     { ...typography.body, color: colors.textPrimary, fontWeight: "600" as const, fontSize: 14 },
+  jobSchedule: { ...typography.caption, color: colors.textMuted, marginTop: 1 },
+  jobHealthBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs - 2,
+    borderWidth: 1,
     borderRadius: radius.sm,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  jobHealthDot: { width: 5, height: 5, borderRadius: 2.5 },
+  jobHealthText: { fontSize: 8, fontWeight: "700" as const, letterSpacing: 0.8 },
+  jobMetaRow: {
+    flexDirection: "row",
+    backgroundColor: colors.surfaceDark,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.borderDark,
+    overflow: "hidden",
+  },
+  jobMetaItem:    { flex: 1, padding: spacing.sm, gap: 3 },
+  jobMetaDivider: { width: 1, backgroundColor: colors.borderDark },
+  jobMetaLabel:   { fontSize: 8, fontWeight: "700" as const, letterSpacing: 1, color: colors.textMuted },
+  jobMetaValue:   { fontSize: 11, fontWeight: "600" as const, color: colors.textSecondary },
+  jobRunBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.success,
     backgroundColor: `${colors.success}14`,
   },
-  bgJobRunBtnText: {
+  jobRunBtnRunning: { borderColor: colors.warning, backgroundColor: `${colors.warning}14` },
+  jobRunBtnDone:    { borderColor: colors.success,  backgroundColor: `${colors.success}26` },
+  jobRunBtnText:    { fontSize: 10, fontWeight: "700" as const, letterSpacing: 1, color: colors.success },
+  jobDisabledRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+  },
+  jobDisabledText: {
     fontSize: 9,
     fontWeight: "700" as const,
     letterSpacing: 0.8,
-    color: colors.success,
-  },
-  bgJobDisabled: {
-    fontSize: 8,
-    fontWeight: "700" as const,
-    letterSpacing: 1,
     color: colors.textMuted,
-    opacity: 0.5,
+    opacity: 0.6,
   },
 });
 }

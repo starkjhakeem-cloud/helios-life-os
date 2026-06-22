@@ -323,7 +323,7 @@ function Hero({
   const pillStyle = [
     s.statusPill,
     { backgroundColor: `${toneColor}24`, borderColor: `${toneColor}2e` },
-  ] as const;
+  ];
 
   const pillInner = (
     <>
