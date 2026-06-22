@@ -177,7 +177,7 @@ export default function HomeScreen() {
           <Metric icon="circle" value={String(openTasks)} label="Open Tasks" sub={openTasks === 0 ? "All clear" : "Needs attention"} />
         </View>
 
-        <Section title="DAILY COMMAND" action="View full briefing  ›" onAction={() => router.push("/(tabs)/assistant")} />
+        <Section title="DAILY BRIEF" action="View full briefing  ›" onAction={() => router.push("/(tabs)/assistant")} />
         <DailyCommand timeStr={timeStr} userName={displayName} />
       </ScrollView>
     </View>
@@ -432,7 +432,7 @@ function DailyCommand({ timeStr, userName }: { timeStr: string; userName: string
             tintColor={colors.accentCyan}
             resizeMode="scaleAspectFit"
           />
-          <Text style={s.commandTitle}>DAILY COMMAND</Text>
+          <Text style={s.commandTitle}>DAILY BRIEF</Text>
         </View>
 
         <Text style={s.commandTime}>{timeStr}</Text>

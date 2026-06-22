@@ -101,7 +101,7 @@ export default function BriefingCard({
             tintColor={colors.accentCyan}
             resizeMode="scaleAspectFit"
           />
-          <Text style={styles.headerLabel}>DAILY COMMAND</Text>
+          <Text style={styles.headerLabel}>DAILY BRIEF</Text>
         </View>
         <Text style={styles.timestamp}>{time}</Text>
       </View>
