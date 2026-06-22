@@ -42,27 +42,69 @@ const PAGE = width - 52;
 // ── System status ─────────────────────────────────────────────────────────────
 
 type StatusTone = "active" | "warning" | "attention" | "danger" | "syncing" | "focus";
-type SystemStatus = { label: string; tone: StatusTone };
+type SystemStatus = {
+  label: string;
+  tone: StatusTone;
+  targetRoute: string | null;
+  accessibilityHint: string;
+};
 
 function getSystemStatus({
   apiError,
   aiProviderOffline,
   hasAttention,
+  attentionRoute,
   isSyncing,
   focusModeActive,
 }: {
   apiError: boolean;
   aiProviderOffline: boolean;
   hasAttention: boolean;
+  attentionRoute: string;
   isSyncing: boolean;
   focusModeActive: boolean;
 }): SystemStatus {
-  if (apiError)           return { label: "SYSTEM ALERT",       tone: "danger"    };
-  if (aiProviderOffline)  return { label: "AI PROVIDER OFFLINE", tone: "warning"   };
-  if (hasAttention)       return { label: "ATTENTION REQUIRED",  tone: "attention" };
-  if (isSyncing)          return { label: "SYNCING SYSTEMS",     tone: "syncing"   };
-  if (focusModeActive)    return { label: "FOCUS MODE ACTIVE",   tone: "focus"     };
-  return                         { label: "ALL SYSTEMS ACTIVE",  tone: "active"    };
+  if (apiError)
+    return {
+      label: "SYSTEM ALERT",
+      tone: "danger",
+      targetRoute: "/(tabs)/more",
+      accessibilityHint: "System alert active. Tap to view status.",
+    };
+  if (aiProviderOffline)
+    return {
+      label: "AI PROVIDER OFFLINE",
+      tone: "warning",
+      targetRoute: "/(tabs)/integrations",
+      accessibilityHint: "AI provider offline. Tap to view integrations.",
+    };
+  if (hasAttention)
+    return {
+      label: "ATTENTION REQUIRED",
+      tone: "attention",
+      targetRoute: attentionRoute,
+      accessibilityHint: "Attention required. Tap to review.",
+    };
+  if (isSyncing)
+    return {
+      label: "SYNCING SYSTEMS",
+      tone: "syncing",
+      targetRoute: "/(tabs)/integrations",
+      accessibilityHint: "Systems syncing. Tap to view integrations.",
+    };
+  if (focusModeActive)
+    return {
+      label: "FOCUS MODE ACTIVE",
+      tone: "focus",
+      targetRoute: null,
+      accessibilityHint: "Focus mode active.",
+    };
+  return {
+    label: "ALL SYSTEMS ACTIVE",
+    tone: "active",
+    targetRoute: null,
+    accessibilityHint: "All systems active.",
+  };
 }
 
 function getToneColor(tone: StatusTone, colors: ThemeColors): string {
@@ -135,13 +177,26 @@ export default function HomeScreen() {
     (aiSendError.toLowerCase().includes("provider") ||
       aiSendError.toLowerCase().includes("unavailable"));
 
+  // Resolve the highest-priority destination for ATTENTION REQUIRED
+  const attentionRoute =
+    overdueTasks > 0 || highPriorityOpen > 0
+      ? "/(tabs)/tasks"
+      : pendingApprovals > 0
+        ? "/(tabs)/autonomy"
+        : "/(tabs)/notifications";
+
   const systemStatus = getSystemStatus({
     apiError: !!(tasksError || goalsError),
     aiProviderOffline,
     hasAttention: unreadCount > 0 || pendingApprovals > 0 || overdueTasks > 0 || highPriorityOpen > 0,
+    attentionRoute,
     isSyncing: !!(syncingId || bgJobsRunning),
     focusModeActive: false,
   });
+
+  const onPressStatus = systemStatus.targetRoute
+    ? () => router.push(systemStatus.targetRoute as Parameters<typeof router.push>[0])
+    : null;
 
   const now = today;
   const hour = now.getHours();
@@ -166,7 +221,7 @@ export default function HomeScreen() {
         ]}
       >
         <Header unreadCount={unreadCount} onGearPress={() => router.push("/(tabs)/profile")} />
-        <Hero greeting={greeting} userName={displayName} dateStr={dateStr} systemStatus={systemStatus} />
+        <Hero greeting={greeting} userName={displayName} dateStr={dateStr} systemStatus={systemStatus} onPressStatus={onPressStatus} />
 
         <Section title={"TODAY'S METRICS"} action="View all  ›" onAction={() => router.push("/(tabs)/analytics")} />
 
@@ -225,15 +280,29 @@ function Hero({
   userName,
   dateStr,
   systemStatus,
+  onPressStatus,
 }: {
   greeting: string;
   userName: string;
   dateStr: string;
   systemStatus: SystemStatus;
+  onPressStatus: (() => void) | null;
 }) {
   const { colors } = useTheme();
   const s = useMemo(() => createStyles(colors), [colors]);
   const toneColor = getToneColor(systemStatus.tone, colors);
+
+  const pillStyle = [
+    s.statusPill,
+    { backgroundColor: `${toneColor}24`, borderColor: `${toneColor}2e` },
+  ] as const;
+
+  const pillInner = (
+    <>
+      <View style={[s.statusDot, { backgroundColor: toneColor }]} />
+      <Text style={[s.statusText, { color: toneColor }]}>{systemStatus.label}</Text>
+    </>
+  );
 
   return (
     <View style={s.heroCard}>
@@ -242,13 +311,21 @@ function Hero({
         <Text style={s.heroName} numberOfLines={2}>{userName}.</Text>
         <Text style={s.heroDate}>{dateStr}</Text>
 
-        <View style={[
-          s.statusPill,
-          { backgroundColor: `${toneColor}24`, borderColor: `${toneColor}2e` },
-        ]}>
-          <View style={[s.statusDot, { backgroundColor: toneColor }]} />
-          <Text style={[s.statusText, { color: toneColor }]}>{systemStatus.label}</Text>
-        </View>
+        {onPressStatus ? (
+          <TouchableOpacity
+            style={pillStyle}
+            onPress={onPressStatus}
+            activeOpacity={0.65}
+            accessibilityLabel={systemStatus.accessibilityHint}
+            accessibilityRole="button"
+          >
+            {pillInner}
+          </TouchableOpacity>
+        ) : (
+          <View style={pillStyle}>
+            {pillInner}
+          </View>
+        )}
       </View>
 
       <View style={s.heroOrbArea}>
