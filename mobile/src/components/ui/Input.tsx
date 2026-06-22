@@ -1,6 +1,6 @@
-import { forwardRef, useState } from "react";
+import { forwardRef, useState, useMemo } from "react";
 import { View, TextInput, Text, StyleSheet, type TextInputProps } from "react-native";
-import { spacing, radius, typography } from "../../theme/theme";
+import { spacing, radius, typography, type ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 
 type Props = TextInputProps & {
@@ -14,6 +14,7 @@ const Input = forwardRef<TextInput, Props>(function Input(
 ) {
   const [focused, setFocused] = useState(false);
   const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
     <View style={styles.container}>
@@ -51,7 +52,8 @@ const Input = forwardRef<TextInput, Props>(function Input(
 
 export default Input;
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   container: {
     gap: spacing.xs,
   },
@@ -67,10 +69,11 @@ const styles = StyleSheet.create({
   },
   inputFocused: {},
   inputError: {
-    borderColor: "#ef4444",
+    borderColor: colors.danger,
   },
   error: {
     ...typography.caption,
-    color: "#ef4444",
+    color: colors.danger,
   },
 });
+}

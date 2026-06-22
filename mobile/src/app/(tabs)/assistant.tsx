@@ -492,7 +492,7 @@ function createStyles(colors: ThemeColors) {
 
   toggleButtonActive: {
     borderColor: colors.accentCyan,
-    backgroundColor: "rgba(34,211,238,0.1)",
+    backgroundColor: `${colors.accentCyan}1a`,
   },
 
   toggleButtonText: {
@@ -526,9 +526,9 @@ function createStyles(colors: ThemeColors) {
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    backgroundColor: "rgba(34,211,238,0.06)",
+    backgroundColor: `${colors.accentCyan}0f`,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(34,211,238,0.2)",
+    borderBottomColor: `${colors.accentCyan}33`,
   },
 
   contextBannerDot: {
@@ -553,9 +553,9 @@ function createStyles(colors: ThemeColors) {
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    backgroundColor: "rgba(34,211,238,0.05)",
+    backgroundColor: `${colors.accentCyan}0d`,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(34,211,238,0.15)",
+    borderBottomColor: `${colors.accentCyan}26`,
   },
 
   initBannerText: {
@@ -572,14 +572,14 @@ function createStyles(colors: ThemeColors) {
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    backgroundColor: "rgba(239,68,68,0.08)",
+    backgroundColor: `${colors.danger}14`,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(239,68,68,0.25)",
+    borderBottomColor: `${colors.danger}40`,
   },
 
   initErrorText: {
     ...typography.caption,
-    color: "#ef4444",
+    color: colors.danger,
     flex: 1,
   },
 
@@ -681,16 +681,16 @@ function createStyles(colors: ThemeColors) {
   errorBanner: {
     marginHorizontal: spacing.md,
     marginBottom: spacing.xs,
-    backgroundColor: "rgba(239,68,68,0.1)",
+    backgroundColor: `${colors.danger}1a`,
     borderWidth: 1,
-    borderColor: "rgba(239,68,68,0.3)",
+    borderColor: `${colors.danger}4d`,
     borderRadius: radius.sm,
     padding: spacing.sm,
   },
 
   errorText: {
     ...typography.caption,
-    color: "#ef4444",
+    color: colors.danger,
   },
 
   // Input bar — marginBottom lifts it above the absolute-positioned tab bar (106px).
@@ -711,10 +711,10 @@ function createStyles(colors: ThemeColors) {
 
   textInput: {
     flex: 1,
-    backgroundColor: "rgba(6, 17, 33, 0.92)",
+    backgroundColor: colors.surface,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: "rgba(139, 92, 246, 0.55)",
+    borderColor: `${colors.accent}8c`,
     color: colors.textPrimary,
     ...typography.body,
     paddingHorizontal: spacing.md,
@@ -727,7 +727,7 @@ function createStyles(colors: ThemeColors) {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#8B5CF6",
+    backgroundColor: colors.accent,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -747,7 +747,7 @@ function createStyles(colors: ThemeColors) {
 
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(5,8,22,0.85)",
+    backgroundColor: colors.overlay,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: spacing.lg,
@@ -836,7 +836,7 @@ function createStyles(colors: ThemeColors) {
   },
 
   historyRowActive: {
-    backgroundColor: "rgba(124,58,237,0.08)",
+    backgroundColor: `${colors.accent}14`,
   },
 
   historyRowBody: {

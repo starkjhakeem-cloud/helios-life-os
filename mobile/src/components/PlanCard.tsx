@@ -33,7 +33,7 @@ export default function PlanCard({
         <SymbolView
           name="sparkles"
           size={15}
-          tintColor={"#22d3ee"}
+          tintColor={colors.accentCyan}
           resizeMode="scaleAspectFit"
         />
         <Text style={styles.headerLabel}>HELIOS PLAN</Text>
@@ -47,7 +47,7 @@ export default function PlanCard({
         <SymbolView
           name="list.number"
           size={13}
-          tintColor={"#8490ab"}
+          tintColor={colors.textMuted}
           resizeMode="scaleAspectFit"
         />
         <Text style={styles.sectionLabel}>EXECUTION STEPS</Text>
@@ -79,7 +79,7 @@ export default function PlanCard({
               <SymbolView
                 name="exclamationmark.triangle.fill"
                 size={12}
-                tintColor="#f59e0b"
+                tintColor={colors.warning}
                 resizeMode="scaleAspectFit"
               />
               <Text style={styles.riskText}>{risk}</Text>
@@ -94,7 +94,7 @@ export default function PlanCard({
           <SymbolView
             name="lightbulb.fill"
             size={12}
-            tintColor={"#22d3ee"}
+            tintColor={colors.accentCyan}
             resizeMode="scaleAspectFit"
           />
           <Text style={styles.recommendLabel}>RECOMMENDATION</Text>
@@ -246,7 +246,7 @@ function createStyles(colors: ThemeColors) {
 
   riskText: {
     ...typography.caption,
-    color: "#f59e0b",
+    color: colors.warning,
     flex: 1,
   },
 

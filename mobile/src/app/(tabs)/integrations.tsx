@@ -149,7 +149,7 @@ function IntegrationCard({
                 <SymbolView
                   name="checkmark.shield"
                   size={9}
-                  tintColor="#10b981"
+                  tintColor={colors.success}
                   resizeMode="scaleAspectFit"
                 />
                 <Text style={styles.oauthReadyText}>OAUTH READY</Text>
@@ -165,13 +165,13 @@ function IntegrationCard({
             <View
               style={[
                 styles.statusDot,
-                { backgroundColor: isConnected ? "#10b981" : "#8490ab" },
+                { backgroundColor: isConnected ? colors.success : colors.textMuted },
               ]}
             />
             <Text
               style={[
                 styles.statusText,
-                { color: isConnected ? "#10b981" : "#8490ab" },
+                { color: isConnected ? colors.success : colors.textMuted },
               ]}
             >
               {isConnected ? "CONNECTED" : "DISCONNECTED"}
@@ -213,7 +213,7 @@ function IntegrationCard({
             <SymbolView
               name="lock.shield"
               size={11}
-              tintColor={"#8490ab"}
+              tintColor={colors.textMuted}
               resizeMode="scaleAspectFit"
             />
             <Text style={styles.oauthNoteText}>
@@ -250,7 +250,7 @@ function IntegrationCard({
             <SymbolView
               name="exclamationmark.circle"
               size={11}
-              tintColor="#ef4444"
+              tintColor={colors.danger}
               resizeMode="scaleAspectFit"
             />
             <Text style={styles.syncErrorText} numberOfLines={2}>
@@ -305,7 +305,7 @@ function IntegrationCard({
               activeOpacity={0.8}
             >
               {isMutating ? (
-                <ActivityIndicator size="small" color={"#8490ab"} />
+                <ActivityIndicator size="small" color={colors.textMuted} />
               ) : (
                 <Text style={[styles.actionButtonText, styles.disconnectButtonText]}>
                   DISCONNECT
@@ -328,13 +328,13 @@ function IntegrationCard({
               activeOpacity={0.8}
             >
               {isConnecting ? (
-                <ActivityIndicator size="small" color={"#020617"} />
+                <ActivityIndicator size="small" color={colors.background} />
               ) : (
                 <>
                   <SymbolView
                     name="lock.shield"
                     size={11}
-                    tintColor={"#020617"}
+                    tintColor={colors.background}
                     resizeMode="scaleAspectFit"
                   />
                   <Text style={styles.actionButtonText}>CONNECT GOOGLE</Text>
@@ -352,9 +352,9 @@ function IntegrationCard({
               activeOpacity={0.8}
             >
               {isMutating ? (
-                <ActivityIndicator size="small" color={"#8490ab"} />
+                <ActivityIndicator size="small" color={colors.textMuted} />
               ) : (
-                <Text style={[styles.actionButtonText, { color: "#8490ab" }]}>
+                <Text style={[styles.actionButtonText, { color: colors.textMuted }]}>
                   MOCK
                 </Text>
               )}
@@ -374,7 +374,7 @@ function IntegrationCard({
             activeOpacity={0.8}
           >
             {isMutating ? (
-              <ActivityIndicator size="small" color={"#020617"} />
+              <ActivityIndicator size="small" color={colors.background} />
             ) : (
               <Text style={styles.actionButtonText}>MOCK CONNECT</Text>
             )}
@@ -499,7 +499,7 @@ export default function IntegrationsScreen() {
 
   return (
     <ScrollView
-      style={{ backgroundColor: "#020617" }}
+      style={{ backgroundColor: colors.background }}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={[
         styles.container,
@@ -509,7 +509,7 @@ export default function IntegrationsScreen() {
         <RefreshControl
           refreshing={isLoading}
           onRefresh={load}
-          tintColor={"#22d3ee"}
+          tintColor={colors.accentCyan}
         />
       }
     >
@@ -529,7 +529,7 @@ export default function IntegrationsScreen() {
         <SymbolView
           name="antenna.radiowaves.left.and.right"
           size={13}
-          tintColor={"#22d3ee"}
+          tintColor={colors.accentCyan}
           resizeMode="scaleAspectFit"
         />
         <Text style={styles.readinessText}>
@@ -541,7 +541,7 @@ export default function IntegrationsScreen() {
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionLabel}>AVAILABLE INTEGRATIONS</Text>
         {isLoading ? (
-          <ActivityIndicator size="small" color={"#22d3ee"} />
+          <ActivityIndicator size="small" color={colors.accentCyan} />
         ) : null}
       </View>
 
@@ -568,7 +568,7 @@ export default function IntegrationsScreen() {
         <SymbolView
           name="info.circle"
           size={12}
-          tintColor={"#8490ab"}
+          tintColor={colors.textMuted}
           resizeMode="scaleAspectFit"
         />
         <Text style={styles.footerText}>
@@ -649,7 +649,7 @@ function createStyles(colors: ThemeColors) {
 
   errorText: {
     ...typography.caption,
-    color: "#ef4444",
+    color: colors.danger,
     marginBottom: spacing.sm,
   },
 
@@ -720,9 +720,9 @@ function createStyles(colors: ThemeColors) {
   },
 
   statusConnected: {
-    backgroundColor: "#10b98115",
+    backgroundColor: `${colors.success}26`,
     borderWidth: 1,
-    borderColor: "#10b98130",
+    borderColor: `${colors.success}4d`,
   },
 
   statusDisconnected: {
@@ -777,18 +777,18 @@ function createStyles(colors: ThemeColors) {
     alignItems: "center",
     gap: 3,
     alignSelf: "flex-start",
-    backgroundColor: "#10b98112",
+    backgroundColor: `${colors.success}1f`,
     borderRadius: 4,
     paddingHorizontal: 5,
     paddingVertical: 2,
     borderWidth: 1,
-    borderColor: "#10b98128",
+    borderColor: `${colors.success}40`,
     marginTop: 3,
   },
 
   oauthReadyText: {
     ...typography.label,
-    color: "#10b981",
+    color: colors.success,
     fontSize: 8,
   },
 
@@ -850,7 +850,7 @@ function createStyles(colors: ThemeColors) {
 
   syncErrorText: {
     ...typography.caption,
-    color: "#ef4444",
+    color: colors.danger,
     flex: 1,
     fontSize: 11,
     lineHeight: 16,

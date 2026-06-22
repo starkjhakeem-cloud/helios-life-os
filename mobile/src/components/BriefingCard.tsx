@@ -26,13 +26,15 @@ type Props = {
 
 // ── Agent accent colours matching AgentCard ───────────────────────────────────
 
-const AGENT_ACCENT: Record<string, string> = {
-  "Strategy Agent": "#a855f7",
-  "Finance Agent":  "#10b981",
-  "Study Agent":    "#22d3ee",
-  "Health Agent":   "#ef4444",
-  "Career Agent":   "#f59e0b",
-};
+function getAgentAccent(c: ThemeColors): Record<string, string> {
+  return {
+    "Strategy Agent": c.accent,
+    "Finance Agent":  c.success,
+    "Study Agent":    c.accentCyan,
+    "Health Agent":   c.danger,
+    "Career Agent":   c.warning,
+  };
+}
 
 const AGENT_ICON: Record<string, Parameters<typeof SymbolView>[0]["name"]> = {
   "Strategy Agent": "scope",
@@ -72,12 +74,13 @@ export default function BriefingCard({
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const AGENT_ACCENT = useMemo(() => getAgentAccent(colors), [colors]);
   const time = new Date(generated_at).toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
   });
 
-  const agentAccent = AGENT_ACCENT[recommended_agent] ?? "#8490ab";
+  const agentAccent = AGENT_ACCENT[recommended_agent] ?? colors.textMuted;
   const agentIcon = AGENT_ICON[recommended_agent] ?? "cpu";
 
   const hasEmailData = !!email_summary || important_emails.length > 0;
@@ -95,7 +98,7 @@ export default function BriefingCard({
           <SymbolView
             name="brain.head.profile"
             size={14}
-            tintColor={"#22d3ee"}
+            tintColor={colors.accentCyan}
             resizeMode="scaleAspectFit"
           />
           <Text style={styles.headerLabel}>DAILY COMMAND</Text>
@@ -130,7 +133,7 @@ export default function BriefingCard({
               <SymbolView
                 name="exclamationmark.triangle.fill"
                 size={12}
-                tintColor="#f59e0b"
+                tintColor={colors.warning}
                 resizeMode="scaleAspectFit"
               />
               <Text style={styles.riskText}>{risk}</Text>
@@ -148,7 +151,7 @@ export default function BriefingCard({
               <SymbolView
                 name="envelope.fill"
                 size={12}
-                tintColor="#f59e0b"
+                tintColor={colors.warning}
                 resizeMode="scaleAspectFit"
               />
               <Text style={styles.inboxLabel}>INBOX STATUS</Text>
@@ -181,7 +184,7 @@ export default function BriefingCard({
               <SymbolView
                 name="exclamationmark.triangle.fill"
                 size={10}
-                tintColor="#f59e0b"
+                tintColor={colors.warning}
                 resizeMode="scaleAspectFit"
               />
               <Text style={styles.inboxRiskText}>{risk}</Text>
@@ -194,7 +197,7 @@ export default function BriefingCard({
               <SymbolView
                 name="arrow.right.circle.fill"
                 size={11}
-                tintColor="#f59e0b"
+                tintColor={colors.warning}
                 resizeMode="scaleAspectFit"
               />
               <Text style={styles.inboxActionText}>{topEmailAction}</Text>
@@ -209,7 +212,7 @@ export default function BriefingCard({
           <SymbolView
             name="bolt.fill"
             size={12}
-            tintColor={"#22d3ee"}
+            tintColor={colors.accentCyan}
             resizeMode="scaleAspectFit"
           />
           <Text style={styles.focusLabel}>FOCUS BLOCK</Text>
@@ -375,17 +378,17 @@ function createStyles(colors: ThemeColors) {
 
   riskText: {
     ...typography.caption,
-    color: "#f59e0b",
+    color: colors.warning,
     flex: 1,
     lineHeight: 18,
   },
 
   // Inbox status box
   inboxBox: {
-    backgroundColor: `${"#f59e0b"}10`,
+    backgroundColor: `${colors.warning}1a`,
     borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: `${"#f59e0b"}30`,
+    borderColor: `${colors.warning}4d`,
     padding: spacing.md,
     margin: spacing.lg,
     marginTop: spacing.xs,
@@ -407,12 +410,12 @@ function createStyles(colors: ThemeColors) {
 
   inboxLabel: {
     ...typography.label,
-    color: "#f59e0b",
+    color: colors.warning,
     fontSize: 9,
   },
 
   inboxBadge: {
-    backgroundColor: `${"#f59e0b"}25`,
+    backgroundColor: `${colors.warning}40`,
     borderRadius: 4,
     paddingHorizontal: 5,
     paddingVertical: 2,
@@ -420,7 +423,7 @@ function createStyles(colors: ThemeColors) {
 
   inboxBadgeText: {
     ...typography.label,
-    color: "#f59e0b",
+    color: colors.warning,
     fontSize: 8,
   },
 
@@ -441,7 +444,7 @@ function createStyles(colors: ThemeColors) {
     width: 5,
     height: 5,
     borderRadius: 3,
-    backgroundColor: "#f59e0b",
+    backgroundColor: colors.warning,
     marginTop: 5,
     flexShrink: 0,
   },
@@ -463,7 +466,7 @@ function createStyles(colors: ThemeColors) {
 
   inboxRiskText: {
     ...typography.caption,
-    color: "#f59e0b",
+    color: colors.warning,
     fontSize: 11,
     flex: 1,
     lineHeight: 16,

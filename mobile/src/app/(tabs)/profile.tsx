@@ -86,8 +86,8 @@ function InfoRow({ label, value }: InfoRowProps) {
 
   return (
     <View style={styles.infoRow}>
-      <Text style={[styles.infoLabel, { color: "#c7d2fe" }]}>{label}</Text>
-      <Text style={[styles.infoValue, { color: "#ffffff" }]} numberOfLines={1}>{value}</Text>
+      <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>{label}</Text>
+      <Text style={[styles.infoValue, { color: colors.textPrimary }]} numberOfLines={1}>{value}</Text>
     </View>
   );
 }
@@ -104,14 +104,14 @@ reminder, onToggle, onDelete }: ReminderRowProps) {
 
   return (
     <View style={styles.reminderRow}>
-      <View style={[styles.reminderDot, { backgroundColor: reminder.is_enabled ? "#22d3ee" : "#263452" }]} />
+      <View style={[styles.reminderDot, { backgroundColor: reminder.is_enabled ? colors.accentCyan : colors.border }]} />
       <View style={styles.reminderBody}>
         <Text style={styles.reminderTitle} numberOfLines={1}>{reminder.title}</Text>
         <Text style={styles.reminderTime}>{formatRemindAt(reminder.remind_at)}</Text>
       </View>
       <View style={styles.reminderActions}>
         <TouchableOpacity onPress={onToggle} style={styles.reminderToggle} activeOpacity={0.7}>
-          <Text style={[styles.reminderToggleText, { color: reminder.is_enabled ? "#22d3ee" : "#8490ab" }]}>
+          <Text style={[styles.reminderToggleText, { color: reminder.is_enabled ? colors.accentCyan : colors.textMuted }]}>
             {reminder.is_enabled ? "ON" : "OFF"}
           </Text>
         </TouchableOpacity>
@@ -189,7 +189,7 @@ visible, onClose, onSubmit, isMutating }: NewReminderModalProps) {
             value={title}
             onChangeText={setTitle}
             placeholder="e.g. Review weekly goals"
-            placeholderTextColor={"#8490ab"}
+            placeholderTextColor={colors.textMuted}
             maxLength={200}
           />
 
@@ -199,7 +199,7 @@ visible, onClose, onSubmit, isMutating }: NewReminderModalProps) {
             value={body}
             onChangeText={setBody}
             placeholder="Additional context"
-            placeholderTextColor={"#8490ab"}
+            placeholderTextColor={colors.textMuted}
             maxLength={500}
             multiline
           />
@@ -210,7 +210,7 @@ visible, onClose, onSubmit, isMutating }: NewReminderModalProps) {
             value={remindAt}
             onChangeText={setRemindAt}
             placeholder="e.g. 2026-06-01 09:00"
-            placeholderTextColor={"#8490ab"}
+            placeholderTextColor={colors.textMuted}
             autoCapitalize="none"
             autoCorrect={false}
           />
@@ -229,7 +229,7 @@ visible, onClose, onSubmit, isMutating }: NewReminderModalProps) {
               activeOpacity={0.8}
             >
               {isMutating ? (
-                <ActivityIndicator size="small" color={"#020617"} />
+                <ActivityIndicator size="small" color={colors.background} />
               ) : (
                 <Text style={styles.createButtonText}>CREATE</Text>
               )}
@@ -385,14 +385,14 @@ export default function ProfileScreen() {
     : "NOT REQUESTED";
 
   const permColor =
-    permissionStatus === "granted" ? "#22d3ee"
-    : permissionStatus === "denied" ? "#ef4444"
-    : "#8490ab";
+    permissionStatus === "granted" ? colors.accentCyan
+    : permissionStatus === "denied" ? colors.danger
+    : colors.textMuted;
 
   return (
     <>
       <ScrollView
-        style={{ backgroundColor: "#020617" }}
+        style={{ backgroundColor: colors.background }}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}
       >
@@ -431,7 +431,7 @@ export default function ProfileScreen() {
             </>
           ) : (
             <View style={styles.loadingRow}>
-              <ActivityIndicator size="small" color={"#22d3ee"} />
+              <ActivityIndicator size="small" color={colors.accentCyan} />
               <Text style={styles.loadingText}>LOADING...</Text>
             </View>
           )}
@@ -458,7 +458,7 @@ export default function ProfileScreen() {
                 activeOpacity={0.8}
               >
                 {permRequesting ? (
-                  <ActivityIndicator size="small" color={"#020617"} />
+                  <ActivityIndicator size="small" color={colors.background} />
                 ) : (
                   <Text style={styles.permButtonText}>REQUEST</Text>
                 )}
@@ -472,7 +472,7 @@ export default function ProfileScreen() {
           <Text style={styles.sectionLabel}>REMINDERS</Text>
           <View style={styles.remindersHeaderRight}>
             {(remindersLoading || isMutating) ? (
-              <ActivityIndicator size="small" color={"#22d3ee"} />
+              <ActivityIndicator size="small" color={colors.accentCyan} />
             ) : null}
             <TouchableOpacity
               style={styles.addButton}
@@ -510,7 +510,7 @@ export default function ProfileScreen() {
         {/* Preferences */}
         <View style={styles.prefHeader}>
           <Text style={styles.sectionLabel}>PREFERENCES</Text>
-          {prefsSaving && <ActivityIndicator size="small" color={"#22d3ee"} />}
+          {prefsSaving && <ActivityIndicator size="small" color={colors.accentCyan} />}
         </View>
 
         <View style={styles.card}>
@@ -567,7 +567,7 @@ export default function ProfileScreen() {
               onPress={() => handlePrefChange("notifications_enabled", !notifications_enabled)}
               activeOpacity={0.7}
             >
-              <Text style={[styles.toggleText, { color: notifications_enabled ? "#22d3ee" : "#8490ab" }]}>
+              <Text style={[styles.toggleText, { color: notifications_enabled ? colors.accentCyan : colors.textMuted }]}>
                 {notifications_enabled ? "ON" : "OFF"}
               </Text>
             </TouchableOpacity>
@@ -590,7 +590,7 @@ export default function ProfileScreen() {
               activeOpacity={0.7}
             >
               <Text style={[styles.toggleText, {
-                color: notifications_enabled && reminder_notifications ? "#22d3ee" : "#8490ab",
+                color: notifications_enabled && reminder_notifications ? colors.accentCyan : colors.textMuted,
               }]}>
                 {reminder_notifications ? "ON" : "OFF"}
               </Text>
@@ -609,7 +609,7 @@ export default function ProfileScreen() {
             <SymbolView
               name="link.circle"
               size={16}
-              tintColor={"#22d3ee"}
+              tintColor={colors.accentCyan}
               resizeMode="scaleAspectFit"
             />
             <Text style={styles.integrationsButtonText}>INTEGRATIONS</Text>
@@ -617,7 +617,7 @@ export default function ProfileScreen() {
           <SymbolView
             name="chevron.right"
             size={12}
-            tintColor={"#8490ab"}
+            tintColor={colors.textMuted}
             resizeMode="scaleAspectFit"
           />
         </TouchableOpacity>
@@ -635,7 +635,7 @@ export default function ProfileScreen() {
                     <SymbolView
                       name={def.icon as Parameters<typeof SymbolView>[0]["name"]}
                       size={16}
-                      tintColor={job?.enabled ? "#a855f7" : "#8490ab"}
+                      tintColor={job?.enabled ? colors.accent : colors.textMuted}
                       resizeMode="scaleAspectFit"
                     />
                     <View style={styles.jobInfo}>
@@ -672,7 +672,7 @@ export default function ProfileScreen() {
                           disabled={isMutating || jobsMutating}
                           activeOpacity={0.7}
                         >
-                          <Text style={[styles.jobToggleText, { color: job.enabled ? "#a855f7" : "#8490ab" }]}>
+                          <Text style={[styles.jobToggleText, { color: job.enabled ? colors.accent : colors.textMuted }]}>
                             {job.enabled ? "ON" : "OFF"}
                           </Text>
                         </TouchableOpacity>
@@ -695,7 +695,7 @@ export default function ProfileScreen() {
                           disabled={isMutating || jobsMutating}
                           activeOpacity={0.7}
                         >
-                          <SymbolView name="trash" size={13} tintColor={"#8490ab"} resizeMode="scaleAspectFit" />
+                          <SymbolView name="trash" size={13} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
                         </TouchableOpacity>
                       </>
                     ) : (
@@ -938,7 +938,7 @@ function createStyles(colors: ThemeColors) {
 
   errorText: {
     ...typography.caption,
-    color: "#ef4444",
+    color: colors.danger,
     marginBottom: spacing.sm,
   },
 
@@ -1127,10 +1127,10 @@ function createStyles(colors: ThemeColors) {
 
   // Logout
   logoutButton: {
-    backgroundColor: "rgba(239,68,68,0.12)",
+    backgroundColor: `${colors.danger}1e`,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: "rgba(239,68,68,0.35)",
+    borderColor: `${colors.danger}59`,
     paddingVertical: spacing.md,
     alignItems: "center",
     marginTop: spacing.sm,
@@ -1138,7 +1138,7 @@ function createStyles(colors: ThemeColors) {
 
   logoutText: {
     ...typography.label,
-    color: "#ef4444",
+    color: colors.danger,
     fontSize: 13,
   },
 
@@ -1158,7 +1158,7 @@ function createStyles(colors: ThemeColors) {
   // New reminder modal
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: colors.overlay,
   },
 
   modalWrapper: {
@@ -1225,7 +1225,7 @@ function createStyles(colors: ThemeColors) {
 
   formError: {
     ...typography.caption,
-    color: "#ef4444",
+    color: colors.danger,
     marginBottom: spacing.sm,
   },
 
@@ -1291,15 +1291,15 @@ function createStyles(colors: ThemeColors) {
     paddingVertical: spacing.xs - 2,
     borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: "#22c55e",
-    backgroundColor: "rgba(34, 197, 94, 0.08)",
+    borderColor: colors.success,
+    backgroundColor: `${colors.success}14`,
     alignItems: "center",
   },
   jobRunBtnText: {
     fontSize: 9,
     fontWeight: "700" as const,
     letterSpacing: 0.8,
-    color: "#22c55e",
+    color: colors.success,
   },
   jobToggle: {
     paddingHorizontal: spacing.sm,
@@ -1329,7 +1329,7 @@ function createStyles(colors: ThemeColors) {
     borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: colors.accentCyan,
-    backgroundColor: "rgba(0, 255, 255, 0.06)",
+    backgroundColor: `${colors.accentCyan}0f`,
     alignItems: "center",
   },
   jobAddBtnText: {

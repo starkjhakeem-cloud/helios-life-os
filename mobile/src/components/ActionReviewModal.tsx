@@ -136,7 +136,7 @@ export default function ActionReviewModal({ action, onConfirm, onCancel }: Props
               {/* ── Executing ── */}
               {execState === "executing" && (
                 <View style={styles.centeredState}>
-                  <ActivityIndicator size="large" color={"#22d3ee"} />
+                  <ActivityIndicator size="large" color={colors.accentCyan} />
                   <Text style={styles.executingText}>EXECUTING...</Text>
                 </View>
               )}
@@ -272,7 +272,7 @@ function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(5,8,22,0.85)",
+    backgroundColor: colors.overlay,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: spacing.lg,
@@ -303,9 +303,9 @@ function createStyles(colors: ThemeColors) {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: "rgba(34,211,238,0.15)",
+    backgroundColor: `${colors.accentCyan}26`,
     borderWidth: 1,
-    borderColor: "rgba(34,211,238,0.4)",
+    borderColor: `${colors.accentCyan}66`,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: spacing.xs,
@@ -331,7 +331,7 @@ function createStyles(colors: ThemeColors) {
 
   errorTitle: {
     ...typography.title,
-    color: "#ef4444",
+    color: colors.danger,
     textAlign: "center",
     marginBottom: spacing.xs,
   },
@@ -346,9 +346,9 @@ function createStyles(colors: ThemeColors) {
 
   typeBadge: {
     alignSelf: "flex-start",
-    backgroundColor: "rgba(124,58,237,0.18)",
+    backgroundColor: `${colors.accent}2e`,
     borderWidth: 1,
-    borderColor: "rgba(124,58,237,0.5)",
+    borderColor: `${colors.accent}80`,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
@@ -357,7 +357,7 @@ function createStyles(colors: ThemeColors) {
 
   typeBadgeText: {
     ...typography.label,
-    color: "#a78bfa",
+    color: colors.accent,
     fontSize: 10,
   },
 
@@ -441,13 +441,13 @@ function createStyles(colors: ThemeColors) {
   },
 
   bannerNoExec: {
-    backgroundColor: "rgba(34,211,238,0.06)",
-    borderColor: "rgba(34,211,238,0.2)",
+    backgroundColor: `${colors.accentCyan}0f`,
+    borderColor: `${colors.accentCyan}33`,
   },
 
   bannerExec: {
-    backgroundColor: "rgba(245,158,11,0.08)",
-    borderColor: "rgba(245,158,11,0.3)",
+    backgroundColor: `${colors.warning}14`,
+    borderColor: `${colors.warning}4d`,
   },
 
   bannerText: {
@@ -461,7 +461,7 @@ function createStyles(colors: ThemeColors) {
   },
 
   bannerTextExec: {
-    color: "#f59e0b",
+    color: colors.warning,
   },
 
   buttons: {

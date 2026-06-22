@@ -165,14 +165,14 @@ export default function CalendarScreen() {
   return (
     <>
       <ScrollView
-        style={{ backgroundColor: "#020617" }}
+        style={{ backgroundColor: colors.background }}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}
         refreshControl={
           <RefreshControl
             refreshing={isLoading}
             onRefresh={onRefresh}
-            tintColor={"#22d3ee"}
+            tintColor={colors.accentCyan}
           />
         }
       >
@@ -192,7 +192,7 @@ export default function CalendarScreen() {
           <Text style={styles.sectionLabel}>UPCOMING</Text>
           <View style={styles.headerRight}>
             {(isLoading || isMutating) ? (
-              <ActivityIndicator size="small" color={"#22d3ee"} />
+              <ActivityIndicator size="small" color={colors.accentCyan} />
             ) : null}
             <TouchableOpacity style={styles.addButton} onPress={openCreate}>
               <Text style={styles.addButtonText}>+ NEW EVENT</Text>
@@ -210,7 +210,7 @@ export default function CalendarScreen() {
             <SymbolView
               name="calendar"
               size={36}
-              tintColor={"#8490ab"}
+              tintColor={colors.textMuted}
               resizeMode="scaleAspectFit"
             />
             <Text style={styles.emptyTitle}>No events scheduled</Text>
@@ -394,7 +394,7 @@ function createStyles(colors: ThemeColors) {
 
   errorText: {
     ...typography.caption,
-    color: "#ef4444",
+    color: colors.danger,
     marginBottom: spacing.sm,
   },
 
@@ -437,7 +437,7 @@ function createStyles(colors: ThemeColors) {
   // Modal
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: colors.overlay,
   },
 
   modalWrapper: {

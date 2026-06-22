@@ -10,13 +10,15 @@ import { ACTION_TYPE_LABELS } from "./ActionReviewModal";
 
 // ── Agent accent colours (keyed by agent id) ─────────────────────────────────
 
-const AGENT_ACCENT: Record<string, string> = {
-  strategy: "#a855f7",
-  finance:  "#10b981",
-  study:    "#22d3ee",
-  health:   "#ef4444",
-  career:   "#f59e0b",
-};
+function getAgentAccent(c: ThemeColors): Record<string, string> {
+  return {
+    strategy: c.accent,
+    finance:  c.success,
+    study:    c.accentCyan,
+    health:   c.danger,
+    career:   c.warning,
+  };
+}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -32,6 +34,7 @@ export default function OrchestrationResultCard({
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const AGENT_ACCENT = useMemo(() => getAgentAccent(colors), [colors]);
   const time = new Date(result.generated_at).toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
@@ -48,7 +51,7 @@ export default function OrchestrationResultCard({
           <SymbolView
             name="cpu"
             size={13}
-            tintColor={"#a855f7"}
+            tintColor={colors.accent}
             resizeMode="scaleAspectFit"
           />
           <Text style={styles.headerLabel}>COMMAND RESULT</Text>
@@ -64,7 +67,7 @@ export default function OrchestrationResultCard({
       <Text style={styles.sectionLabel}>AGENT ASSESSMENTS</Text>
 
       {result.agent_assessments.map((assessment) => {
-        const accent = AGENT_ACCENT[assessment.agent_id] ?? "#8490ab";
+        const accent = AGENT_ACCENT[assessment.agent_id] ?? colors.textMuted;
         const confPct = Math.round(assessment.confidence * 100);
         return (
           <View key={assessment.agent_id} style={styles.assessmentRow}>
@@ -114,7 +117,7 @@ export default function OrchestrationResultCard({
       {result.consensus_summary ? (
         <View style={styles.consensusBox}>
           <View style={styles.consensusHeader}>
-            <SymbolView name="checkmark.seal.fill" size={12} tintColor="#22c55e" resizeMode="scaleAspectFit" />
+            <SymbolView name="checkmark.seal.fill" size={12} tintColor={colors.success} resizeMode="scaleAspectFit" />
             <Text style={styles.consensusLabel}>AGENT CONSENSUS</Text>
             {result.overall_confidence > 0 ? (
               <View style={styles.overallConfBadge}>
@@ -130,7 +133,7 @@ export default function OrchestrationResultCard({
               <Text style={styles.disagreementsLabel}>DIVERGENT VIEWS</Text>
               {result.disagreements.map((d, i) => (
                 <View key={i} style={styles.disagreementRow}>
-                  <SymbolView name="arrow.triangle.branch" size={10} tintColor="#f59e0b" resizeMode="scaleAspectFit" />
+                  <SymbolView name="arrow.triangle.branch" size={10} tintColor={colors.warning} resizeMode="scaleAspectFit" />
                   <Text style={styles.disagreementText}>{d}</Text>
                 </View>
               ))}
@@ -145,7 +148,7 @@ export default function OrchestrationResultCard({
           <SymbolView
             name="bolt.fill"
             size={12}
-            tintColor={"#a855f7"}
+            tintColor={colors.accent}
             resizeMode="scaleAspectFit"
           />
           <Text style={styles.planLabel}>COORDINATED PLAN</Text>
@@ -162,7 +165,7 @@ export default function OrchestrationResultCard({
               <SymbolView
                 name="exclamationmark.triangle.fill"
                 size={11}
-                tintColor="#f59e0b"
+                tintColor={colors.warning}
                 resizeMode="scaleAspectFit"
               />
               <Text style={styles.riskText}>{risk}</Text>
@@ -426,7 +429,7 @@ function createStyles(colors: ThemeColors) {
 
   riskText: {
     ...typography.caption,
-    color: "#f59e0b",
+    color: colors.warning,
     flex: 1,
     lineHeight: 18,
   },
@@ -563,10 +566,10 @@ function createStyles(colors: ThemeColors) {
 
   execAckBadge: {
     alignSelf: "flex-start" as const,
-    backgroundColor: "#10b98120",
+    backgroundColor: `${colors.success}1f`,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#10b98140",
+    borderColor: `${colors.success}40`,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
     marginTop: spacing.xs,
@@ -574,7 +577,7 @@ function createStyles(colors: ThemeColors) {
 
   execAckText: {
     ...typography.label,
-    color: "#10b981",
+    color: colors.success,
     fontSize: 10,
   },
 
@@ -616,8 +619,8 @@ function createStyles(colors: ThemeColors) {
   consensusBox: {
     borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: "rgba(34, 197, 94, 0.25)",
-    backgroundColor: "rgba(34, 197, 94, 0.06)",
+    borderColor: `${colors.success}40`,
+    backgroundColor: `${colors.success}0f`,
     padding: spacing.md,
     margin: spacing.lg,
     marginTop: 0,
@@ -633,21 +636,21 @@ function createStyles(colors: ThemeColors) {
     fontSize: 9,
     fontWeight: "700" as const,
     letterSpacing: 1.2,
-    color: "#22c55e",
+    color: colors.success,
     flex: 1,
   },
   overallConfBadge: {
-    backgroundColor: "rgba(34, 197, 94, 0.15)",
+    backgroundColor: `${colors.success}26`,
     borderRadius: 4,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderWidth: 1,
-    borderColor: "rgba(34, 197, 94, 0.3)",
+    borderColor: `${colors.success}4d`,
   },
   overallConfText: {
     fontSize: 9,
     fontWeight: "700" as const,
-    color: "#22c55e",
+    color: colors.success,
   },
   consensusText: {
     ...typography.caption,
@@ -658,7 +661,7 @@ function createStyles(colors: ThemeColors) {
     fontSize: 9,
     fontWeight: "700" as const,
     letterSpacing: 1,
-    color: "#f59e0b",
+    color: colors.warning,
     marginTop: spacing.xs,
   },
   disagreementRow: {

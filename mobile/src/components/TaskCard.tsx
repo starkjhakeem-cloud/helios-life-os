@@ -7,19 +7,23 @@ import { spacing, radius, typography , type ThemeColors } from "../theme/theme";
 import { useTheme } from "../theme/ThemeContext";
 import type { Task } from "../services/tasksService";
 
-const PRIORITY_COLOR: Record<string, string> = {
-  critical: "#ef4444",
-  high:     "#f97316",
-  medium:   "#f59e0b",
-  low:      "#8490ab",
-};
+function getPriorityColor(c: ThemeColors): Record<string, string> {
+  return {
+    critical: c.danger,
+    high:     "#f97316",
+    medium:   c.warning,
+    low:      c.textMuted,
+  };
+}
 
-const PRIORITY_BG: Record<string, string> = {
-  critical: "rgba(239,68,68,0.12)",
-  high:     "rgba(249,115,22,0.12)",
-  medium:   "rgba(245,158,11,0.12)",
-  low:      "#050a18",
-};
+function getPriorityBg(c: ThemeColors): Record<string, string> {
+  return {
+    critical: `${c.danger}1f`,
+    high:     "rgba(249,115,22,0.12)",
+    medium:   `${c.warning}1f`,
+    low:      c.surfaceDark,
+  };
+}
 
 const STATUS_ICON: Record<string, Parameters<typeof SymbolView>[0]["name"]> = {
   todo:        "circle",
@@ -27,11 +31,13 @@ const STATUS_ICON: Record<string, Parameters<typeof SymbolView>[0]["name"]> = {
   done:        "checkmark.circle.fill",
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  todo:        "#8490ab",
-  in_progress: "#22d3ee",
-  done:        "#22c55e",
-};
+function getStatusColor(c: ThemeColors): Record<string, string> {
+  return {
+    todo:        c.textMuted,
+    in_progress: c.accentCyan,
+    done:        c.success,
+  };
+}
 
 const STATUS_NEXT: Record<string, string> = {
   todo:        "in_progress",
@@ -48,9 +54,9 @@ type Props = {
 export default function TaskCard({ task, onStatusChange, onDelete }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const priorityColor = PRIORITY_COLOR[task.priority] ?? "#8490ab";
-  const priorityBg    = PRIORITY_BG[task.priority]    ?? "#050a18";
-  const statusColor   = STATUS_COLOR[task.status]     ?? "#8490ab";
+  const priorityColor = useMemo(() => getPriorityColor(colors), [colors])[task.priority] ?? colors.textMuted;
+  const priorityBg    = useMemo(() => getPriorityBg(colors), [colors])[task.priority]    ?? colors.surfaceDark;
+  const statusColor   = useMemo(() => getStatusColor(colors), [colors])[task.status]     ?? colors.textMuted;
   const nextStatus    = STATUS_NEXT[task.status]      ?? "todo";
 
   function handleStatusChange() {
@@ -110,7 +116,7 @@ export default function TaskCard({ task, onStatusChange, onDelete }: Props) {
             <SymbolView
               name="trash"
               size={16}
-              tintColor={"#8490ab"}
+              tintColor={colors.textMuted}
               resizeMode="scaleAspectFit"
             />
           </TouchableOpacity>
@@ -126,14 +132,14 @@ export default function TaskCard({ task, onStatusChange, onDelete }: Props) {
           <View style={styles.metaRow}>
             {task.due_date ? (
               <View style={styles.metaItem}>
-                <SymbolView name="calendar" size={11} tintColor={"#8490ab"} resizeMode="scaleAspectFit" />
+                <SymbolView name="calendar" size={11} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
                 <Text style={styles.metaText}>{task.due_date}</Text>
               </View>
             ) : null}
             {task.linked_goal_id ? (
               <View style={styles.metaItem}>
-                <SymbolView name="target" size={11} tintColor={"#a855f7"} resizeMode="scaleAspectFit" />
-                <Text style={[styles.metaText, { color: "#a855f7" }]}>Goal linked</Text>
+                <SymbolView name="target" size={11} tintColor={colors.accent} resizeMode="scaleAspectFit" />
+                <Text style={[styles.metaText, { color: colors.accent }]}>Goal linked</Text>
               </View>
             ) : null}
           </View>

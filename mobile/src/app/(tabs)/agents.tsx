@@ -33,17 +33,18 @@ const HORIZONS: { label: string; days: number }[] = [
   { label: "90D", days: 90 },
 ];
 
-const ORCH_ACCENT: Record<string, string> = {
-  strategy: "#7c3aed",
-  finance:  "#10b981",
-  study:    "#22d3ee",
-  health:   "#ef4444",
-  career:   "#f59e0b",
-};
 
 export default function AgentsScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+
+  const ORCH_ACCENT: Record<string, string> = {
+    strategy: colors.accent,
+    finance:  colors.success,
+    study:    colors.accentCyan,
+    health:   colors.danger,
+    career:   colors.warning,
+  };
   const insets = useSafeAreaInsets();
   const accessToken = useAuthStore((s) => s.accessToken);
 
@@ -156,7 +157,7 @@ export default function AgentsScreen() {
   const activeGoals = goals.filter((g) => g.status === "active");
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#020617" }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
     <ScrollView
       style={{ flex: 1 }}
       showsVerticalScrollIndicator={false}
@@ -169,7 +170,7 @@ export default function AgentsScreen() {
         <RefreshControl
           refreshing={agentsLoading}
           onRefresh={load}
-          tintColor={"#22d3ee"}
+          tintColor={colors.accentCyan}
         />
       }
     >
@@ -188,7 +189,7 @@ export default function AgentsScreen() {
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionLabel}>ACTIVE AGENTS</Text>
         {agentsLoading ? (
-          <ActivityIndicator size="small" color={"#22d3ee"} />
+          <ActivityIndicator size="small" color={colors.accentCyan} />
         ) : null}
       </View>
 
@@ -241,7 +242,7 @@ export default function AgentsScreen() {
         <TextInput
           style={[styles.promptInput, promptError ? styles.promptInputError : null]}
           placeholder="e.g. Build and launch a mobile app in 30 days"
-          placeholderTextColor={"#8490ab"}
+          placeholderTextColor={colors.textMuted}
           value={prompt}
           onChangeText={(t) => { setPrompt(t); setPromptError(null); }}
           multiline
@@ -308,7 +309,7 @@ export default function AgentsScreen() {
           disabled={isPlanLoading}
         >
           {isPlanLoading ? (
-            <ActivityIndicator size="small" color={"#ffffff"} />
+            <ActivityIndicator size="small" color={colors.background} />
           ) : null}
           <Text style={styles.generateButtonText}>
             {isPlanLoading ? "GENERATING..." : "GENERATE PLAN"}
@@ -336,7 +337,7 @@ export default function AgentsScreen() {
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionLabel}>AGENT ORCHESTRATION</Text>
         {isOrchLoading ? (
-          <ActivityIndicator size="small" color={"#a855f7"} />
+          <ActivityIndicator size="small" color={colors.accent} />
         ) : null}
       </View>
 
@@ -353,7 +354,7 @@ export default function AgentsScreen() {
             orchObjectiveError ? styles.promptInputError : null,
           ]}
           placeholder="e.g. Launch a freelance consulting practice in 60 days"
-          placeholderTextColor={"#8490ab"}
+          placeholderTextColor={colors.textMuted}
           value={orchObjective}
           onChangeText={(t) => {
             setOrchObjective(t);
@@ -375,7 +376,7 @@ export default function AgentsScreen() {
                 const isSelected =
                   orchSelectedIds === null ||
                   orchSelectedIds.includes(agent.id);
-                const accent = ORCH_ACCENT[agent.id] ?? "#8490ab";
+                const accent = ORCH_ACCENT[agent.id] ?? colors.textMuted;
                 return (
                   <TouchableOpacity
                     key={agent.id}
@@ -413,7 +414,7 @@ export default function AgentsScreen() {
           disabled={isOrchLoading}
         >
           {isOrchLoading ? (
-            <ActivityIndicator size="small" color={"#ffffff"} />
+            <ActivityIndicator size="small" color={colors.background} />
           ) : null}
           <Text style={styles.generateButtonText}>
             {isOrchLoading ? "ORCHESTRATING..." : "ORCHESTRATE"}
@@ -501,7 +502,7 @@ function createStyles(colors: ThemeColors) {
 
   errorText: {
     ...typography.caption,
-    color: "#ef4444",
+    color: colors.danger,
     marginBottom: spacing.sm,
   },
 
@@ -545,12 +546,12 @@ function createStyles(colors: ThemeColors) {
   },
 
   promptInputError: {
-    borderColor: "#ef4444",
+    borderColor: colors.danger,
   },
 
   fieldError: {
     ...typography.caption,
-    color: "#ef4444",
+    color: colors.danger,
     marginBottom: spacing.sm,
   },
 
@@ -604,7 +605,7 @@ function createStyles(colors: ThemeColors) {
 
   goalChipActive: {
     borderColor: colors.accent,
-    backgroundColor: "rgba(124,58,237,0.15)",
+    backgroundColor: `${colors.accent}26`,
   },
 
   goalChipText: {

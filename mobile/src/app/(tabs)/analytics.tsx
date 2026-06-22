@@ -19,34 +19,66 @@ import { useAnalyticsStore, useAuthStore } from "../../store";
 
 type StatTileProps = { value: string | number; label: string; icon: SFSymbol; accent?: string };
 
-function StatTile({ value, label, icon, accent = "#a855f7" }: StatTileProps) {
+function StatTile({ value, label, icon, accent }: StatTileProps) {
+  const { colors } = useTheme();
+  const tileStyles = useMemo(() => StyleSheet.create({
+    card: {
+      width: "48%" as const,
+      backgroundColor: colors.surfaceDark,
+      borderRadius: radius.md,
+      padding: spacing.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      marginBottom: spacing.sm,
+    },
+    icon: { marginBottom: spacing.sm },
+    value: { color: colors.textPrimary, fontSize: 26, fontWeight: "800" as const, marginBottom: spacing.xs },
+    label: { ...typography.caption, color: colors.textMuted },
+  }), [colors]);
   return (
     <View style={tileStyles.card}>
-      <SymbolView name={icon} size={16} tintColor={accent} resizeMode="scaleAspectFit" style={tileStyles.icon} />
+      <SymbolView name={icon} size={16} tintColor={accent ?? colors.accent} resizeMode="scaleAspectFit" style={tileStyles.icon} />
       <Text style={tileStyles.value}>{value}</Text>
       <Text style={tileStyles.label}>{label}</Text>
     </View>
   );
 }
 
-const tileStyles = StyleSheet.create({
-  card: {
-    width: "48%" as const,
-    backgroundColor: "#050a18",
-    borderRadius: radius.md,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: "#1e2a44",
-    marginBottom: spacing.sm,
-  },
-  icon: { marginBottom: spacing.sm },
-  value: { color: "#ffffff", fontSize: 26, fontWeight: "800" as const, marginBottom: spacing.xs },
-  label: { ...typography.caption, color: "#8490ab" },
-});
-
 type StatBarProps = { label: string; value: number; max: number; color: string; showCount?: boolean };
 
 function StatBar({ label, value, max, color, showCount = false }: StatBarProps) {
+  const { colors } = useTheme();
+  const barStyles = useMemo(() => StyleSheet.create({
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.sm,
+      marginBottom: spacing.md,
+    },
+    label: {
+      ...typography.caption,
+      color: colors.textMuted,
+      width: 92,
+    },
+    track: {
+      flex: 1,
+      height: 6,
+      backgroundColor: colors.surfaceDark,
+      borderRadius: 3,
+      overflow: "hidden",
+    },
+    fill: {
+      height: 6,
+      borderRadius: 3,
+      minWidth: 2,
+    },
+    value: {
+      ...typography.label,
+      color: colors.textSecondary,
+      width: 36,
+      textAlign: "right",
+    },
+  }), [colors]);
   const pct = max > 0 ? Math.min(Math.round((value / max) * 100), 100) : 0;
   return (
     <View style={barStyles.row}>
@@ -58,38 +90,6 @@ function StatBar({ label, value, max, color, showCount = false }: StatBarProps) 
     </View>
   );
 }
-
-const barStyles = StyleSheet.create({
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  label: {
-    ...typography.caption,
-    color: "#8490ab",
-    width: 92,
-  },
-  track: {
-    flex: 1,
-    height: 6,
-    backgroundColor: "#050a18",
-    borderRadius: 3,
-    overflow: "hidden",
-  },
-  fill: {
-    height: 6,
-    borderRadius: 3,
-    minWidth: 2,
-  },
-  value: {
-    ...typography.label,
-    color: "#c7d2fe",
-    width: 36,
-    textAlign: "right",
-  },
-});
 
 // ── Screen ───────────────────────────────────────────────────────────────────
 
@@ -112,14 +112,14 @@ export default function AnalyticsScreen() {
 
   return (
     <ScrollView
-      style={{ backgroundColor: "#020617" }}
+      style={{ backgroundColor: colors.background }}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}
       refreshControl={
         <RefreshControl
           refreshing={isLoading}
           onRefresh={load}
-          tintColor={"#22d3ee"}
+          tintColor={colors.accentCyan}
         />
       }
     >
@@ -131,7 +131,7 @@ export default function AnalyticsScreen() {
           {updatedAt ? `Last updated ${updatedAt}` : "Pull to refresh for live data."}
         </Text>
         {isLoading && !summary ? (
-          <ActivityIndicator size="small" color={"#22d3ee"} style={{ marginTop: spacing.sm }} />
+          <ActivityIndicator size="small" color={colors.accentCyan} style={{ marginTop: spacing.sm }} />
         ) : null}
       </View>
 
@@ -143,18 +143,18 @@ export default function AnalyticsScreen() {
           <Text style={styles.sectionLabel}>GOALS OVERVIEW</Text>
           <View style={styles.grid}>
             <StatTile value={summary.total_goals}      label="Total Goals"      icon="target" />
-            <StatTile value={summary.completed_goals}  label="Completed"        icon="checkmark.circle.fill" accent="#22c55e" />
-            <StatTile value={summary.active_goals}     label="Active"           icon="circle" accent={"#22d3ee"} />
-            <StatTile value={`${summary.goal_completion_rate}%`} label="Completion Rate" icon="percent" accent={"#a855f7"} />
+            <StatTile value={summary.completed_goals}  label="Completed"        icon="checkmark.circle.fill" accent={colors.success} />
+            <StatTile value={summary.active_goals}     label="Active"           icon="circle" accent={colors.accentCyan} />
+            <StatTile value={`${summary.goal_completion_rate}%`} label="Completion Rate" icon="percent" accent={colors.accent} />
           </View>
 
           {/* Tasks Overview */}
           <Text style={styles.sectionLabel}>EXECUTION METRICS</Text>
           <View style={styles.grid}>
             <StatTile value={summary.total_tasks}        label="Total Tasks"    icon="checklist" />
-            <StatTile value={summary.completed_tasks}    label="Completed"      icon="checkmark.circle.fill" accent="#22c55e" />
-            <StatTile value={summary.overdue_tasks}      label="Overdue"        icon="exclamationmark.circle.fill" accent={summary.overdue_tasks > 0 ? "#ef4444" : "#8490ab"} />
-            <StatTile value={summary.high_priority_tasks} label="High Priority" icon="bolt.fill" accent={summary.high_priority_tasks > 0 ? "#f97316" : "#8490ab"} />
+            <StatTile value={summary.completed_tasks}    label="Completed"      icon="checkmark.circle.fill" accent={colors.success} />
+            <StatTile value={summary.overdue_tasks}      label="Overdue"        icon="exclamationmark.circle.fill" accent={summary.overdue_tasks > 0 ? colors.danger : colors.textMuted} />
+            <StatTile value={summary.high_priority_tasks} label="High Priority" icon="bolt.fill" accent={summary.high_priority_tasks > 0 ? "#f97316" : colors.textMuted} />
           </View>
 
           {/* Completion Rates */}
@@ -164,13 +164,13 @@ export default function AnalyticsScreen() {
               label="Goals"
               value={summary.completed_goals}
               max={summary.total_goals}
-              color={"#a855f7"}
+              color={colors.accent}
             />
             <StatBar
               label="Tasks"
               value={summary.completed_tasks}
               max={summary.total_tasks}
-              color={"#22d3ee"}
+              color={colors.accentCyan}
             />
           </View>
 
@@ -181,21 +181,21 @@ export default function AnalyticsScreen() {
               label="Todo"
               value={summary.todo_tasks}
               max={summary.total_tasks}
-              color={"#8490ab"}
+              color={colors.textMuted}
               showCount
             />
             <StatBar
               label="In Progress"
               value={summary.in_progress_tasks}
               max={summary.total_tasks}
-              color={"#22d3ee"}
+              color={colors.accentCyan}
               showCount
             />
             <StatBar
               label="Done"
               value={summary.completed_tasks}
               max={summary.total_tasks}
-              color="#22c55e"
+              color={colors.success}
               showCount
             />
             {summary.overdue_tasks > 0 ? (
@@ -203,7 +203,7 @@ export default function AnalyticsScreen() {
                 label="Overdue"
                 value={summary.overdue_tasks}
                 max={summary.total_tasks}
-                color="#ef4444"
+                color={colors.danger}
                 showCount
               />
             ) : null}
@@ -216,28 +216,28 @@ export default function AnalyticsScreen() {
               label="Active"
               value={summary.active_goals}
               max={summary.total_goals}
-              color={"#22d3ee"}
+              color={colors.accentCyan}
               showCount
             />
             <StatBar
               label="Completed"
               value={summary.completed_goals}
               max={summary.total_goals}
-              color="#22c55e"
+              color={colors.success}
               showCount
             />
             <StatBar
               label="Paused"
               value={summary.paused_goals}
               max={summary.total_goals}
-              color="#f59e0b"
+              color={colors.warning}
               showCount
             />
           </View>
         </>
       ) : !isLoading ? (
         <View style={styles.emptyState}>
-          <SymbolView name="chart.bar" size={32} tintColor={"#8490ab"} resizeMode="scaleAspectFit" />
+          <SymbolView name="chart.bar" size={32} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
           <Text style={styles.emptyText}>
             Create goals and tasks to see your performance analytics.
           </Text>
@@ -314,7 +314,7 @@ function createStyles(colors: ThemeColors) {
 
   errorText: {
     ...typography.caption,
-    color: "#ef4444",
+    color: colors.danger,
     marginBottom: spacing.sm,
   },
 

@@ -61,18 +61,19 @@ const EMPTY_FORM = (): FormState => ({
 });
 
 const IMPORTANCE_OPTIONS: MessageImportance[] = ["low", "normal", "high", "urgent"];
-const IMPORTANCE_COLOR: Record<string, string> = {
-  low:    "#8490ab",
-  normal: "#22d3ee",
-  high:   "#f59e0b",
-  urgent: "#ef4444",
-};
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function EmailScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+
+  const IMPORTANCE_COLOR: Record<string, string> = {
+    low:    colors.textMuted,
+    normal: colors.accentCyan,
+    high:   colors.warning,
+    urgent: colors.danger,
+  };
   const insets = useSafeAreaInsets();
   const accessToken = useAuthStore((s) => s.accessToken);
   const { messages, isLoading, isMutating, error, fetchMessages, createMessage, updateMessage, deleteMessage } =
@@ -163,14 +164,14 @@ export default function EmailScreen() {
   return (
     <>
       <ScrollView
-        style={{ backgroundColor: "#020617" }}
+        style={{ backgroundColor: colors.background }}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}
         refreshControl={
           <RefreshControl
             refreshing={isLoading}
             onRefresh={onRefresh}
-            tintColor={"#22d3ee"}
+            tintColor={colors.accentCyan}
           />
         }
       >
@@ -201,7 +202,7 @@ export default function EmailScreen() {
 
           <View style={styles.toolbarRight}>
             {(isLoading || isMutating) ? (
-              <ActivityIndicator size="small" color={"#22d3ee"} />
+              <ActivityIndicator size="small" color={colors.accentCyan} />
             ) : null}
             <TouchableOpacity style={styles.addButton} onPress={openCreate}>
               <Text style={styles.addButtonText}>+ NEW</Text>
@@ -219,7 +220,7 @@ export default function EmailScreen() {
             <SymbolView
               name="envelope"
               size={36}
-              tintColor={"#8490ab"}
+              tintColor={colors.textMuted}
               resizeMode="scaleAspectFit"
             />
             <Text style={styles.emptyTitle}>No messages</Text>
@@ -426,7 +427,7 @@ function createStyles(colors: ThemeColors) {
 
   errorText: {
     ...typography.caption,
-    color: "#ef4444",
+    color: colors.danger,
     marginBottom: spacing.sm,
   },
 
@@ -478,7 +479,7 @@ function createStyles(colors: ThemeColors) {
   // Modal
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: colors.overlay,
   },
 
   modalWrapper: {

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import {
   Animated,
   Dimensions,
@@ -24,11 +24,14 @@ import Svg, {
 } from "react-native-svg";
 
 import { useAuthStore, useGoalsStore, useNotificationsStore, useTasksStore } from "../../store";
+import { useTheme } from "../../theme/ThemeContext";
+import type { ThemeColors } from "../../theme/theme";
 
 const { width } = Dimensions.get("window");
 const PAGE = width - 52;
 
 export default function HomeScreen() {
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const accessToken = useAuthStore((s) => s.accessToken);
@@ -62,7 +65,9 @@ export default function HomeScreen() {
   const openTasks = tasks.filter((t) => t.status !== "done").length;
   const totalTasks = tasks.length;
   const completionRate =
-    totalTasks === 0 ? "—" : `${Math.round((tasks.filter((t) => t.status === "done").length / totalTasks) * 100)}%`;
+    totalTasks === 0
+      ? "—"
+      : `${Math.round((tasks.filter((t) => t.status === "done").length / totalTasks) * 100)}%`;
 
   const now = new Date();
   const hour = now.getHours();
@@ -73,7 +78,7 @@ export default function HomeScreen() {
   const displayName = userName.split(" ").slice(0, 2).join(" ");
 
   return (
-    <View style={styles.safe}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       <Background />
 
       <ScrollView
@@ -106,30 +111,33 @@ export default function HomeScreen() {
 }
 
 function Header({ unreadCount, onGearPress }: { unreadCount: number; onGearPress: () => void }) {
-  return (
-    <View style={styles.header}>
-      <Text style={styles.logo}>H E L I O S</Text>
+  const { colors } = useTheme();
+  const s = useMemo(() => createStyles(colors), [colors]);
 
-      <View style={styles.headerIcons}>
-        <TouchableOpacity style={styles.roundButton} activeOpacity={0.75}>
+  return (
+    <View style={s.header}>
+      <Text style={s.logo}>H E L I O S</Text>
+
+      <View style={s.headerIcons}>
+        <TouchableOpacity style={s.roundButton} activeOpacity={0.75}>
           <SymbolView
             name="bell"
             size={20}
-            tintColor="#D8DEE9"
+            tintColor={colors.textSecondary}
             resizeMode="scaleAspectFit"
           />
           {unreadCount > 0 && (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
+            <View style={s.badge}>
+              <Text style={s.badgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
             </View>
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.roundButton} onPress={onGearPress} activeOpacity={0.75}>
+        <TouchableOpacity style={s.roundButton} onPress={onGearPress} activeOpacity={0.75}>
           <SymbolView
             name="gearshape"
             size={21}
-            tintColor="#D8DEE9"
+            tintColor={colors.textSecondary}
             resizeMode="scaleAspectFit"
           />
         </TouchableOpacity>
@@ -139,20 +147,23 @@ function Header({ unreadCount, onGearPress }: { unreadCount: number; onGearPress
 }
 
 function Hero({ greeting, userName, dateStr }: { greeting: string; userName: string; dateStr: string }) {
-  return (
-    <View style={styles.heroCard}>
-      <View style={styles.heroLeft}>
-        <Text style={styles.heroGreeting}>{greeting}</Text>
-        <Text style={styles.heroName} numberOfLines={2}>{userName}.</Text>
-        <Text style={styles.heroDate}>{dateStr}</Text>
+  const { colors } = useTheme();
+  const s = useMemo(() => createStyles(colors), [colors]);
 
-        <View style={styles.statusPill}>
-          <View style={styles.statusDot} />
-          <Text style={styles.statusText}>ALL SYSTEMS NOMINAL</Text>
+  return (
+    <View style={s.heroCard}>
+      <View style={s.heroLeft}>
+        <Text style={s.heroGreeting}>{greeting}</Text>
+        <Text style={s.heroName} numberOfLines={2}>{userName}.</Text>
+        <Text style={s.heroDate}>{dateStr}</Text>
+
+        <View style={s.statusPill}>
+          <View style={s.statusDot} />
+          <Text style={s.statusText}>ALL SYSTEMS NOMINAL</Text>
         </View>
       </View>
 
-      <View style={styles.heroOrbArea}>
+      <View style={s.heroOrbArea}>
         <HeliosOrb />
       </View>
     </View>
@@ -184,15 +195,8 @@ function HeliosOrb() {
     return () => loop.stop();
   }, [pulse]);
 
-  const scale = pulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.025],
-  });
-
-  const opacity = pulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.88, 1],
-  });
+  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.025] });
+  const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] });
 
   return (
     <Animated.View style={{ opacity, transform: [{ scale }] }}>
@@ -203,13 +207,11 @@ function HeliosOrb() {
             <Stop offset="45%" stopColor="#8B3DFF" stopOpacity="0.08" />
             <Stop offset="100%" stopColor="#8B3DFF" stopOpacity="0" />
           </RadialGradient>
-
           <RadialGradient id="orbWash" cx="50%" cy="50%" r="50%">
             <Stop offset="0%" stopColor="#111B36" stopOpacity="0.46" />
             <Stop offset="58%" stopColor="#25145E" stopOpacity="0.18" />
             <Stop offset="100%" stopColor="#020617" stopOpacity="0" />
           </RadialGradient>
-
           <RadialGradient id="orbCore" cx="35%" cy="28%" r="72%">
             <Stop offset="0%" stopColor="#F5D0FE" stopOpacity="0.96" />
             <Stop offset="18%" stopColor="#C4B5FD" stopOpacity="0.98" />
@@ -217,30 +219,25 @@ function HeliosOrb() {
             <Stop offset="72%" stopColor="#6D28D9" stopOpacity="1" />
             <Stop offset="100%" stopColor="#2E1065" stopOpacity="1" />
           </RadialGradient>
-
           <RadialGradient id="coreHalo" cx="50%" cy="50%" r="50%">
             <Stop offset="0%" stopColor="#A855F7" stopOpacity="0.34" />
             <Stop offset="100%" stopColor="#A855F7" stopOpacity="0" />
           </RadialGradient>
-
           <RadialGradient id="coreShade" cx="72%" cy="78%" r="58%">
             <Stop offset="0%" stopColor="#160A36" stopOpacity="0.62" />
             <Stop offset="58%" stopColor="#2E1065" stopOpacity="0.22" />
             <Stop offset="100%" stopColor="#2E1065" stopOpacity="0" />
           </RadialGradient>
-
           <RadialGradient id="coreSpecular" cx="50%" cy="50%" r="50%">
             <Stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.62" />
             <Stop offset="46%" stopColor="#F5D0FE" stopOpacity="0.26" />
             <Stop offset="100%" stopColor="#F5D0FE" stopOpacity="0" />
           </RadialGradient>
-
           <RadialGradient id="particle" cx="50%" cy="50%" r="50%">
             <Stop offset="0%" stopColor="#F0FDFF" stopOpacity="1" />
             <Stop offset="52%" stopColor="#22D3EE" stopOpacity="0.62" />
             <Stop offset="100%" stopColor="#22D3EE" stopOpacity="0" />
           </RadialGradient>
-
           <LinearGradient id="outerArc" x1="90" y1="22" x2="99" y2="82">
             <Stop offset="0%" stopColor="#22D3EE" stopOpacity="0" />
             <Stop offset="28%" stopColor="#C084FC" stopOpacity="0.78" />
@@ -251,85 +248,25 @@ function HeliosOrb() {
 
         <Circle cx="59" cy="59" r="57" fill="url(#orbHalo)" />
         <Circle cx="59" cy="59" r="45" fill="url(#orbWash)" opacity="0.58" />
-
-        <Circle
-          cx="59"
-          cy="59"
-          r="43"
-          fill="none"
-          stroke="rgba(139, 92, 246, 0.26)"
-          strokeWidth="1"
-        />
-        <Circle
-          cx="59"
-          cy="59"
-          r="31"
-          fill="none"
-          stroke="rgba(139, 92, 246, 0.56)"
-          strokeWidth="1.25"
-        />
-        <Circle
-          cx="59"
-          cy="59"
-          r="20"
-          fill="rgba(139, 92, 246, 0.12)"
-          stroke="rgba(192, 132, 252, 0.18)"
-          strokeWidth="0.65"
-        />
-
-        <Path
-          d="M 89.5 26.5 A 45 45 0 0 1 92.5 83"
-          fill="none"
-          stroke="url(#outerArc)"
-          strokeWidth="2.8"
-          strokeLinecap="round"
-        />
-        <Path
-          d="M 88 30 A 41 41 0 0 1 88.8 77"
-          fill="none"
-          stroke="rgba(139, 92, 246, 0.26)"
-          strokeWidth="1.2"
-          strokeLinecap="round"
-        />
-
+        <Circle cx="59" cy="59" r="43" fill="none" stroke="rgba(139, 92, 246, 0.26)" strokeWidth="1" />
+        <Circle cx="59" cy="59" r="31" fill="none" stroke="rgba(139, 92, 246, 0.56)" strokeWidth="1.25" />
+        <Circle cx="59" cy="59" r="20" fill="rgba(139, 92, 246, 0.12)" stroke="rgba(192, 132, 252, 0.18)" strokeWidth="0.65" />
+        <Path d="M 89.5 26.5 A 45 45 0 0 1 92.5 83" fill="none" stroke="url(#outerArc)" strokeWidth="2.8" strokeLinecap="round" />
+        <Path d="M 88 30 A 41 41 0 0 1 88.8 77" fill="none" stroke="rgba(139, 92, 246, 0.26)" strokeWidth="1.2" strokeLinecap="round" />
         <Circle cx="59" cy="59" r="24" fill="url(#coreHalo)" />
-        <Circle
-          cx="59"
-          cy="59"
-          r="16.8"
-          fill="none"
-          stroke="rgba(216, 180, 254, 0.16)"
-          strokeWidth="2"
-        />
+        <Circle cx="59" cy="59" r="16.8" fill="none" stroke="rgba(216, 180, 254, 0.16)" strokeWidth="2" />
         <Circle cx="59" cy="59" r="16.2" fill="url(#orbCore)" />
         <Circle cx="60.8" cy="61.4" r="15.6" fill="url(#coreShade)" />
         <Circle cx="53.6" cy="52" r="7.3" fill="url(#coreSpecular)" />
         <Circle cx="51.4" cy="49.2" r="2.4" fill="rgba(255, 255, 255, 0.42)" />
-        <Path
-          d="M 46.8 62.5 A 15.8 15.8 0 0 0 70.8 67.1"
-          fill="none"
-          stroke="rgba(20, 10, 48, 0.28)"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-        />
-
+        <Path d="M 46.8 62.5 A 15.8 15.8 0 0 0 70.8 67.1" fill="none" stroke="rgba(20, 10, 48, 0.28)" strokeWidth="1.4" strokeLinecap="round" />
         <G opacity="0.78">
           <Circle cx="25" cy="80" r="1.4" fill="url(#particle)" />
-          <Path
-            d="M25 76.8 L25 83.2 M21.8 80 L28.2 80"
-            stroke="rgba(34, 211, 238, 0.3)"
-            strokeWidth="0.5"
-            strokeLinecap="round"
-          />
+          <Path d="M25 76.8 L25 83.2 M21.8 80 L28.2 80" stroke="rgba(34, 211, 238, 0.3)" strokeWidth="0.5" strokeLinecap="round" />
         </G>
         <G opacity="0.7">
           <Circle cx="94" cy="54" r="1.25" fill="#22D3EE" />
-          <Path
-            d="M94 51.2 L94 56.8 M91.2 54 L96.8 54"
-            stroke="rgba(34, 211, 238, 0.24)"
-            strokeWidth="0.42"
-            strokeLinecap="round"
-          />
+          <Path d="M94 51.2 L94 56.8 M91.2 54 L96.8 54" stroke="rgba(34, 211, 238, 0.24)" strokeWidth="0.42" strokeLinecap="round" />
         </G>
         <Circle cx="64" cy="24" r="0.9" fill="rgba(196, 181, 253, 0.7)" />
         <Circle cx="78" cy="91" r="0.75" fill="rgba(139, 92, 246, 0.72)" />
@@ -342,11 +279,14 @@ function HeliosOrb() {
 }
 
 function Section({ title, action, onAction }: { title: string; action: string; onAction?: () => void }) {
+  const { colors } = useTheme();
+  const s = useMemo(() => createStyles(colors), [colors]);
+
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+    <View style={s.section}>
+      <Text style={s.sectionTitle}>{title}</Text>
       <TouchableOpacity onPress={onAction} activeOpacity={0.7}>
-        <Text style={styles.sectionAction}>{action}</Text>
+        <Text style={s.sectionAction}>{action}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -363,22 +303,25 @@ function Metric({
   label: string;
   sub: string;
 }) {
+  const { colors } = useTheme();
+  const s = useMemo(() => createStyles(colors), [colors]);
+
   return (
-    <View style={styles.metric}>
-      <View style={styles.metricTop}>
-        <View style={styles.metricIcon}>
+    <View style={s.metric}>
+      <View style={s.metricTop}>
+        <View style={s.metricIcon}>
           <SymbolView
             name={icon}
             size={24}
-            tintColor="#8B5CF6"
+            tintColor={colors.tabBarActive}
             resizeMode="scaleAspectFit"
           />
         </View>
 
-        <View style={styles.metricTextWrap}>
-          <Text style={styles.metricValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{value}</Text>
-          <Text style={styles.metricLabel}>{label}</Text>
-          <Text style={styles.metricSub}>{sub}</Text>
+        <View style={s.metricTextWrap}>
+          <Text style={s.metricValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{value}</Text>
+          <Text style={s.metricLabel}>{label}</Text>
+          <Text style={s.metricSub}>{sub}</Text>
         </View>
       </View>
     </View>
@@ -386,25 +329,28 @@ function Metric({
 }
 
 function DailyCommand({ timeStr, userName }: { timeStr: string; userName: string }) {
-  return (
-    <View style={styles.command}>
-      <View style={styles.commandLine} />
+  const { colors } = useTheme();
+  const s = useMemo(() => createStyles(colors), [colors]);
 
-      <View style={styles.commandTop}>
-        <View style={styles.commandTitleWrap}>
+  return (
+    <View style={s.command}>
+      <View style={s.commandLine} />
+
+      <View style={s.commandTop}>
+        <View style={s.commandTitleWrap}>
           <SymbolView
             name="brain.head.profile"
             size={16}
-            tintColor="#22D3EE"
+            tintColor={colors.accentCyan}
             resizeMode="scaleAspectFit"
           />
-          <Text style={styles.commandTitle}>DAILY COMMAND</Text>
+          <Text style={s.commandTitle}>DAILY COMMAND</Text>
         </View>
 
-        <Text style={styles.commandTime}>{timeStr}</Text>
+        <Text style={s.commandTime}>{timeStr}</Text>
       </View>
 
-      <Text style={styles.commandBody}>
+      <Text style={s.commandBody}>
         {"Good to see you, "}{userName}.{"\n"}
         {"Your priority queue is loaded and systems are nominal."}
       </Text>
@@ -413,183 +359,18 @@ function DailyCommand({ timeStr, userName }: { timeStr: string; userName: string
 }
 
 function Background() {
+  const { colors } = useTheme();
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <View style={styles.bg} />
+      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: colors.background }]} />
     </View>
   );
 }
 
-const c = {
-  bg: "#020617",
-  card: "rgba(10, 20, 39, 0.92)",
-  card2: "rgba(13, 25, 48, 0.86)",
-  border: "rgba(95, 122, 170, 0.22)",
-  text: "#F8FAFC",
-  muted: "#9BA8C3",
-  dim: "#6B7791",
-  purple: "#8B3DFF",
-  purple2: "#A855F7",
-  cyan: "#22D3EE",
-};
-
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: c.bg,
-  },
   content: {
     paddingHorizontal: 26,
   },
-
-  bg: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#030918",
-  },
-
-  header: {
-    minHeight: 54,
-    marginBottom: 16,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  logo: {
-    color: c.purple,
-    fontSize: 21,
-    fontWeight: "900",
-    letterSpacing: 8,
-    textShadowColor: "rgba(139, 61, 255, 0.65)",
-    textShadowRadius: 8,
-  },
-  headerIcons: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  roundButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "rgba(15, 23, 42, 0.72)",
-    borderWidth: 1,
-    borderColor: "rgba(148, 163, 184, 0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.22,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 8 },
-  },
-  badge: {
-    position: "absolute",
-    top: -3,
-    right: -3,
-    minWidth: 19,
-    height: 19,
-    borderRadius: 10,
-    backgroundColor: c.purple,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 3,
-    borderWidth: 2,
-    borderColor: c.bg,
-  },
-  badgeText: {
-    color: c.text,
-    fontSize: 10,
-    fontWeight: "900",
-  },
-
-  heroCard: {
-    width: PAGE,
-    height: 232,
-    borderRadius: 28,
-    marginBottom: 34,
-    paddingLeft: 17,
-    paddingTop: 21,
-    backgroundColor: "rgba(10, 22, 43, 0.91)",
-    borderWidth: 1,
-    borderColor: "rgba(92, 120, 170, 0.22)",
-    overflow: "hidden",
-  },
-  heroLeft: {
-    width: 208,
-    zIndex: 5,
-  },
-  heroGreeting: {
-    color: "#9AA8C5",
-    fontSize: 17,
-    lineHeight: 22,
-    fontWeight: "500",
-    marginBottom: 6,
-  },
-  heroName: {
-    color: "#F8FAFC",
-    fontSize: 31,
-    lineHeight: 38,
-    fontWeight: "900",
-    letterSpacing: -0.7,
-    marginBottom: 10,
-  },
-  heroDate: {
-    color: "#9AA8C5",
-    fontSize: 14,
-    lineHeight: 22,
-    fontWeight: "600",
-    marginBottom: 18,
-  },
-  statusPill: {
-    height: 32,
-    alignSelf: "flex-start",
-    borderRadius: 16,
-    paddingHorizontal: 13,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-    backgroundColor: "rgba(34, 211, 238, 0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(34, 211, 238, 0.18)",
-  },
-  statusDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-    backgroundColor: "#22D3EE",
-  },
-  statusText: {
-    color: "#22D3EE",
-    fontSize: 9.5,
-    fontWeight: "900",
-    letterSpacing: 1.9,
-  },
-  heroOrbArea: {
-    position: "absolute",
-    right: 27,
-    top: 45,
-    width: 118,
-    height: 118,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  section: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 15,
-  },
-  sectionTitle: {
-    color: c.text,
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 3.8,
-  },
-  sectionAction: {
-    color: c.purple,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -597,112 +378,260 @@ const styles = StyleSheet.create({
     rowGap: 14,
     marginBottom: 38,
   },
-  metric: {
-    width: "48%",
-    minHeight: 110,
-    borderRadius: 20,
-    padding: 13,
-    backgroundColor: "rgba(16, 30, 52, 0.82)",
-    borderWidth: 1,
-    borderColor: c.border,
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.14,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 10 },
-  },
-  metricIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: "rgba(139, 61, 255, 0.16)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  metricTop: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 14,
-  },
-  metricTextWrap: {
-    flex: 1,
-    marginTop: -1,
-  },
-  metricValue: {
-    color: c.text,
-    fontSize: 31,
-    lineHeight: 34,
-    fontWeight: "900",
-    letterSpacing: 0,
-  },
-  metricLabel: {
-    color: "#CBD5E1",
-    fontSize: 12.5,
-    lineHeight: 16,
-    fontWeight: "700",
-    marginTop: 4,
-  },
-  metricSub: {
-    color: c.muted,
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: "500",
-    marginTop: 5,
-  },
-
-  command: {
-    minHeight: 166,
-    borderRadius: 24,
-    backgroundColor: "rgba(10, 20, 39, 0.90)",
-    borderWidth: 1,
-    borderColor: c.border,
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 20,
-    overflow: "hidden",
-    shadowColor: c.cyan,
-    shadowOpacity: 0.09,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 10 },
-  },
-  commandLine: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 2.5,
-    backgroundColor: c.cyan,
-    shadowColor: c.cyan,
-    shadowRadius: 12,
-    shadowOpacity: 1,
-  },
-  commandTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 18,
-  },
-  commandTitleWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-  },
-  commandTitle: {
-    color: c.cyan,
-    fontSize: 12.5,
-    fontWeight: "900",
-    letterSpacing: 2.8,
-  },
-  commandTime: {
-    color: c.muted,
-    fontSize: 12.5,
-    fontWeight: "800",
-    letterSpacing: 1.8,
-  },
-  commandBody: {
-    color: c.text,
-    fontSize: 15.5,
-    lineHeight: 23,
-    fontWeight: "800",
-  },
 });
+
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    header: {
+      minHeight: 54,
+      marginBottom: 16,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    logo: {
+      color: colors.tabBarActive,
+      fontSize: 21,
+      fontWeight: "900",
+      letterSpacing: 8,
+      textShadowColor: `${colors.tabBarActive}a6`,
+      textShadowRadius: 8,
+    },
+    headerIcons: {
+      flexDirection: "row",
+      gap: 12,
+    },
+    roundButton: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: `${colors.surface}b8`,
+      borderWidth: 1,
+      borderColor: `${colors.textMuted}26`,
+      alignItems: "center",
+      justifyContent: "center",
+      shadowColor: "#000",
+      shadowOpacity: 0.22,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 8 },
+    },
+    badge: {
+      position: "absolute",
+      top: -3,
+      right: -3,
+      minWidth: 19,
+      height: 19,
+      borderRadius: 10,
+      backgroundColor: colors.tabBarActive,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 3,
+      borderWidth: 2,
+      borderColor: colors.background,
+    },
+    badgeText: {
+      color: colors.textPrimary,
+      fontSize: 10,
+      fontWeight: "900",
+    },
+
+    heroCard: {
+      width: PAGE,
+      height: 232,
+      borderRadius: 28,
+      marginBottom: 34,
+      paddingLeft: 17,
+      paddingTop: 21,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.tabBarBorder,
+      overflow: "hidden",
+    },
+    heroLeft: {
+      width: 208,
+      zIndex: 5,
+    },
+    heroGreeting: {
+      color: colors.textMuted,
+      fontSize: 17,
+      lineHeight: 22,
+      fontWeight: "500",
+      marginBottom: 6,
+    },
+    heroName: {
+      color: colors.textPrimary,
+      fontSize: 31,
+      lineHeight: 38,
+      fontWeight: "900",
+      letterSpacing: -0.7,
+      marginBottom: 10,
+    },
+    heroDate: {
+      color: colors.textMuted,
+      fontSize: 14,
+      lineHeight: 22,
+      fontWeight: "600",
+      marginBottom: 18,
+    },
+    statusPill: {
+      height: 32,
+      alignSelf: "flex-start",
+      borderRadius: 16,
+      paddingHorizontal: 13,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 9,
+      backgroundColor: `${colors.accentCyan}24`,
+      borderWidth: 1,
+      borderColor: `${colors.accentCyan}2e`,
+    },
+    statusDot: {
+      width: 9,
+      height: 9,
+      borderRadius: 5,
+      backgroundColor: colors.accentCyan,
+    },
+    statusText: {
+      color: colors.accentCyan,
+      fontSize: 9.5,
+      fontWeight: "900",
+      letterSpacing: 1.9,
+    },
+    heroOrbArea: {
+      position: "absolute",
+      right: 27,
+      top: 45,
+      width: 118,
+      height: 118,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    section: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 15,
+    },
+    sectionTitle: {
+      color: colors.textPrimary,
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 3.8,
+    },
+    sectionAction: {
+      color: colors.tabBarActive,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+
+    metric: {
+      width: "48%",
+      minHeight: 110,
+      borderRadius: 20,
+      padding: 13,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.tabBarBorder,
+      justifyContent: "center",
+      shadowColor: "#000",
+      shadowOpacity: 0.14,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 10 },
+    },
+    metricIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      backgroundColor: `${colors.tabBarActive}29`,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    metricTop: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 14,
+    },
+    metricTextWrap: {
+      flex: 1,
+      marginTop: -1,
+    },
+    metricValue: {
+      color: colors.textPrimary,
+      fontSize: 31,
+      lineHeight: 34,
+      fontWeight: "900",
+      letterSpacing: 0,
+    },
+    metricLabel: {
+      color: colors.textSecondary,
+      fontSize: 12.5,
+      lineHeight: 16,
+      fontWeight: "700",
+      marginTop: 4,
+    },
+    metricSub: {
+      color: colors.textMuted,
+      fontSize: 11,
+      lineHeight: 14,
+      fontWeight: "500",
+      marginTop: 5,
+    },
+
+    command: {
+      minHeight: 166,
+      borderRadius: 24,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.tabBarBorder,
+      paddingHorizontal: 20,
+      paddingTop: 24,
+      paddingBottom: 20,
+      overflow: "hidden",
+      shadowColor: colors.accentCyan,
+      shadowOpacity: 0.09,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 10 },
+    },
+    commandLine: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 2.5,
+      backgroundColor: colors.accentCyan,
+      shadowColor: colors.accentCyan,
+      shadowRadius: 12,
+      shadowOpacity: 1,
+    },
+    commandTop: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 18,
+    },
+    commandTitleWrap: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 9,
+    },
+    commandTitle: {
+      color: colors.accentCyan,
+      fontSize: 12.5,
+      fontWeight: "900",
+      letterSpacing: 2.8,
+    },
+    commandTime: {
+      color: colors.textMuted,
+      fontSize: 12.5,
+      fontWeight: "800",
+      letterSpacing: 1.8,
+    },
+    commandBody: {
+      color: colors.textPrimary,
+      fontSize: 15.5,
+      lineHeight: 23,
+      fontWeight: "800",
+    },
+  });
+}

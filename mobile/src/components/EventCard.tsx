@@ -47,12 +47,14 @@ function isSameDay(a: string, b: string): boolean {
   }
 }
 
-const SOURCE_COLOR: Record<string, string> = {
-  manual:  "#8490ab",
-  google:  "#4285F4",
-  outlook: "#0078D4",
-  ical:    "#22d3ee",
-};
+function getSourceColor(c: ThemeColors): Record<string, string> {
+  return {
+    manual:  c.textMuted,
+    google:  "#4285F4",
+    outlook: "#0078D4",
+    ical:    c.accentCyan,
+  };
+}
 
 // ── EventCard ─────────────────────────────────────────────────────────────────
 
@@ -65,7 +67,7 @@ type Props = {
 export default function EventCard({ event, onEdit, onDelete }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const sourceColor = SOURCE_COLOR[event.source] ?? "#8490ab";
+  const sourceColor = useMemo(() => getSourceColor(colors), [colors])[event.source] ?? colors.textMuted;
 
   const timeLabel = isSameDay(event.start_time, event.end_time)
     ? `${formatTime(event.start_time)} – ${formatTimeShort(event.end_time)}`
@@ -86,7 +88,7 @@ export default function EventCard({ event, onEdit, onDelete }: Props) {
                 <SymbolView
                   name="pencil"
                   size={14}
-                  tintColor={"#8490ab"}
+                  tintColor={colors.textMuted}
                   resizeMode="scaleAspectFit"
                 />
               </TouchableOpacity>
@@ -96,7 +98,7 @@ export default function EventCard({ event, onEdit, onDelete }: Props) {
                 <SymbolView
                   name="trash"
                   size={14}
-                  tintColor="#ef4444"
+                  tintColor={colors.danger}
                   resizeMode="scaleAspectFit"
                 />
               </TouchableOpacity>
@@ -109,7 +111,7 @@ export default function EventCard({ event, onEdit, onDelete }: Props) {
           <SymbolView
             name="clock"
             size={11}
-            tintColor={"#8490ab"}
+            tintColor={colors.textMuted}
             resizeMode="scaleAspectFit"
           />
           <Text style={styles.metaText}>{timeLabel}</Text>
@@ -121,7 +123,7 @@ export default function EventCard({ event, onEdit, onDelete }: Props) {
             <SymbolView
               name="mappin"
               size={11}
-              tintColor={"#8490ab"}
+              tintColor={colors.textMuted}
               resizeMode="scaleAspectFit"
             />
             <Text style={styles.metaText} numberOfLines={1}>{event.location}</Text>

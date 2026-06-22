@@ -16,13 +16,15 @@ const CATEGORY_ICON: Record<string, Parameters<typeof SymbolView>[0]["name"]> = 
   conversations: "bubble.left.and.bubble.right",
 };
 
-const CATEGORY_ACCENT: Record<string, string> = {
-  memory:        "#a855f7",
-  goals:         "#f59e0b",
-  tasks:         "#22d3ee",
-  analytics:     "#10b981",
-  conversations: "#818cf8",
-};
+function getCategoryAccent(c: ThemeColors): Record<string, string> {
+  return {
+    memory:        c.accent,
+    goals:         c.warning,
+    tasks:         c.accentCyan,
+    analytics:     c.success,
+    conversations: c.info,
+  };
+}
 
 // ── SectionRow ────────────────────────────────────────────────────────────────
 
@@ -31,25 +33,26 @@ type SectionRowProps = { section: AgentContextSection };
 function SectionRow({ section }: SectionRowProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const CATEGORY_ACCENT = useMemo(() => getCategoryAccent(colors), [colors]);
   const { category, label, description, is_active, item_count, items } = section;
 
-  const accent = CATEGORY_ACCENT[category] ?? "#8490ab";
+  const accent = CATEGORY_ACCENT[category] ?? colors.textMuted;
   const icon = CATEGORY_ICON[category] ?? "cpu";
 
   const hasData = item_count > 0;
-  const badgeColor = is_active && hasData ? accent : "#8490ab";
+  const badgeColor = is_active && hasData ? accent : colors.textMuted;
   const badgeLabel = !is_active ? "INACTIVE" : hasData ? `${item_count}` : "NO DATA";
   const badgeBg = is_active && hasData ? `${accent}18` : "transparent";
-  const badgeBorder = is_active && hasData ? `${accent}50` : "#1e2a44";
+  const badgeBorder = is_active && hasData ? `${accent}50` : colors.border;
 
   return (
     <View style={styles.sectionRow}>
       {/* Left: icon + label + description */}
-      <View style={[styles.iconWrap, { borderColor: is_active ? `${accent}40` : "#1e2a44" }]}>
+      <View style={[styles.iconWrap, { borderColor: is_active ? `${accent}40` : colors.border }]}>
         <SymbolView
           name={icon}
           size={14}
-          tintColor={is_active ? accent : "#8490ab"}
+          tintColor={is_active ? accent : colors.textMuted}
           resizeMode="scaleAspectFit"
         />
       </View>
@@ -101,7 +104,7 @@ export default function AgentContextPreview({ contextPackage, isLoading, accentC
   if (isLoading) {
     return (
       <View style={styles.loadingRow}>
-        <ActivityIndicator size="small" color={"#22d3ee"} />
+        <ActivityIndicator size="small" color={colors.accentCyan} />
         <Text style={styles.loadingText}>Loading context...</Text>
       </View>
     );
@@ -116,7 +119,7 @@ export default function AgentContextPreview({ contextPackage, isLoading, accentC
 
   return (
     <View style={styles.container}>
-      <Text style={[styles.header, { color: accentColor ?? "#8490ab" }]}>
+      <Text style={[styles.header, { color: accentColor ?? colors.textMuted }]}>
         DATA SOURCES
       </Text>
 

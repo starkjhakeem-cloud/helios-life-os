@@ -9,11 +9,13 @@ import AgentContextPreview from "./AgentContextPreview";
 
 // ── Static lookups ────────────────────────────────────────────────────────────
 
-const STATUS_COLOR: Record<string, string> = {
-  active: "#22d3ee",
-  standby: "#f59e0b",
-  offline: "#8490ab",
-};
+function getStatusColor(c: ThemeColors): Record<string, string> {
+  return {
+    active: c.accentCyan,
+    standby: c.warning,
+    offline: c.textMuted,
+  };
+}
 
 const AGENT_ICON: Record<string, string> = {
   strategy: "scope",
@@ -23,13 +25,15 @@ const AGENT_ICON: Record<string, string> = {
   career: "briefcase.fill",
 };
 
-const AGENT_ACCENT: Record<string, string> = {
-  strategy: "#a855f7",
-  finance: "#10b981",
-  study: "#22d3ee",
-  health: "#ef4444",
-  career: "#f59e0b",
-};
+function getAgentAccent(c: ThemeColors): Record<string, string> {
+  return {
+    strategy: c.accent,
+    finance:  c.success,
+    study:    c.accentCyan,
+    health:   c.danger,
+    career:   c.warning,
+  };
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -50,8 +54,8 @@ export default function AgentCard({ agent, agentContext, isContextLoading, onExp
 
   const [expanded, setExpanded] = useState(false);
 
-  const dotColor = STATUS_COLOR[status] ?? "#8490ab";
-  const accentColor = AGENT_ACCENT[id] ?? "#a855f7";
+  const dotColor = useMemo(() => getStatusColor(colors), [colors])[status] ?? colors.textMuted;
+  const accentColor = useMemo(() => getAgentAccent(colors), [colors])[id] ?? colors.accent;
   const iconName = (AGENT_ICON[id] ?? "cpu") as Parameters<typeof SymbolView>[0]["name"];
 
   function handleToggle() {
@@ -89,7 +93,7 @@ export default function AgentCard({ agent, agentContext, isContextLoading, onExp
           <SymbolView
             name={expanded ? "chevron.up" : "chevron.down"}
             size={12}
-            tintColor={"#8490ab"}
+            tintColor={colors.textMuted}
             resizeMode="scaleAspectFit"
           />
         </View>
@@ -111,13 +115,13 @@ export default function AgentCard({ agent, agentContext, isContextLoading, onExp
             <SymbolView
               name={memory_context_enabled ? "brain.head.profile" : "brain"}
               size={10}
-              tintColor={memory_context_enabled ? "#a855f7" : "#8490ab"}
+              tintColor={memory_context_enabled ? colors.accent : colors.textMuted}
               resizeMode="scaleAspectFit"
             />
             <Text
               style={[
                 styles.memoryBadgeText,
-                { color: memory_context_enabled ? "#a855f7" : "#8490ab" },
+                { color: memory_context_enabled ? colors.accent : colors.textMuted },
               ]}
             >
               {memory_context_enabled ? "MEMORY ON" : "MEMORY OFF"}
@@ -142,9 +146,9 @@ export default function AgentCard({ agent, agentContext, isContextLoading, onExp
               style={[
                 styles.memoryContextBadge,
                 {
-                  borderColor: memory_context_enabled ? `${"#a855f7"}50` : "#1e2a44",
+                  borderColor: memory_context_enabled ? `${colors.accent}80` : colors.border,
                   backgroundColor: memory_context_enabled
-                    ? `${"#a855f7"}12`
+                    ? `${colors.accent}1f`
                     : "transparent",
                 },
               ]}
@@ -152,13 +156,13 @@ export default function AgentCard({ agent, agentContext, isContextLoading, onExp
               <SymbolView
                 name={memory_context_enabled ? "brain.head.profile" : "brain"}
                 size={11}
-                tintColor={memory_context_enabled ? "#a855f7" : "#8490ab"}
+                tintColor={memory_context_enabled ? colors.accent : colors.textMuted}
                 resizeMode="scaleAspectFit"
               />
               <Text
                 style={[
                   styles.memoryContextText,
-                  { color: memory_context_enabled ? "#a855f7" : "#8490ab" },
+                  { color: memory_context_enabled ? colors.accent : colors.textMuted },
                 ]}
               >
                 {memory_context_enabled ? "MEMORY CONTEXT: ENABLED" : "MEMORY CONTEXT: DISABLED"}

@@ -28,14 +28,16 @@ const EVENT_LABELS: Record<string, string> = {
   execution_failed:    "FAILED",
 };
 
-const EVENT_COLORS: Record<string, string> = {
-  new_suggestion:      "#6366f1",
-  queue_item_created:  "#22d3ee",
-  approval_required:   "#a855f7",
-  execution_blocked:   "#f59e0b",
-  execution_completed: "#22c55e",
-  execution_failed:    "#ef4444",
-};
+function getEventColors(c: ThemeColors): Record<string, string> {
+  return {
+    new_suggestion:      c.info,
+    queue_item_created:  c.accentCyan,
+    approval_required:   c.accent,
+    execution_blocked:   c.warning,
+    execution_completed: c.success,
+    execution_failed:    c.danger,
+  };
+}
 
 const EVENT_ICONS: Record<string, string> = {
   new_suggestion:      "lightbulb",
@@ -75,7 +77,8 @@ function NotificationCard({
 item, isMutating, onMarkRead, onDelete }: NotificationCardProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const color = EVENT_COLORS[item.event_type] ?? "#8490ab";
+  const EVENT_COLORS = useMemo(() => getEventColors(colors), [colors]);
+  const color = EVENT_COLORS[item.event_type] ?? colors.textMuted;
   const label = EVENT_LABELS[item.event_type] ?? item.event_type.replace(/_/g, " ").toUpperCase();
   const icon = (EVENT_ICONS[item.event_type] ?? "bell") as Parameters<typeof SymbolView>[0]["name"];
 
@@ -196,7 +199,7 @@ export default function NotificationsScreen() {
       contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
       showsVerticalScrollIndicator={false}
       refreshControl={
-        <RefreshControl refreshing={isLoading} onRefresh={load} tintColor={"#a855f7"} />
+        <RefreshControl refreshing={isLoading} onRefresh={load} tintColor={colors.accent} />
       }
     >
       {/* Hero */}
@@ -226,7 +229,7 @@ export default function NotificationsScreen() {
 
       {/* Loading */}
       {isLoading && notifications.length === 0 ? (
-        <ActivityIndicator color={"#a855f7"} style={{ marginTop: spacing.xl }} />
+        <ActivityIndicator color={colors.accent} style={{ marginTop: spacing.xl }} />
       ) : null}
 
       {/* Mark all read */}
@@ -278,7 +281,7 @@ export default function NotificationsScreen() {
       {/* Empty state */}
       {!isLoading && notifications.length === 0 ? (
         <View style={styles.emptyState}>
-          <SymbolView name="bell.slash" size={48} tintColor={"#8490ab"} resizeMode="scaleAspectFit" />
+          <SymbolView name="bell.slash" size={48} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
           <Text style={styles.emptyText}>No notifications yet.</Text>
           <Text style={styles.emptySubtext}>
             Notifications will appear here when HELIOS generates suggestions, processes queue items, or executes actions.
@@ -334,7 +337,7 @@ function createStyles(colors: ThemeColors) {
   badgeText: {
     fontSize: 11,
     fontWeight: "700" as const,
-    color: "#fff",
+    color: colors.textPrimary,
   },
   heroSubtitle: { ...typography.body, color: colors.textSecondary },
 
@@ -348,14 +351,14 @@ function createStyles(colors: ThemeColors) {
   },
 
   errorBox: {
-    backgroundColor: "rgba(239, 68, 68, 0.1)",
+    backgroundColor: `${colors.danger}1a`,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.3)",
+    borderColor: `${colors.danger}4d`,
     padding: spacing.md,
     marginBottom: spacing.md,
   },
-  errorText: { ...typography.body, color: "#ef4444" },
+  errorText: { ...typography.body, color: colors.danger },
 
   emptyState: {
     alignItems: "center",
@@ -458,14 +461,14 @@ function createStyles(colors: ThemeColors) {
     paddingVertical: spacing.xs - 2,
     borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: "#22c55e",
-    backgroundColor: "rgba(34, 197, 94, 0.08)",
+    borderColor: colors.success,
+    backgroundColor: `${colors.success}14`,
   },
   actionBtnText: {
     fontSize: 10,
     fontWeight: "700" as const,
     letterSpacing: 0.5,
-    color: "#22c55e",
+    color: colors.success,
   },
   deleteBtn: {
     paddingHorizontal: spacing.sm,

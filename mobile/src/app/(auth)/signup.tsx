@@ -39,9 +39,9 @@ export default function SignupScreen() {
   return (
     <Screen style={styles.screen}>
       <View style={styles.header}>
-        <Text variant="label" color={"#22d3ee"}>HELIOS</Text>
+        <Text variant="label" color={colors.accentCyan}>HELIOS</Text>
         <Text variant="displaySmall" style={styles.centered}>CREATE ACCOUNT</Text>
-        <Text variant="body" color={"#8490ab"} style={styles.centered}>
+        <Text variant="body" color={colors.textMuted} style={styles.centered}>
           Register your operator profile
         </Text>
       </View>
@@ -82,7 +82,7 @@ export default function SignupScreen() {
           onSubmitEditing={handleSignup}
         />
         {displayError ? (
-          <Text variant="caption" color="#ef4444">{displayError}</Text>
+          <Text variant="caption" color={colors.danger}>{displayError}</Text>
         ) : null}
         <Button
           label="CREATE ACCOUNT"
@@ -93,9 +93,9 @@ export default function SignupScreen() {
       </View>
 
       <View style={styles.footer}>
-        <Text variant="body" color={"#8490ab"}>Already registered?  </Text>
+        <Text variant="body" color={colors.textMuted}>Already registered?  </Text>
         <Link href="/(auth)/login">
-          <Text variant="body" color={"#22d3ee"}>Sign in</Text>
+          <Text variant="body" color={colors.accentCyan}>Sign in</Text>
         </Link>
       </View>
     </Screen>

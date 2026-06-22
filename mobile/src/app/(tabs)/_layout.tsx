@@ -2,9 +2,9 @@ import { useEffect } from "react";
 import { Tabs, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import type { SymbolViewProps } from "expo-symbols";
-import type { SFSymbol } from "sf-symbols-typescript";
 
 import { useAuthStore, useNotificationsStore } from "../../store";
+import { useTheme } from "../../theme/ThemeContext";
 
 type TabIconProps = {
   name: SymbolViewProps["name"];
@@ -23,6 +23,7 @@ function TabIcon({ name, color }: TabIconProps) {
 }
 
 export default function TabsLayout() {
+  const { colors } = useTheme();
   const isAuthenticated = useAuthStore((s) => s.accessToken !== null);
   const accessToken = useAuthStore((s) => s.accessToken);
   const router = useRouter();
@@ -32,8 +33,6 @@ export default function TabsLayout() {
     if (accessToken) fetchNotifications(accessToken);
   }, [accessToken, fetchNotifications]);
 
-  // Secondary guard: root _layout.tsx is the primary gatekeeper, but this
-  // catches any edge-case (e.g., deep-link into a tab while unauthenticated).
   useEffect(() => {
     if (!isAuthenticated) {
       router.replace("/(auth)/login");
@@ -49,8 +48,8 @@ export default function TabsLayout() {
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: "#061121f2",
-          borderTopColor: "rgba(92, 120, 170, 0.22)",
+          backgroundColor: colors.tabBar,
+          borderTopColor: colors.tabBarBorder,
           borderTopWidth: 1,
           borderColor: "transparent",
           borderWidth: 0,
@@ -64,8 +63,8 @@ export default function TabsLayout() {
           shadowOpacity: 0.28,
           shadowRadius: 18,
         },
-        tabBarActiveTintColor: "#8B5CF6",
-        tabBarInactiveTintColor: "#9AA8C5",
+        tabBarActiveTintColor: colors.tabBarActive,
+        tabBarInactiveTintColor: colors.tabBarInactive,
         tabBarLabelStyle: {
           fontSize: 11.5,
           fontWeight: "800",
@@ -91,10 +90,7 @@ export default function TabsLayout() {
         options={{
           title: "Autonomy",
           tabBarIcon: ({ color }) => (
-            <TabIcon
-              name={{ ios: "robot" as SFSymbol, android: "robot", web: "robot" }}
-              color={color}
-            />
+            <TabIcon name="sparkles" color={color} />
           ),
         }}
       />

@@ -34,12 +34,14 @@ const TYPE_LABELS: Record<MemoryType, string> = {
   recurring_interest: "INTEREST",
 };
 
-const TYPE_COLORS: Record<MemoryType, string> = {
-  preference: "#a855f7",
-  important_fact: "#22d3ee",
-  goal_context: "#f59e0b",
-  recurring_interest: "#10b981",
-};
+function getTypeColors(c: ThemeColors): Record<MemoryType, string> {
+  return {
+    preference: c.accent,
+    important_fact: c.accentCyan,
+    goal_context: c.warning,
+    recurring_interest: c.success,
+  };
+}
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -58,7 +60,7 @@ label, active, color, onPress }: FilterChipProps) {
     <TouchableOpacity
       style={[
         styles.chip,
-        active && { backgroundColor: color ?? "#a855f7", borderColor: color ?? "#a855f7" },
+        active && { backgroundColor: color ?? colors.accent, borderColor: color ?? colors.accent },
       ]}
       onPress={onPress}
       activeOpacity={0.7}
@@ -77,7 +79,8 @@ function MemoryCard({
 memory, onDelete }: MemoryCardProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const typeColor = TYPE_COLORS[memory.memory_type as MemoryType] ?? "#8490ab";
+  const TYPE_COLORS = useMemo(() => getTypeColors(colors), [colors]);
+  const typeColor = TYPE_COLORS[memory.memory_type as MemoryType] ?? colors.textMuted;
   const typeLabel = TYPE_LABELS[memory.memory_type as MemoryType] ?? memory.memory_type.toUpperCase();
 
   const formattedDate = (() => {
@@ -122,6 +125,7 @@ function AddMemoryModal({
 visible, onClose, onSubmit, isMutating }: AddMemoryModalProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const TYPE_COLORS = useMemo(() => getTypeColors(colors), [colors]);
   const [selectedType, setSelectedType] = useState<MemoryType>("preference");
   const [content, setContent] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
@@ -202,7 +206,7 @@ visible, onClose, onSubmit, isMutating }: AddMemoryModalProps) {
                 ? "e.g. My career goal is to become an engineering manager"
                 : "e.g. I am interested in stoic philosophy and productivity systems"
             }
-            placeholderTextColor={"#8490ab"}
+            placeholderTextColor={colors.textMuted}
             multiline
             maxLength={2000}
             autoFocus
@@ -226,7 +230,7 @@ visible, onClose, onSubmit, isMutating }: AddMemoryModalProps) {
               activeOpacity={0.8}
             >
               {isMutating ? (
-                <ActivityIndicator size="small" color={"#020617"} />
+                <ActivityIndicator size="small" color={colors.background} />
               ) : (
                 <Text style={styles.createButtonText}>SAVE</Text>
               )}
@@ -243,6 +247,7 @@ visible, onClose, onSubmit, isMutating }: AddMemoryModalProps) {
 export default function MemoryScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const TYPE_COLORS = useMemo(() => getTypeColors(colors), [colors]);
   const insets = useSafeAreaInsets();
   const accessToken = useAuthStore((s) => s.accessToken);
   const { memories, isLoading, isMutating, error, fetchMemories, createMemory, deleteMemory } =
@@ -291,7 +296,7 @@ export default function MemoryScreen() {
   return (
     <>
       <ScrollView
-        style={{ backgroundColor: "#020617" }}
+        style={{ backgroundColor: colors.background }}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.container,
@@ -301,7 +306,7 @@ export default function MemoryScreen() {
           <RefreshControl
             refreshing={isLoading}
             onRefresh={loadMemories}
-            tintColor={"#22d3ee"}
+            tintColor={colors.accentCyan}
           />
         }
       >
@@ -335,7 +340,7 @@ export default function MemoryScreen() {
           <Text style={styles.sectionLabel}>MEMORIES</Text>
           <View style={styles.headerRight}>
             {(isLoading || isMutating) ? (
-              <ActivityIndicator size="small" color={"#22d3ee"} />
+              <ActivityIndicator size="small" color={colors.accentCyan} />
             ) : null}
             <TouchableOpacity
               style={styles.addButton}
@@ -356,7 +361,7 @@ export default function MemoryScreen() {
           <FilterChip
             label="ALL"
             active={activeFilter === null}
-            color={"#8490ab"}
+            color={colors.textMuted}
             onPress={() => setActiveFilter(null)}
           />
           {MEMORY_TYPES.map((t) => (
@@ -380,7 +385,7 @@ export default function MemoryScreen() {
             <SymbolView
               name="brain.head.profile"
               size={36}
-              tintColor={"#8490ab"}
+              tintColor={colors.textMuted}
               resizeMode="scaleAspectFit"
             />
             <Text style={styles.emptyTitle}>
@@ -549,7 +554,7 @@ function createStyles(colors: ThemeColors) {
   // Error
   errorText: {
     ...typography.caption,
-    color: "#ef4444",
+    color: colors.danger,
     marginBottom: spacing.sm,
   },
 
@@ -645,7 +650,7 @@ function createStyles(colors: ThemeColors) {
   // Modal
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: colors.overlay,
   },
 
   modalWrapper: {
@@ -733,7 +738,7 @@ function createStyles(colors: ThemeColors) {
 
   formError: {
     ...typography.caption,
-    color: "#ef4444",
+    color: colors.danger,
     marginBottom: spacing.sm,
   },
 

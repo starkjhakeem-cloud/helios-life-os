@@ -31,31 +31,18 @@ import type {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const ENERGY_COLORS: Record<"high" | "medium" | "low", string> = {
-  high:   "#a855f7",
-  medium: "#f59e0b",
-  low:    "#8490ab",
-};
-
-const PRIORITY_COLORS: Record<string, string> = {
-  critical: "#ef4444",
-  high:     "#f59e0b",
-  medium:   "#22d3ee",
-  low:      "#8490ab",
-};
-
-const RISK_COLORS: Record<RiskLevel, string> = {
-  low: "#22c55e",
-  medium: "#f59e0b",
-  high: "#ef4444",
-};
-
-const STATUS_COLORS: Record<QueueStatus, string> = {
-  pending: "#22d3ee",
-  approved: "#22c55e",
-  rejected: "#8490ab",
-  completed: "#8490ab",
-};
+function getEnergyColors(c: ThemeColors): Record<string, string> {
+  return { high: c.accent, medium: c.warning, low: c.textMuted };
+}
+function getPriorityColors(c: ThemeColors): Record<string, string> {
+  return { critical: c.danger, high: c.warning, medium: c.accentCyan, low: c.textMuted };
+}
+function getRiskColors(c: ThemeColors): Record<string, string> {
+  return { low: c.success, medium: c.warning, high: c.danger };
+}
+function getStatusColors(c: ThemeColors): Record<string, string> {
+  return { pending: c.accentCyan, approved: c.success, rejected: c.textMuted, completed: c.textMuted };
+}
 
 const AGENT_LABELS: Record<string, string> = {
   strategy_agent:       "STRATEGY",
@@ -113,12 +100,12 @@ item, isQueued, isMutating, onAddToQueue }: SuggestionCardProps) {
       {/* Header row */}
       <View style={styles.cardHeader}>
         <View style={styles.cardMeta}>
-          <Badge label={agentLabel(item.source_agent)} color={"#a855f7"} />
-          <Badge label={item.risk_level.toUpperCase()} color={RISK_COLORS[item.risk_level as RiskLevel]} />
+          <Badge label={agentLabel(item.source_agent)} color={colors.accent} />
+          <Badge label={item.risk_level.toUpperCase()} color={getRiskColors(colors)[item.risk_level] ?? colors.textMuted} />
         </View>
         <Badge
           label={item.suggested_action_type.replace(/_/g, " ").toUpperCase()}
-          color={"#22d3ee"}
+          color={colors.accentCyan}
         />
       </View>
 
@@ -137,7 +124,7 @@ item, isQueued, isMutating, onAddToQueue }: SuggestionCardProps) {
           <SymbolView
             name="checkmark.circle.fill"
             size={14}
-            tintColor="#22c55e"
+            tintColor={colors.success}
             resizeMode="scaleAspectFit"
           />
           <Text style={styles.queuedText}>Added to Queue</Text>
@@ -221,11 +208,11 @@ function QueueCard({
         <View style={styles.cardMeta}>
           <Badge
             label={item.risk_level.toUpperCase()}
-            color={RISK_COLORS[item.risk_level as RiskLevel]}
+            color={getRiskColors(colors)[item.risk_level] ?? colors.textMuted}
           />
           <Badge
             label={item.status.toUpperCase()}
-            color={STATUS_COLORS[item.status as QueueStatus]}
+            color={getStatusColors(colors)[item.status] ?? colors.textMuted}
           />
         </View>
         <Text style={styles.cardAgent}>{agentLabel(item.source_agent)}</Text>
@@ -283,12 +270,12 @@ function QueueCard({
       {isApproved ? (
         isBlocked ? (
           <View style={styles.blockedRow}>
-            <SymbolView name="lock.fill" size={12} tintColor="#ef4444" resizeMode="scaleAspectFit" />
+            <SymbolView name="lock.fill" size={12} tintColor={colors.danger} resizeMode="scaleAspectFit" />
             <Text style={styles.blockedText}>BLOCKED BY RULE — update rules to allow execution</Text>
           </View>
         ) : isExecuting ? (
           <View style={styles.executingRow}>
-            <ActivityIndicator color={"#a855f7"} size="small" />
+            <ActivityIndicator color={colors.accent} size="small" />
             <Text style={styles.executingText}>Executing…</Text>
           </View>
         ) : (
@@ -352,7 +339,7 @@ function DailyPlanSection({
           style={[styles.generateBtn, isLoading && styles.btnDisabled]}
         >
           {isLoading ? (
-            <ActivityIndicator color={"#a855f7"} size="small" />
+            <ActivityIndicator color={colors.accent} size="small" />
           ) : (
             <Text style={styles.generateBtnText}>{plan ? "Regenerate" : "Generate"}</Text>
           )}
@@ -365,7 +352,7 @@ function DailyPlanSection({
         </View>
       ) : !plan && !isLoading ? (
         <View style={styles.emptyState}>
-          <SymbolView name="calendar.badge.clock" size={36} tintColor={"#8490ab"} resizeMode="scaleAspectFit" />
+          <SymbolView name="calendar.badge.clock" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
           <Text style={styles.emptyText}>No plan generated yet.</Text>
           <Text style={styles.emptySubtext}>Tap Generate to build today&apos;s operational plan.</Text>
         </View>
@@ -385,7 +372,7 @@ function DailyPlanSection({
                 <Text style={styles.focusTimeRange}>{block.time_range}</Text>
                 <Text style={styles.focusActivity}>{block.activity}</Text>
               </View>
-              <View style={[styles.energyDot, { backgroundColor: ENERGY_COLORS[block.energy_level] ?? "#8490ab" }]} />
+              <View style={[styles.energyDot, { backgroundColor: getEnergyColors(colors)[block.energy_level] ?? colors.textMuted }]} />
             </View>
           ))}
 
@@ -397,7 +384,7 @@ function DailyPlanSection({
                 <Text style={styles.priorityRank}>#{task.rank}</Text>
                 <Badge
                   label={task.priority.toUpperCase()}
-                  color={PRIORITY_COLORS[task.priority] ?? "#8490ab"}
+                  color={getPriorityColors(colors)[task.priority] ?? colors.textMuted}
                 />
                 <Text style={styles.priorityDuration}>{task.estimated_duration}</Text>
               </View>
@@ -416,12 +403,12 @@ function DailyPlanSection({
                   <View key={item.id} style={[styles.card, isQueued && styles.cardQueued]}>
                     <View style={styles.cardHeader}>
                       <View style={styles.cardMeta}>
-                        <Badge label={agentLabel(item.source_agent)} color={"#a855f7"} />
-                        <Badge label={item.risk_level.toUpperCase()} color={RISK_COLORS[item.risk_level as RiskLevel]} />
+                        <Badge label={agentLabel(item.source_agent)} color={colors.accent} />
+                        <Badge label={item.risk_level.toUpperCase()} color={getRiskColors(colors)[item.risk_level] ?? colors.textMuted} />
                       </View>
                       <Badge
                         label={item.suggested_action_type.replace(/_/g, " ").toUpperCase()}
-                        color={"#22d3ee"}
+                        color={colors.accentCyan}
                       />
                     </View>
                     <Text style={styles.cardTitle}>{item.title}</Text>
@@ -432,7 +419,7 @@ function DailyPlanSection({
                     </View>
                     {isQueued ? (
                       <View style={styles.queuedRow}>
-                        <SymbolView name="checkmark.circle.fill" size={14} tintColor="#22c55e" resizeMode="scaleAspectFit" />
+                        <SymbolView name="checkmark.circle.fill" size={14} tintColor={colors.success} resizeMode="scaleAspectFit" />
                         <Text style={styles.queuedText}>Added to Queue</Text>
                       </View>
                     ) : (
@@ -485,8 +472,8 @@ function DailyPlanSection({
               <Text style={[styles.planSubLabel, { marginTop: spacing.md }]}>SCHEDULE CONFLICTS</Text>
               <View style={[styles.planListCard, styles.conflictCard]}>
                 {plan.schedule_conflicts.map((conflict, idx) => (
-                  <Text key={idx} style={[styles.planListItem, { color: "#f59e0b" }]}>
-                    <Text style={{ color: "#f59e0b" }}>⚠ </Text>{conflict}
+                  <Text key={idx} style={[styles.planListItem, { color: colors.warning }]}>
+                    <Text style={{ color: colors.warning }}>⚠ </Text>{conflict}
                   </Text>
                 ))}
               </View>
@@ -592,14 +579,14 @@ onSave, onCancel, isMutating }: AddRuleFormProps) {
           onPress={() => setAllowExecution(true)}
           activeOpacity={0.75}
         >
-          <Text style={[styles.formOptionText, allowExecution && { color: "#22c55e" }]}>ALLOW</Text>
+          <Text style={[styles.formOptionText, allowExecution && { color: colors.success }]}>ALLOW</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.formOption, !allowExecution && styles.formOptionBlocked]}
           onPress={() => setAllowExecution(false)}
           activeOpacity={0.75}
         >
-          <Text style={[styles.formOptionText, !allowExecution && { color: "#ef4444" }]}>BLOCK</Text>
+          <Text style={[styles.formOptionText, !allowExecution && { color: colors.danger }]}>BLOCK</Text>
         </TouchableOpacity>
       </View>
 
@@ -666,16 +653,16 @@ rule, isMutating, onToggleExecution, onDelete }: RuleCardProps) {
         <View style={styles.cardMeta}>
           <Badge
             label={(ACTION_LABELS[rule.action_type] ?? rule.action_type).toUpperCase()}
-            color={"#22d3ee"}
+            color={colors.accentCyan}
           />
           <Badge
             label={rule.risk_level ? rule.risk_level.toUpperCase() : "ANY RISK"}
-            color={rule.risk_level ? (RISK_COLORS[rule.risk_level as RiskLevel] ?? "#8490ab") : "#8490ab"}
+            color={rule.risk_level ? (getRiskColors(colors)[rule.risk_level] ?? colors.textMuted) : colors.textMuted}
           />
         </View>
         <Badge
           label={rule.allow_execution ? "ALLOW" : "BLOCKED"}
-          color={rule.allow_execution ? "#22c55e" : "#ef4444"}
+          color={rule.allow_execution ? colors.success : colors.danger}
         />
       </View>
 
@@ -729,15 +716,17 @@ const AUDIT_EVENT_LABELS: Record<string, string> = {
   execution_failed:        "Execution failed",
 };
 
-const AUDIT_EVENT_COLORS: Record<string, string> = {
-  suggestion_created:      "#6366f1",
-  queue_item_created:      "#22d3ee",
-  queue_item_approved:     "#22c55e",
-  queue_item_rejected:     "#8490ab",
-  queue_item_executed:     "#22c55e",
-  execution_blocked_by_rule: "#f59e0b",
-  execution_failed:        "#ef4444",
-};
+function getAuditEventColors(c: ThemeColors): Record<string, string> {
+  return {
+    suggestion_created:       c.info,
+    queue_item_created:       c.accentCyan,
+    queue_item_approved:      c.success,
+    queue_item_rejected:      c.textMuted,
+    queue_item_executed:      c.success,
+    execution_blocked_by_rule: c.warning,
+    execution_failed:         c.danger,
+  };
+}
 
 function formatAuditTime(iso: string): string {
   try {
@@ -758,7 +747,7 @@ function AuditEntryRow({
 entry }: AuditEntryRowProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const color = AUDIT_EVENT_COLORS[entry.event_type] ?? "#8490ab";
+  const color = getAuditEventColors(colors)[entry.event_type] ?? colors.textMuted;
   const label = AUDIT_EVENT_LABELS[entry.event_type] ?? entry.event_type.replace(/_/g, " ").toUpperCase();
   return (
     <View style={styles.auditRow}>
@@ -789,7 +778,7 @@ entries, isLoading, error }: AuditLogSectionProps) {
   const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <>
-      <View style={{ height: 1, backgroundColor: "#263452", marginVertical: spacing.lg }} />
+      <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.lg }} />
       <Text style={styles.sectionLabel}>AUDIT LOG</Text>
       <Text style={styles.rulesDescription}>
         Recent autonomy decisions — approvals, executions, blocks, and failures.
@@ -797,7 +786,7 @@ entries, isLoading, error }: AuditLogSectionProps) {
 
       {isLoading && entries.length === 0 ? (
         <View style={styles.loadingRow}>
-          <ActivityIndicator color={"#a855f7"} size="small" />
+          <ActivityIndicator color={colors.accent} size="small" />
           <Text style={styles.loadingText}>Loading audit log…</Text>
         </View>
       ) : error ? (
@@ -806,7 +795,7 @@ entries, isLoading, error }: AuditLogSectionProps) {
         </View>
       ) : entries.length === 0 ? (
         <View style={styles.emptyState}>
-          <SymbolView name="doc.text.magnifyingglass" size={36} tintColor={"#8490ab"} resizeMode="scaleAspectFit" />
+          <SymbolView name="doc.text.magnifyingglass" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
           <Text style={styles.emptyText}>No audit events yet.</Text>
           <Text style={styles.emptySubtext}>
             Events appear here as you review, approve, and execute autonomy queue items.
@@ -988,7 +977,7 @@ export default function AutonomyScreen() {
       contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
       showsVerticalScrollIndicator={false}
       refreshControl={
-        <RefreshControl refreshing={isRefreshing} onRefresh={loadAll} tintColor={"#a855f7"} />
+        <RefreshControl refreshing={isRefreshing} onRefresh={loadAll} tintColor={colors.accent} />
       }
     >
       {/* Hero */}
@@ -1011,7 +1000,7 @@ export default function AutonomyScreen() {
         </View>
         <View style={styles.ccDivider} />
         <View style={styles.ccStat}>
-          <Text style={[styles.ccStatValue, unreadCount > 0 && { color: "#a855f7" }]}>
+          <Text style={[styles.ccStatValue, unreadCount > 0 && { color: colors.accent }]}>
             {unreadCount}
           </Text>
           <Text style={styles.ccStatLabel}>INBOX</Text>
@@ -1026,7 +1015,7 @@ export default function AutonomyScreen() {
       {/* ── Background Jobs Panel ─────────────────────────────────────── */}
       {bgJobs.length > 0 ? (
         <>
-          <View style={{ height: 1, backgroundColor: "#263452", marginVertical: spacing.lg }} />
+          <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.lg }} />
           <Text style={styles.sectionLabel}>SCHEDULED JOBS</Text>
           <Text style={styles.rulesDescription}>
             Manually trigger any job below. Created items enter the review queue — no auto-execution.
@@ -1043,7 +1032,7 @@ export default function AutonomyScreen() {
                 <View key={job.id}>
                   {idx > 0 ? <View style={styles.auditDivider} /> : null}
                   <View style={styles.bgJobRow}>
-                    <View style={[styles.bgJobDot, { backgroundColor: job.enabled ? "#22c55e" : "#8490ab" }]} />
+                    <View style={[styles.bgJobDot, { backgroundColor: job.enabled ? colors.success : colors.textMuted }]} />
                     <View style={styles.bgJobInfo}>
                       <Text style={styles.bgJobName}>{JOB_LABELS[job.job_type] ?? job.job_type}</Text>
                       <Text style={styles.bgJobSchedule}>{job.schedule_label}</Text>
@@ -1060,7 +1049,7 @@ export default function AutonomyScreen() {
                         disabled={bgJobsMutating}
                         activeOpacity={0.7}
                       >
-                        <SymbolView name="play.fill" size={10} tintColor="#22c55e" resizeMode="scaleAspectFit" />
+                        <SymbolView name="play.fill" size={10} tintColor={colors.success} resizeMode="scaleAspectFit" />
                         <Text style={styles.bgJobRunBtnText}>RUN</Text>
                       </TouchableOpacity>
                     ) : (
@@ -1083,7 +1072,7 @@ export default function AutonomyScreen() {
 
       {/* Initial queue loading */}
       {isLoading && items.length === 0 ? (
-        <ActivityIndicator color={"#a855f7"} style={{ marginTop: spacing.xl }} />
+        <ActivityIndicator color={colors.accent} style={{ marginTop: spacing.xl }} />
       ) : null}
 
       {/* ── Daily Plan ───────────────────────────────────────────────── */}
@@ -1097,14 +1086,14 @@ export default function AutonomyScreen() {
         onAddToQueue={handleAddDailyPlanItemToQueue}
       />
 
-      <View style={{ height: 1, backgroundColor: "#263452", marginVertical: spacing.lg }} />
+      <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.lg }} />
 
       {/* ── Proactive Suggestions ─────────────────────────────────────── */}
       <Text style={styles.sectionLabel}>PROACTIVE SUGGESTIONS</Text>
 
       {isSuggestionsLoading && suggestions.length === 0 ? (
         <View style={styles.loadingRow}>
-          <ActivityIndicator color={"#a855f7"} size="small" />
+          <ActivityIndicator color={colors.accent} size="small" />
           <Text style={styles.loadingText}>Generating suggestions…</Text>
         </View>
       ) : suggestionsError ? (
@@ -1113,7 +1102,7 @@ export default function AutonomyScreen() {
         </View>
       ) : suggestions.length === 0 ? (
         <View style={styles.emptyState}>
-          <SymbolView name="lightbulb" size={36} tintColor={"#8490ab"} resizeMode="scaleAspectFit" />
+          <SymbolView name="lightbulb" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
           <Text style={styles.emptyText}>No suggestions right now.</Text>
           <Text style={styles.emptySubtext}>Pull to refresh for fresh recommendations.</Text>
         </View>
@@ -1135,7 +1124,7 @@ export default function AutonomyScreen() {
           <Text style={[styles.sectionLabel, { marginTop: spacing.xl }]}>PENDING REVIEW</Text>
           {pending.length === 0 ? (
             <View style={styles.emptyState}>
-              <SymbolView name="tray" size={36} tintColor={"#8490ab"} resizeMode="scaleAspectFit" />
+              <SymbolView name="tray" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
               <Text style={styles.emptyText}>No pending proposals.</Text>
               <Text style={styles.emptySubtext}>Add a suggestion to the queue to get started.</Text>
             </View>
@@ -1197,7 +1186,7 @@ export default function AutonomyScreen() {
       ) : null}
 
       {/* ── Approval Rules ───────────────────────────────────────────── */}
-      <View style={{ height: 1, backgroundColor: "#263452", marginVertical: spacing.lg }} />
+      <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.lg }} />
       <View style={styles.planSectionHeader}>
         <Text style={styles.sectionLabel}>APPROVAL RULES</Text>
         <TouchableOpacity
@@ -1229,12 +1218,12 @@ export default function AutonomyScreen() {
 
       {isRulesLoading && rules.length === 0 ? (
         <View style={styles.loadingRow}>
-          <ActivityIndicator color={"#a855f7"} size="small" />
+          <ActivityIndicator color={colors.accent} size="small" />
           <Text style={styles.loadingText}>Loading rules…</Text>
         </View>
       ) : rules.length === 0 && !showAddRuleForm ? (
         <View style={styles.emptyState}>
-          <SymbolView name="slider.horizontal.3" size={36} tintColor={"#8490ab"} resizeMode="scaleAspectFit" />
+          <SymbolView name="slider.horizontal.3" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
           <Text style={styles.emptyText}>No rules configured.</Text>
           <Text style={styles.emptySubtext}>
             Default: all approved actions require explicit execution. Add a rule to block specific types.
@@ -1313,14 +1302,14 @@ function createStyles(colors: ThemeColors) {
 
   // Error
   errorBox: {
-    backgroundColor: "rgba(239, 68, 68, 0.1)",
+    backgroundColor: `${colors.danger}1a`,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.3)",
+    borderColor: `${colors.danger}4d`,
     padding: spacing.md,
     marginBottom: spacing.md,
   },
-  errorText: { ...typography.body, color: "#ef4444" },
+  errorText: { ...typography.body, color: colors.danger },
 
   // Empty state
   emptyState: {
@@ -1351,7 +1340,7 @@ function createStyles(colors: ThemeColors) {
     gap: spacing.xs,
   },
   cardQueued: {
-    borderColor: "#22c55e",
+    borderColor: colors.success,
     opacity: 0.75,
   },
   cardHeader: {
@@ -1419,17 +1408,17 @@ function createStyles(colors: ThemeColors) {
   },
   btnDisabled: { opacity: 0.5 },
 
-  approveBtn: { backgroundColor: "rgba(34, 197, 94, 0.1)", borderColor: "#22c55e" },
-  approveBtnText: { ...typography.caption, color: "#22c55e", fontWeight: "700" as const, letterSpacing: 1 },
+  approveBtn: { backgroundColor: `${colors.success}1a`, borderColor: colors.success },
+  approveBtnText: { ...typography.caption, color: colors.success, fontWeight: "700" as const, letterSpacing: 1 },
 
-  rejectBtn: { backgroundColor: "rgba(239, 68, 68, 0.1)", borderColor: "#ef4444" },
-  rejectBtnText: { ...typography.caption, color: "#ef4444", fontWeight: "700" as const, letterSpacing: 1 },
+  rejectBtn: { backgroundColor: `${colors.danger}1a`, borderColor: colors.danger },
+  rejectBtnText: { ...typography.caption, color: colors.danger, fontWeight: "700" as const, letterSpacing: 1 },
 
-  executeBtn: { backgroundColor: "rgba(124, 58, 237, 0.15)", borderColor: colors.accent, marginTop: spacing.sm },
+  executeBtn: { backgroundColor: `${colors.accent}26`, borderColor: colors.accent, marginTop: spacing.sm },
   executeBtnText: { ...typography.caption, color: colors.accent, fontWeight: "700" as const, letterSpacing: 1 },
 
   addToQueueBtn: {
-    backgroundColor: "rgba(34, 211, 238, 0.1)",
+    backgroundColor: `${colors.accentCyan}1a`,
     borderColor: colors.accentCyan,
     marginTop: spacing.sm,
   },
@@ -1443,7 +1432,7 @@ function createStyles(colors: ThemeColors) {
     marginTop: spacing.sm,
     paddingVertical: spacing.xs,
   },
-  queuedText: { ...typography.caption, color: "#22c55e", letterSpacing: 1 },
+  queuedText: { ...typography.caption, color: colors.success, letterSpacing: 1 },
 
   executingRow: {
     flexDirection: "row",
@@ -1469,7 +1458,7 @@ function createStyles(colors: ThemeColors) {
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.accent,
-    backgroundColor: "rgba(124, 58, 237, 0.12)",
+    backgroundColor: `${colors.accent}1f`,
     minWidth: 80,
     alignItems: "center",
   },
@@ -1560,7 +1549,7 @@ function createStyles(colors: ThemeColors) {
     padding: spacing.md,
     gap: spacing.sm,
   },
-  conflictCard: { borderColor: "rgba(245, 158, 11, 0.35)" },
+  conflictCard: { borderColor: `${colors.warning}59` },
   planListItem: { ...typography.body, color: colors.textSecondary, lineHeight: 22 },
   planBullet: { color: colors.textMuted },
 
@@ -1572,14 +1561,14 @@ function createStyles(colors: ThemeColors) {
     marginTop: spacing.sm,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.sm,
-    backgroundColor: "rgba(239, 68, 68, 0.08)",
+    backgroundColor: `${colors.danger}14`,
     borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.25)",
+    borderColor: `${colors.danger}40`,
   },
   blockedText: {
     ...typography.caption,
-    color: "#ef4444",
+    color: colors.danger,
     letterSpacing: 0.5,
     flex: 1,
   },
@@ -1642,15 +1631,15 @@ function createStyles(colors: ThemeColors) {
   },
   formOptionActive: {
     borderColor: colors.accentCyan,
-    backgroundColor: "rgba(34, 211, 238, 0.1)",
+    backgroundColor: `${colors.accentCyan}1a`,
   },
   formOptionAllowed: {
-    borderColor: "#22c55e",
-    backgroundColor: "rgba(34, 197, 94, 0.1)",
+    borderColor: colors.success,
+    backgroundColor: `${colors.success}1a`,
   },
   formOptionBlocked: {
-    borderColor: "#ef4444",
-    backgroundColor: "rgba(239, 68, 68, 0.1)",
+    borderColor: colors.danger,
+    backgroundColor: `${colors.danger}1a`,
   },
   formOptionText: {
     fontSize: 9,
@@ -1778,14 +1767,14 @@ function createStyles(colors: ThemeColors) {
     paddingVertical: spacing.xs - 2,
     borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: "#22c55e",
-    backgroundColor: "rgba(34, 197, 94, 0.08)",
+    borderColor: colors.success,
+    backgroundColor: `${colors.success}14`,
   },
   bgJobRunBtnText: {
     fontSize: 9,
     fontWeight: "700" as const,
     letterSpacing: 0.8,
-    color: "#22c55e",
+    color: colors.success,
   },
   bgJobDisabled: {
     fontSize: 8,

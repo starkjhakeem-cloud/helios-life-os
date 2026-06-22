@@ -36,9 +36,9 @@ export default function LoginScreen() {
   return (
     <Screen style={styles.screen}>
       <View style={styles.header}>
-        <Text variant="label" color={"#22d3ee"}>HELIOS</Text>
+        <Text variant="label" color={colors.accentCyan}>HELIOS</Text>
         <Text variant="displaySmall" style={styles.centered}>ACCESS SYSTEM</Text>
-        <Text variant="body" color={"#8490ab"} style={styles.centered}>
+        <Text variant="body" color={colors.textMuted} style={styles.centered}>
           Enter your credentials to continue
         </Text>
       </View>
@@ -67,7 +67,7 @@ export default function LoginScreen() {
           onSubmitEditing={handleLogin}
         />
         {displayError ? (
-          <Text variant="caption" color="#ef4444">{displayError}</Text>
+          <Text variant="caption" color={colors.danger}>{displayError}</Text>
         ) : null}
         <Button
           label="ACCESS SYSTEM"
@@ -78,9 +78,9 @@ export default function LoginScreen() {
       </View>
 
       <View style={styles.footer}>
-        <Text variant="body" color={"#8490ab"}>New operator?  </Text>
+        <Text variant="body" color={colors.textMuted}>New operator?  </Text>
         <Link href="/(auth)/signup">
-          <Text variant="body" color={"#22d3ee"}>Create account</Text>
+          <Text variant="body" color={colors.accentCyan}>Create account</Text>
         </Link>
       </View>
     </Screen>

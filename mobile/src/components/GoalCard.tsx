@@ -7,11 +7,13 @@ import { spacing, radius, typography , type ThemeColors } from "../theme/theme";
 import { useTheme } from "../theme/ThemeContext";
 import type { Goal } from "../services/goalsService";
 
-const STATUS_COLOR: Record<string, string> = {
-  active: "#22d3ee",
-  completed: "#22c55e",
-  paused: "#f59e0b",
-};
+function getStatusColor(c: ThemeColors): Record<string, string> {
+  return {
+    active: c.accentCyan,
+    completed: c.success,
+    paused: c.warning,
+  };
+}
 
 const STATUS_NEXT: Record<string, string> = {
   active: "completed",
@@ -34,7 +36,7 @@ type Props = {
 export default function GoalCard({ goal, onStatusChange, onDelete }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const dotColor = STATUS_COLOR[goal.status] ?? "#8490ab";
+  const dotColor = useMemo(() => getStatusColor(colors), [colors])[goal.status] ?? colors.textMuted;
   const nextStatus = STATUS_NEXT[goal.status] ?? "active";
 
   function handleStatusChange() {
@@ -84,7 +86,7 @@ export default function GoalCard({ goal, onStatusChange, onDelete }: Props) {
           <SymbolView
             name="trash"
             size={16}
-            tintColor={"#8490ab"}
+            tintColor={colors.textMuted}
             resizeMode="scaleAspectFit"
           />
         </TouchableOpacity>
@@ -101,7 +103,7 @@ export default function GoalCard({ goal, onStatusChange, onDelete }: Props) {
           <SymbolView
             name="calendar"
             size={12}
-            tintColor={"#8490ab"}
+            tintColor={colors.textMuted}
             resizeMode="scaleAspectFit"
           />
           <Text style={styles.dateText}>{goal.target_date}</Text>

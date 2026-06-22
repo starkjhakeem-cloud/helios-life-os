@@ -46,9 +46,9 @@ export default function TasksScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const PRIORITY_COLOR: Record<Priority, string> = {
-    critical: "#ef4444",
+    critical: colors.danger,
     high:     "#f97316",
-    medium:   "#f59e0b",
+    medium:   colors.warning,
     low:      colors.textMuted,
   };
   const insets = useSafeAreaInsets();
@@ -382,7 +382,7 @@ function createStyles(colors: ThemeColors) {
 
   errorText: {
     ...typography.caption,
-    color: "#ef4444",
+    color: colors.danger,
     marginBottom: spacing.sm,
   },
 
@@ -404,7 +404,7 @@ function createStyles(colors: ThemeColors) {
 
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: colors.overlay,
   },
 
   modalWrapper: {
@@ -495,7 +495,7 @@ function createStyles(colors: ThemeColors) {
 
   goalChipActive: {
     borderColor: colors.accent,
-    backgroundColor: "rgba(124,58,237,0.15)",
+    backgroundColor: `${colors.accent}26`,
   },
 
   goalChipText: {
