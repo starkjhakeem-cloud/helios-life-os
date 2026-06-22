@@ -23,12 +23,58 @@ import Svg, {
   Stop,
 } from "react-native-svg";
 
-import { useAuthStore, useGoalsStore, useNotificationsStore, useTasksStore } from "../../store";
+import {
+  useAuthStore,
+  useAutonomyStore,
+  useBackgroundJobsStore,
+  useConversationStore,
+  useGoalsStore,
+  useIntegrationStore,
+  useNotificationsStore,
+  useTasksStore,
+} from "../../store";
 import { useTheme } from "../../theme/ThemeContext";
 import type { ThemeColors } from "../../theme/theme";
 
 const { width } = Dimensions.get("window");
 const PAGE = width - 52;
+
+// ── System status ─────────────────────────────────────────────────────────────
+
+type StatusTone = "active" | "warning" | "attention" | "danger" | "syncing" | "focus";
+type SystemStatus = { label: string; tone: StatusTone };
+
+function getSystemStatus({
+  apiError,
+  aiProviderOffline,
+  hasAttention,
+  isSyncing,
+  focusModeActive,
+}: {
+  apiError: boolean;
+  aiProviderOffline: boolean;
+  hasAttention: boolean;
+  isSyncing: boolean;
+  focusModeActive: boolean;
+}): SystemStatus {
+  if (apiError)           return { label: "SYSTEM ALERT",       tone: "danger"    };
+  if (aiProviderOffline)  return { label: "AI PROVIDER OFFLINE", tone: "warning"   };
+  if (hasAttention)       return { label: "ATTENTION REQUIRED",  tone: "attention" };
+  if (isSyncing)          return { label: "SYNCING SYSTEMS",     tone: "syncing"   };
+  if (focusModeActive)    return { label: "FOCUS MODE ACTIVE",   tone: "focus"     };
+  return                         { label: "ALL SYSTEMS ACTIVE",  tone: "active"    };
+}
+
+function getToneColor(tone: StatusTone, colors: ThemeColors): string {
+  switch (tone) {
+    case "danger":    return colors.danger;
+    case "warning":   return colors.warning;
+    case "attention": return colors.warning;
+    case "syncing":   return colors.accentCyan;
+    case "focus":     return colors.accent;
+    case "active":    return colors.accentCyan;
+  }
+}
 
 export default function HomeScreen() {
   const { colors } = useTheme();
@@ -38,10 +84,16 @@ export default function HomeScreen() {
   const userName = useAuthStore((s) => s.user?.name ?? "Operator");
 
   const goals = useGoalsStore((s) => s.goals);
+  const goalsError = useGoalsStore((s) => s.error);
   const fetchGoals = useGoalsStore((s) => s.fetchGoals);
   const tasks = useTasksStore((s) => s.tasks);
+  const tasksError = useTasksStore((s) => s.error);
   const fetchTasks = useTasksStore((s) => s.fetchTasks);
   const unreadCount = useNotificationsStore((s) => s.notifications.filter((n) => !n.is_read).length);
+  const pendingApprovals = useAutonomyStore((s) => s.items.filter((i) => i.status === "pending").length);
+  const syncingId = useIntegrationStore((s) => s.syncingId);
+  const bgJobsRunning = useBackgroundJobsStore((s) => s.jobs.some((j) => j.status === "running"));
+  const aiSendError = useConversationStore((s) => s.sendError);
 
   useEffect(() => {
     if (accessToken) {
@@ -69,7 +121,29 @@ export default function HomeScreen() {
       ? "—"
       : `${Math.round((tasks.filter((t) => t.status === "done").length / totalTasks) * 100)}%`;
 
-  const now = new Date();
+  const today = new Date();
+  const overdueTasks = tasks.filter((t) => {
+    if (t.status === "done" || !t.due_date) return false;
+    return new Date(t.due_date) < today;
+  }).length;
+  const highPriorityOpen = tasks.filter(
+    (t) => t.status !== "done" && (t.priority === "critical" || t.priority === "high"),
+  ).length;
+
+  const aiProviderOffline =
+    aiSendError != null &&
+    (aiSendError.toLowerCase().includes("provider") ||
+      aiSendError.toLowerCase().includes("unavailable"));
+
+  const systemStatus = getSystemStatus({
+    apiError: !!(tasksError || goalsError),
+    aiProviderOffline,
+    hasAttention: unreadCount > 0 || pendingApprovals > 0 || overdueTasks > 0 || highPriorityOpen > 0,
+    isSyncing: !!(syncingId || bgJobsRunning),
+    focusModeActive: false,
+  });
+
+  const now = today;
   const hour = now.getHours();
   const greeting = hour < 12 ? "Good morning," : hour < 17 ? "Good afternoon," : "Good evening,";
   const dateStr = now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
@@ -92,7 +166,7 @@ export default function HomeScreen() {
         ]}
       >
         <Header unreadCount={unreadCount} onGearPress={() => router.push("/(tabs)/profile")} />
-        <Hero greeting={greeting} userName={displayName} dateStr={dateStr} />
+        <Hero greeting={greeting} userName={displayName} dateStr={dateStr} systemStatus={systemStatus} />
 
         <Section title={"TODAY'S METRICS"} action="View all  ›" onAction={() => router.push("/(tabs)/analytics")} />
 
@@ -146,9 +220,20 @@ function Header({ unreadCount, onGearPress }: { unreadCount: number; onGearPress
   );
 }
 
-function Hero({ greeting, userName, dateStr }: { greeting: string; userName: string; dateStr: string }) {
+function Hero({
+  greeting,
+  userName,
+  dateStr,
+  systemStatus,
+}: {
+  greeting: string;
+  userName: string;
+  dateStr: string;
+  systemStatus: SystemStatus;
+}) {
   const { colors } = useTheme();
   const s = useMemo(() => createStyles(colors), [colors]);
+  const toneColor = getToneColor(systemStatus.tone, colors);
 
   return (
     <View style={s.heroCard}>
@@ -157,9 +242,12 @@ function Hero({ greeting, userName, dateStr }: { greeting: string; userName: str
         <Text style={s.heroName} numberOfLines={2}>{userName}.</Text>
         <Text style={s.heroDate}>{dateStr}</Text>
 
-        <View style={s.statusPill}>
-          <View style={s.statusDot} />
-          <Text style={s.statusText}>ALL SYSTEMS NOMINAL</Text>
+        <View style={[
+          s.statusPill,
+          { backgroundColor: `${toneColor}24`, borderColor: `${toneColor}2e` },
+        ]}>
+          <View style={[s.statusDot, { backgroundColor: toneColor }]} />
+          <Text style={[s.statusText, { color: toneColor }]}>{systemStatus.label}</Text>
         </View>
       </View>
 
