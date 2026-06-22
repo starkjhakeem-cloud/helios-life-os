@@ -220,26 +220,38 @@ export default function HomeScreen() {
           },
         ]}
       >
-        <Header unreadCount={unreadCount} onGearPress={() => router.push("/(tabs)/profile")} />
+        <Header
+          unreadCount={unreadCount}
+          onNotifPress={() => router.push("/(tabs)/notifications")}
+          onGearPress={() => router.push("/(tabs)/profile")}
+        />
         <Hero greeting={greeting} userName={displayName} dateStr={dateStr} systemStatus={systemStatus} onPressStatus={onPressStatus} />
 
         <Section title={"TODAY'S METRICS"} action="View all  ›" onAction={() => router.push("/(tabs)/analytics")} />
 
         <View style={styles.grid}>
-          <Metric icon="target" value={String(activeGoals)} label="Active Goals" sub={activeGoals === 1 ? "On track" : "In progress"} />
-          <Metric icon="checkmark.circle.fill" value={String(doneTodayTasks)} label="Tasks Done" sub="Completed today" />
-          <Metric icon="chart.bar.fill" value={completionRate} label="Completion Rate" sub="Overall progress" />
-          <Metric icon="circle" value={String(openTasks)} label="Open Tasks" sub={openTasks === 0 ? "All clear" : "Needs attention"} />
+          <Metric icon="target" value={String(activeGoals)} label="Active Goals" sub={activeGoals === 1 ? "On track" : "In progress"} onPress={() => router.push("/(tabs)/goals")} />
+          <Metric icon="checkmark.circle.fill" value={String(doneTodayTasks)} label="Tasks Done" sub="Completed today" onPress={() => router.push("/(tabs)/tasks")} />
+          <Metric icon="chart.bar.fill" value={completionRate} label="Completion Rate" sub="Overall progress" onPress={() => router.push("/(tabs)/analytics")} />
+          <Metric icon="circle" value={String(openTasks)} label="Open Tasks" sub={openTasks === 0 ? "All clear" : "Needs attention"} onPress={() => router.push("/(tabs)/tasks")} />
         </View>
 
         <Section title="DAILY BRIEF" action="View full briefing  ›" onAction={() => router.push("/(tabs)/assistant")} />
-        <DailyCommand timeStr={timeStr} userName={displayName} />
+        <DailyCommand timeStr={timeStr} userName={displayName} onPress={() => router.push("/(tabs)/assistant")} />
       </ScrollView>
     </View>
   );
 }
 
-function Header({ unreadCount, onGearPress }: { unreadCount: number; onGearPress: () => void }) {
+function Header({
+  unreadCount,
+  onNotifPress,
+  onGearPress,
+}: {
+  unreadCount: number;
+  onNotifPress: () => void;
+  onGearPress: () => void;
+}) {
   const { colors } = useTheme();
   const s = useMemo(() => createStyles(colors), [colors]);
 
@@ -248,7 +260,17 @@ function Header({ unreadCount, onGearPress }: { unreadCount: number; onGearPress
       <Text style={s.logo}>H E L I O S</Text>
 
       <View style={s.headerIcons}>
-        <TouchableOpacity style={s.roundButton} activeOpacity={0.75}>
+        <TouchableOpacity
+          style={s.roundButton}
+          onPress={onNotifPress}
+          activeOpacity={0.75}
+          accessibilityLabel={
+            unreadCount > 0
+              ? `${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}. Tap to view.`
+              : "Notifications. Tap to view."
+          }
+          accessibilityRole="button"
+        >
           <SymbolView
             name="bell"
             size={20}
@@ -262,7 +284,13 @@ function Header({ unreadCount, onGearPress }: { unreadCount: number; onGearPress
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity style={s.roundButton} onPress={onGearPress} activeOpacity={0.75}>
+        <TouchableOpacity
+          style={s.roundButton}
+          onPress={onGearPress}
+          activeOpacity={0.75}
+          accessibilityLabel="Settings"
+          accessibilityRole="button"
+        >
           <SymbolView
             name="gearshape"
             size={21}
@@ -462,17 +490,26 @@ function Metric({
   value,
   label,
   sub,
+  onPress,
 }: {
   icon: SFSymbol;
   value: string;
   label: string;
   sub: string;
+  onPress?: () => void;
 }) {
   const { colors } = useTheme();
   const s = useMemo(() => createStyles(colors), [colors]);
 
   return (
-    <View style={s.metric}>
+    <TouchableOpacity
+      style={s.metric}
+      onPress={onPress}
+      activeOpacity={0.75}
+      accessibilityLabel={`${label}: ${value}. ${sub}. Tap to view.`}
+      accessibilityRole="button"
+      disabled={!onPress}
+    >
       <View style={s.metricTop}>
         <View style={s.metricIcon}>
           <SymbolView
@@ -489,16 +526,23 @@ function Metric({
           <Text style={s.metricSub}>{sub}</Text>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
-function DailyCommand({ timeStr, userName }: { timeStr: string; userName: string }) {
+function DailyCommand({ timeStr, userName, onPress }: { timeStr: string; userName: string; onPress?: () => void }) {
   const { colors } = useTheme();
   const s = useMemo(() => createStyles(colors), [colors]);
 
   return (
-    <View style={s.command}>
+    <TouchableOpacity
+      style={s.command}
+      onPress={onPress}
+      activeOpacity={0.78}
+      accessibilityLabel="Daily Brief. Tap to open assistant."
+      accessibilityRole="button"
+      disabled={!onPress}
+    >
       <View style={s.commandLine} />
 
       <View style={s.commandTop}>
@@ -519,7 +563,7 @@ function DailyCommand({ timeStr, userName }: { timeStr: string; userName: string
         {"Good to see you, "}{userName}.{"\n"}
         {"Your priority queue is loaded and systems are nominal."}
       </Text>
-    </View>
+    </TouchableOpacity>
   );
 }
 
