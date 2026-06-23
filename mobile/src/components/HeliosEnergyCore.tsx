@@ -1,11 +1,11 @@
 /**
  * HeliosEnergyCore — approved PNG based HELIOS identity mark.
  *
- * The visible Energy Core uses the approved transparent PNG as the source of
- * truth. Animated wave layers float above the static image at low opacity.
- * An invisible layout wrapper (10px larger than the artwork on each side)
- * gives scaled wave layers room to glow around the Energy Core without being
- * clipped by heroOrbArea or heroCard's overflow:hidden.
+ * collapsable={false} on every wrapper View prevents React Native's view
+ * flattening optimizer from merging these into their parent's native layer.
+ * The red debug border worked because a visible border forced a real UIView;
+ * without it the wrapper collapsed, removing the compositing layer that lets
+ * useNativeDriver animations render through heroCard's overflow:hidden.
  */
 
 import React, { memo, useCallback, useEffect, useMemo, useRef } from "react";
@@ -16,7 +16,6 @@ import {
   Image,
   Platform,
   StyleSheet,
-  Text,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -39,46 +38,27 @@ type Props = {
   interactive?: boolean;
   onPress?: () => void;
   onLongPress?: () => void;
-  /**
-   * Dev-only: when true shows the invisible layout frame as a red border with
-   * layer labels so you can verify the animation is rendering. Set to false
-   * (default) in production — the frame structure is preserved but invisible.
-   */
-  debugAnimationFrame?: boolean;
 };
 
 type AnimationConfig = {
-  scaleDuration: number;
-  opacityDuration: number;
-  driftDuration: number;
+  duration: number;
 };
 
 const APPROVED_CORE = require("../../assets/design/branding/helios-energy-core-transparent.png");
 const APPROVED_WAVES = require("../../assets/design/branding/helios-energy-core-waves.png");
 const ARTWORK_ASPECT_RATIO = 434 / 400;
-
-// Extra space (per side) around the artwork inside the layout wrapper.
-// This gives the scaled wave layers room to glow without being clipped.
 const GLOW_INSET = 10;
 
 function resolveAnimationConfig(state: CoreState): AnimationConfig {
   switch (state) {
-    case "thinking":
-      return { scaleDuration: 600, opacityDuration: 700, driftDuration: 800 };
-    case "generating":
-      return { scaleDuration: 600, opacityDuration: 700, driftDuration: 800 };
-    case "listening":
-      return { scaleDuration: 600, opacityDuration: 700, driftDuration: 800 };
-    case "speaking":
-      return { scaleDuration: 600, opacityDuration: 700, driftDuration: 800 };
-    case "attention":
-      return { scaleDuration: 600, opacityDuration: 700, driftDuration: 800 };
-    case "critical":
-      return { scaleDuration: 600, opacityDuration: 700, driftDuration: 800 };
-    case "offline":
-      return { scaleDuration: 600, opacityDuration: 700, driftDuration: 800 };
-    case "idle":
-      return { scaleDuration: 600, opacityDuration: 700, driftDuration: 800 };
+    case "thinking":   return { duration: 4000 };
+    case "generating": return { duration: 3500 };
+    case "listening":  return { duration: 5000 };
+    case "speaking":   return { duration: 4200 };
+    case "attention":  return { duration: 4500 };
+    case "critical":   return { duration: 3500 };
+    case "offline":    return { duration: 7000 };
+    case "idle":       return { duration: 5000 };
   }
 }
 
@@ -88,13 +68,9 @@ function HeliosEnergyCore({
   interactive = true,
   onPress,
   onLongPress,
-  debugAnimationFrame = false,
 }: Props) {
   const config = useMemo(() => resolveAnimationConfig(state), [state]);
   const artworkHeight = size / ARTWORK_ASPECT_RATIO;
-
-  // Wrapper is GLOW_INSET px larger on each side than the artwork so scaled
-  // wave layers have room to be visible without leaving heroOrbArea/heroCard.
   const wrapperWidth = size + GLOW_INSET * 2;
   const wrapperHeight = artworkHeight + GLOW_INSET * 2;
 
@@ -114,75 +90,54 @@ function HeliosEnergyCore({
     opacityPulse.setValue(0);
     drift.setValue(0);
 
-    const scaleLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(scalePulse, {
-          toValue: 1,
-          duration: config.scaleDuration,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(scalePulse, {
-          toValue: 0,
-          duration: config.scaleDuration,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    const opacityLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacityPulse, {
-          toValue: 1,
-          duration: config.opacityDuration,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacityPulse, {
-          toValue: 0,
-          duration: config.opacityDuration,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
+    const make = (value: Animated.Value, dur: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(value, {
+            toValue: 1,
+            duration: dur,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(value, {
+            toValue: 0,
+            duration: dur,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+
     const driftLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(drift, {
           toValue: 1,
-          duration: config.driftDuration,
+          duration: config.duration,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
         Animated.timing(drift, {
           toValue: 0,
-          duration: config.driftDuration,
+          duration: config.duration,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
       ]),
     );
 
-    scaleLoopRef.current = scaleLoop;
-    opacityLoopRef.current = opacityLoop;
+    scaleLoopRef.current = make(scalePulse, config.duration);
+    opacityLoopRef.current = make(opacityPulse, Math.round(config.duration * 1.2));
     driftLoopRef.current = driftLoop;
-    scaleLoop.start();
-    opacityLoop.start();
-    driftLoop.start();
+    scaleLoopRef.current.start();
+    opacityLoopRef.current.start();
+    driftLoopRef.current.start();
 
     return () => {
       scaleLoopRef.current?.stop();
       opacityLoopRef.current?.stop();
       driftLoopRef.current?.stop();
     };
-  }, [
-    config.driftDuration,
-    config.opacityDuration,
-    config.scaleDuration,
-    drift,
-    opacityPulse,
-    scalePulse,
-  ]);
+  }, [config.duration, drift, opacityPulse, scalePulse]);
 
   const handlePress = useCallback(() => {
     if (Platform.OS === "ios") {
@@ -192,21 +147,11 @@ function HeliosEnergyCore({
   }, [onPress]);
 
   const handlePressIn = useCallback(() => {
-    Animated.spring(touch, {
-      toValue: 1,
-      useNativeDriver: true,
-      speed: 22,
-      bounciness: 6,
-    }).start();
+    Animated.spring(touch, { toValue: 1, useNativeDriver: true, speed: 22, bounciness: 6 }).start();
   }, [touch]);
 
   const handlePressOut = useCallback(() => {
-    Animated.spring(touch, {
-      toValue: 0,
-      useNativeDriver: true,
-      speed: 18,
-      bounciness: 5,
-    }).start();
+    Animated.spring(touch, { toValue: 0, useNativeDriver: true, speed: 18, bounciness: 5 }).start();
   }, [touch]);
 
   const handleLongPress = useCallback(() => {
@@ -220,37 +165,37 @@ function HeliosEnergyCore({
     }
   }, [onLongPress]);
 
-  const scaleLayerOpacity = scalePulse.interpolate({
+  const waveOpacity = scalePulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 0.9],
+    outputRange: [0.45, 0.75],
   });
-  const scaleLayerScale = scalePulse.interpolate({
+  const waveScale = scalePulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.7, 1.3],
+    outputRange: [1.0, 1.08],
   });
   const opacityLayerOpacity = opacityPulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 0.9],
+    outputRange: [0.45, 0.75],
   });
   const driftOpacity = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 0.9],
+    outputRange: [0.45, 0.75],
   });
   const driftRotate = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: ["-45deg", "45deg"],
+    outputRange: ["-3deg", "3deg"],
   });
   const driftScale = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.7, 1.3],
+    outputRange: [1.0, 1.08],
   });
   const driftTranslateX = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: [-20, 20],
+    outputRange: [-2.5, 2.5],
   });
   const driftTranslateY = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: [-20, 20],
+    outputRange: [1.6, -1.6],
   });
   const touchScale = touch.interpolate({
     inputRange: [0, 1],
@@ -269,69 +214,40 @@ function HeliosEnergyCore({
         accessibilityRole: "button" as const,
         accessibilityHint: "Tap to view assistant status. Long press for voice mode.",
       }
-    : {
-        accessibilityLabel: "HELIOS energy core",
-      };
+    : { accessibilityLabel: "HELIOS energy core" };
 
   return (
-    /**
-     * Invisible layout wrapper — GLOW_INSET px larger than the artwork on each
-     * side so the scaled wave layers have room to glow around the Energy Core.
-     * borderWidth:hairline + borderColor:transparent preserves the same native
-     * UIView border layer structure that existed in the debug state (where the
-     * red border made this wrapper visible), ensuring the same compositing path
-     * that allowed useNativeDriver animations to render through heroCard's
-     * overflow:hidden. When debugAnimationFrame=true the border and labels
-     * become visible so you can inspect the glow bounds.
-     */
+    // collapsable={false} — forces a real native UIView even with no visible
+    // border/background. Without this, RN flattens this wrapper into heroCard's
+    // layer and the useNativeDriver animations lose their compositing context.
     <View
-      style={[
-        styles.outerWrapper,
-        {
-          width: wrapperWidth,
-          height: wrapperHeight,
-          borderWidth: 2,
-          borderColor: debugAnimationFrame ? "red" : "transparent",
-        },
-      ]}
+      collapsable={false}
+      style={[styles.outerWrapper, { width: wrapperWidth, height: wrapperHeight }]}
     >
-      {debugAnimationFrame && (
-        <Text style={styles.debugLabel} numberOfLines={1}>
-          glow frame {wrapperWidth}×{Math.round(wrapperHeight)}
-        </Text>
-      )}
-
       <Container
+        // @ts-ignore — collapsable is valid on View; TS typing is incomplete
+        collapsable={false}
         style={[styles.container, { width: size, height: artworkHeight }]}
         {...containerProps}
       >
         <Animated.View
+          collapsable={false}
           style={[
             styles.artworkFrame,
-            {
-              width: size,
-              height: artworkHeight,
-              transform: [{ scale: touchScale }],
-            },
+            { width: size, height: artworkHeight, transform: [{ scale: touchScale }] },
           ]}
           pointerEvents="none"
         >
-          {/* ── 1. Static approved image — bottom of stack ──────────────── */}
-          {/* The H and orbital design stay perfectly still at full opacity. */}
+          {/* Static approved image — bottom, keeps H perfectly still at 0.92
+              opacity so animated wave layers above it remain perceptible.    */}
           <Image
             source={APPROVED_CORE}
-            style={styles.image}
+            style={[styles.image, { opacity: 0.92 }]}
             resizeMode="contain"
             accessibilityIgnoresInvertColors
           />
 
-          {/* ── 2-4. Animated wave layers — above the static image ───────── */}
-          {/* Low opacity so the static design shows through. The 10px GLOW_INSET
-              space around the artwork inside the wrapper lets these layers be
-              visible as a moving glow ring when they scale/drift outward.   */}
-          {debugAnimationFrame && (
-            <Text style={[styles.debugLayerLabel, { top: 2 }]}>drift</Text>
-          )}
+          {/* Drift layer — translates, rotates, and scales above the static base */}
           <Animated.Image
             source={APPROVED_WAVES}
             style={[
@@ -350,34 +266,18 @@ function HeliosEnergyCore({
             accessibilityIgnoresInvertColors
           />
 
-          {debugAnimationFrame && (
-            <Text style={[styles.debugLayerLabel, { top: 14 }]}>opacity</Text>
-          )}
+          {/* Opacity pulse layer — breathes in/out above the static base */}
           <Animated.Image
             source={APPROVED_WAVES}
-            style={[
-              styles.image,
-              {
-                opacity: opacityLayerOpacity,
-                transform: [{ scale: 1.06 }],
-              },
-            ]}
+            style={[styles.image, { opacity: opacityLayerOpacity, transform: [{ scale: 1.04 }] }]}
             resizeMode="contain"
             accessibilityIgnoresInvertColors
           />
 
-          {debugAnimationFrame && (
-            <Text style={[styles.debugLayerLabel, { top: 26 }]}>scale</Text>
-          )}
+          {/* Scale pulse layer — grows and shrinks above the static base */}
           <Animated.Image
             source={APPROVED_WAVES}
-            style={[
-              styles.image,
-              {
-                opacity: scaleLayerOpacity,
-                transform: [{ scale: scaleLayerScale }],
-              },
-            ]}
+            style={[styles.image, { opacity: waveOpacity, transform: [{ scale: waveScale }] }]}
             resizeMode="contain"
             accessibilityIgnoresInvertColors
           />
@@ -395,23 +295,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     overflow: "visible",
-  },
-  debugLabel: {
-    position: "absolute",
-    top: -16,
-    left: 0,
-    color: "red",
-    fontSize: 9,
-    fontWeight: "700",
-    zIndex: 999,
-  },
-  debugLayerLabel: {
-    position: "absolute",
-    left: 2,
-    color: "red",
-    fontSize: 8,
-    fontWeight: "700",
-    zIndex: 999,
+    // Invisible 1-alpha background forces a real backing store on iOS,
+    // complementing collapsable={false} to prevent layer flattening.
+    backgroundColor: "rgba(0,0,0,0.001)",
   },
   container: {
     alignItems: "center",
