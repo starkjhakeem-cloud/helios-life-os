@@ -189,23 +189,23 @@ function HeliosEnergyCore({
     outputRange: [0.45, 0.70],
   });
 
-  // Inner glow: tight focus on the H — contracts slightly at rest, blooms at peak
+  // Atmospheric glow: large dark-purple nebula that fills the orbital area
+  const atmosphericOpacity = glow.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [0.70, 0.95],
+  });
+  const atmosphericScale = glow.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [0.94, 1.05],
+  });
+  // Inner core glow: bright focal point directly behind the H
   const innerGlowOpacity = glow.interpolate({
     inputRange:  [0, 1],
-    outputRange: [0.42, 0.82],
+    outputRange: [0.55, 0.88],
   });
   const innerGlowScale = glow.interpolate({
     inputRange:  [0, 1],
-    outputRange: [0.90, 1.0],
-  });
-  // Outer bloom: barely visible halo, expands outward as the inner pulse peaks
-  const outerBloomOpacity = glow.interpolate({
-    inputRange:  [0, 1],
-    outputRange: [0.04, 0.18],
-  });
-  const outerBloomScale = glow.interpolate({
-    inputRange:  [0, 1],
-    outputRange: [1.0, 1.14],
+    outputRange: [0.88, 1.0],
   });
 
   const touchScale = touch.interpolate({
@@ -252,29 +252,30 @@ function HeliosEnergyCore({
           ]}
           pointerEvents="none"
         >
-          {/* Outer bloom — expands outward as the inner pulse peaks, barely visible */}
+          {/* Atmospheric glow — large dark-purple nebula covering the full orbital area */}
           <Animated.View
             style={{
               position: "absolute",
-              width: artworkHeight,
-              height: artworkHeight,
-              opacity: outerBloomOpacity,
-              transform: [{ scale: outerBloomScale }],
+              width: size,
+              height: size,
+              opacity: atmosphericOpacity,
+              transform: [{ scale: atmosphericScale }],
             }}
           >
-            <Svg width={artworkHeight} height={artworkHeight}>
+            <Svg width={size} height={size}>
               <Defs>
-                <RadialGradient id="outerBloom" cx="50%" cy="50%" rx="50%" ry="50%">
-                  <Stop offset="0%"   stopColor="#8A5CF6" stopOpacity="0.40" />
-                  <Stop offset="55%"  stopColor="#8A5CF6" stopOpacity="0.12" />
-                  <Stop offset="100%" stopColor="#8A5CF6" stopOpacity="0" />
+                <RadialGradient id="atmosphericGlow" cx="50%" cy="50%" rx="50%" ry="50%">
+                  <Stop offset="0%"   stopColor="#5B21B6" stopOpacity="0.72" />
+                  <Stop offset="40%"  stopColor="#4C1D95" stopOpacity="0.45" />
+                  <Stop offset="75%"  stopColor="#3B0764" stopOpacity="0.18" />
+                  <Stop offset="100%" stopColor="#3B0764" stopOpacity="0" />
                 </RadialGradient>
               </Defs>
-              <Circle cx={artworkHeight / 2} cy={artworkHeight / 2} r={artworkHeight / 2} fill="url(#outerBloom)" />
+              <Circle cx={size / 2} cy={size / 2} r={size / 2} fill="url(#atmosphericGlow)" />
             </Svg>
           </Animated.View>
 
-          {/* Inner glow — tight focus behind the H, breathes opacity + scale */}
+          {/* Inner core glow — bright focal point directly behind the H */}
           <Animated.View
             style={{
               position: "absolute",
@@ -286,13 +287,13 @@ function HeliosEnergyCore({
           >
             <Svg width={artworkHeight} height={artworkHeight}>
               <Defs>
-                <RadialGradient id="innerGlow" cx="50%" cy="50%" rx="36%" ry="36%">
-                  <Stop offset="0%"   stopColor="#8A5CF6" stopOpacity="0.90" />
-                  <Stop offset="60%"  stopColor="#8A5CF6" stopOpacity="0.35" />
-                  <Stop offset="100%" stopColor="#8A5CF6" stopOpacity="0" />
+                <RadialGradient id="innerGlow" cx="50%" cy="50%" rx="38%" ry="38%">
+                  <Stop offset="0%"   stopColor="#8B5CF6" stopOpacity="1.0" />
+                  <Stop offset="50%"  stopColor="#6D28D9" stopOpacity="0.55" />
+                  <Stop offset="100%" stopColor="#4C1D95" stopOpacity="0" />
                 </RadialGradient>
               </Defs>
-              <Circle cx={artworkHeight / 2} cy={artworkHeight / 2} r={artworkHeight * 0.36} fill="url(#innerGlow)" />
+              <Circle cx={artworkHeight / 2} cy={artworkHeight / 2} r={artworkHeight * 0.38} fill="url(#innerGlow)" />
             </Svg>
           </Animated.View>
 
