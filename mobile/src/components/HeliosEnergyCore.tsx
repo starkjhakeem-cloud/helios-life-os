@@ -133,13 +133,13 @@ function HeliosEnergyCore({
       Animated.sequence([
         Animated.timing(glow, {
           toValue: 1,
-          duration: 1400,
+          duration: 3800,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
         Animated.timing(glow, {
           toValue: 0,
-          duration: 1400,
+          duration: 3800,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
@@ -189,23 +189,32 @@ function HeliosEnergyCore({
     outputRange: [0.45, 0.70],
   });
 
-  // Atmospheric glow: large dark-purple nebula that fills the orbital area
-  const atmosphericOpacity = glow.interpolate({
+  // Outer ambient — full orbital area, violet→blue, opacity exactly as specified
+  const outerOpacity = glow.interpolate({
     inputRange:  [0, 1],
-    outputRange: [0.70, 0.95],
+    outputRange: [0.18, 0.32],
   });
-  const atmosphericScale = glow.interpolate({
+  const outerScale = glow.interpolate({
     inputRange:  [0, 1],
-    outputRange: [0.94, 1.05],
+    outputRange: [1.00, 1.08],
   });
-  // Inner core glow: bright focal point directly behind the H
-  const innerGlowOpacity = glow.interpolate({
+  // Mid violet — tighter, adds depth and saturation behind the waves
+  const midOpacity = glow.interpolate({
     inputRange:  [0, 1],
-    outputRange: [0.55, 0.88],
+    outputRange: [0.28, 0.50],
   });
-  const innerGlowScale = glow.interpolate({
+  const midScale = glow.interpolate({
     inputRange:  [0, 1],
-    outputRange: [0.88, 1.0],
+    outputRange: [1.00, 1.04],
+  });
+  // Inner core — focused bright point directly behind the H, contracts then blooms
+  const coreOpacity = glow.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [0.42, 0.70],
+  });
+  const coreScale = glow.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [0.92, 1.00],
   });
 
   const touchScale = touch.interpolate({
@@ -252,48 +261,70 @@ function HeliosEnergyCore({
           ]}
           pointerEvents="none"
         >
-          {/* Atmospheric glow — large dark-purple nebula covering the full orbital area */}
+          {/* Layer 1 — outer ambient: violet→electric-blue, full orbital coverage */}
           <Animated.View
             style={{
               position: "absolute",
               width: size,
               height: size,
-              opacity: atmosphericOpacity,
-              transform: [{ scale: atmosphericScale }],
+              opacity: outerOpacity,
+              transform: [{ scale: outerScale }],
             }}
           >
             <Svg width={size} height={size}>
               <Defs>
-                <RadialGradient id="atmosphericGlow" cx="50%" cy="50%" rx="50%" ry="50%">
-                  <Stop offset="0%"   stopColor="#5B21B6" stopOpacity="0.72" />
-                  <Stop offset="40%"  stopColor="#4C1D95" stopOpacity="0.45" />
-                  <Stop offset="75%"  stopColor="#3B0764" stopOpacity="0.18" />
-                  <Stop offset="100%" stopColor="#3B0764" stopOpacity="0" />
+                <RadialGradient id="glowOuter" cx="50%" cy="50%" rx="50%" ry="50%">
+                  <Stop offset="0%"   stopColor="#6E4CFF" stopOpacity="0.90" />
+                  <Stop offset="30%"  stopColor="#5A3FDB" stopOpacity="0.65" />
+                  <Stop offset="62%"  stopColor="#38BDF8" stopOpacity="0.30" />
+                  <Stop offset="100%" stopColor="#38BDF8" stopOpacity="0" />
                 </RadialGradient>
               </Defs>
-              <Circle cx={size / 2} cy={size / 2} r={size / 2} fill="url(#atmosphericGlow)" />
+              <Circle cx={size / 2} cy={size / 2} r={size / 2} fill="url(#glowOuter)" />
             </Svg>
           </Animated.View>
 
-          {/* Inner core glow — bright focal point directly behind the H */}
+          {/* Layer 2 — mid violet: saturates the core, adds depth behind the waves */}
           <Animated.View
             style={{
               position: "absolute",
-              width: artworkHeight,
-              height: artworkHeight,
-              opacity: innerGlowOpacity,
-              transform: [{ scale: innerGlowScale }],
+              width: size,
+              height: size,
+              opacity: midOpacity,
+              transform: [{ scale: midScale }],
             }}
           >
-            <Svg width={artworkHeight} height={artworkHeight}>
+            <Svg width={size} height={size}>
               <Defs>
-                <RadialGradient id="innerGlow" cx="50%" cy="50%" rx="38%" ry="38%">
-                  <Stop offset="0%"   stopColor="#8B5CF6" stopOpacity="1.0" />
-                  <Stop offset="50%"  stopColor="#6D28D9" stopOpacity="0.55" />
+                <RadialGradient id="glowMid" cx="50%" cy="50%" rx="44%" ry="44%">
+                  <Stop offset="0%"   stopColor="#7C3AED" stopOpacity="1.0" />
+                  <Stop offset="48%"  stopColor="#6D28D9" stopOpacity="0.55" />
                   <Stop offset="100%" stopColor="#4C1D95" stopOpacity="0" />
                 </RadialGradient>
               </Defs>
-              <Circle cx={artworkHeight / 2} cy={artworkHeight / 2} r={artworkHeight * 0.38} fill="url(#innerGlow)" />
+              <Circle cx={size / 2} cy={size / 2} r={size * 0.44} fill="url(#glowMid)" />
+            </Svg>
+          </Animated.View>
+
+          {/* Layer 3 — inner core: tightest, brightest, contracts then blooms behind H */}
+          <Animated.View
+            style={{
+              position: "absolute",
+              width: size,
+              height: size,
+              opacity: coreOpacity,
+              transform: [{ scale: coreScale }],
+            }}
+          >
+            <Svg width={size} height={size}>
+              <Defs>
+                <RadialGradient id="glowCore" cx="50%" cy="50%" rx="28%" ry="28%">
+                  <Stop offset="0%"   stopColor="#A78BFA" stopOpacity="1.0" />
+                  <Stop offset="50%"  stopColor="#8B5CF6" stopOpacity="0.80" />
+                  <Stop offset="100%" stopColor="#6E4CFF" stopOpacity="0" />
+                </RadialGradient>
+              </Defs>
+              <Circle cx={size / 2} cy={size / 2} r={size * 0.28} fill="url(#glowCore)" />
             </Svg>
           </Animated.View>
 
