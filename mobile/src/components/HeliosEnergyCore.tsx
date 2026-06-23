@@ -2,8 +2,10 @@
  * HeliosEnergyCore — approved PNG based HELIOS identity mark.
  *
  * The visible Energy Core uses the approved transparent PNG as the source of
- * truth. Animated wave layers are rendered BELOW the static image so they
- * extend visibly outside its bounds as a moving glow ring. The H stays still.
+ * truth. Animated wave layers float above the static image at low opacity.
+ * An invisible layout wrapper (10px larger than the artwork on each side)
+ * gives scaled wave layers room to glow around the Energy Core without being
+ * clipped by heroOrbArea or heroCard's overflow:hidden.
  */
 
 import React, { memo, useCallback, useEffect, useMemo, useRef } from "react";
@@ -14,6 +16,7 @@ import {
   Image,
   Platform,
   StyleSheet,
+  Text,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -36,6 +39,12 @@ type Props = {
   interactive?: boolean;
   onPress?: () => void;
   onLongPress?: () => void;
+  /**
+   * Dev-only: when true shows the invisible layout frame as a red border with
+   * layer labels so you can verify the animation is rendering. Set to false
+   * (default) in production — the frame structure is preserved but invisible.
+   */
+  debugAnimationFrame?: boolean;
 };
 
 type AnimationConfig = {
@@ -47,6 +56,10 @@ type AnimationConfig = {
 const APPROVED_CORE = require("../../assets/design/branding/helios-energy-core-transparent.png");
 const APPROVED_WAVES = require("../../assets/design/branding/helios-energy-core-waves.png");
 const ARTWORK_ASPECT_RATIO = 434 / 400;
+
+// Extra space (per side) around the artwork inside the layout wrapper.
+// This gives the scaled wave layers room to glow without being clipped.
+const GLOW_INSET = 10;
 
 function resolveAnimationConfig(state: CoreState): AnimationConfig {
   switch (state) {
@@ -75,9 +88,16 @@ function HeliosEnergyCore({
   interactive = true,
   onPress,
   onLongPress,
+  debugAnimationFrame = false,
 }: Props) {
   const config = useMemo(() => resolveAnimationConfig(state), [state]);
   const artworkHeight = size / ARTWORK_ASPECT_RATIO;
+
+  // Wrapper is GLOW_INSET px larger on each side than the artwork so scaled
+  // wave layers have room to be visible without leaving heroOrbArea/heroCard.
+  const wrapperWidth = size + GLOW_INSET * 2;
+  const wrapperHeight = artworkHeight + GLOW_INSET * 2;
+
   const scalePulse = useRef(new Animated.Value(0)).current;
   const opacityPulse = useRef(new Animated.Value(0)).current;
   const drift = useRef(new Animated.Value(0)).current;
@@ -200,39 +220,37 @@ function HeliosEnergyCore({
     }
   }, [onLongPress]);
 
-  // Wave layers scale to 1.14x so the outer orbital ring tips (~10px) extend
-  // visibly outside the static image bounds as animated glow.
   const scaleLayerOpacity = scalePulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.28, 0.52],
-  });
-  const scaleLayerScale = scalePulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.14],
-  });
-  const opacityLayerOpacity = opacityPulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.22, 0.48],
-  });
-  const driftOpacity = drift.interpolate({
     inputRange: [0, 1],
     outputRange: [0.22, 0.42],
   });
+  const scaleLayerScale = scalePulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.08],
+  });
+  const opacityLayerOpacity = opacityPulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.20, 0.40],
+  });
+  const driftOpacity = drift.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.18, 0.36],
+  });
   const driftRotate = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: ["-4deg", "4deg"],
+    outputRange: ["-3deg", "3deg"],
   });
   const driftScale = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: [1.02, 1.14],
+    outputRange: [1.015, 1.08],
   });
   const driftTranslateX = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: [-3.5, 3.5],
+    outputRange: [-2.5, 2.5],
   });
   const driftTranslateY = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: [2, -2],
+    outputRange: [1.6, -1.6],
   });
   const touchScale = touch.interpolate({
     inputRange: [0, 1],
@@ -256,9 +274,33 @@ function HeliosEnergyCore({
       };
 
   return (
-    // Permanent invisible wrapper — explicit overflow:visible so scaled wave
-    // layers are never clipped by the layout system or heroCard's overflow:hidden.
-    <View style={[styles.outerWrapper, { width: size, height: artworkHeight }]}>
+    /**
+     * Invisible layout wrapper — GLOW_INSET px larger than the artwork on each
+     * side so the scaled wave layers have room to glow around the Energy Core.
+     * borderWidth:hairline + borderColor:transparent preserves the same native
+     * UIView border layer structure that existed in the debug state (where the
+     * red border made this wrapper visible), ensuring the same compositing path
+     * that allowed useNativeDriver animations to render through heroCard's
+     * overflow:hidden. When debugAnimationFrame=true the border and labels
+     * become visible so you can inspect the glow bounds.
+     */
+    <View
+      style={[
+        styles.outerWrapper,
+        {
+          width: wrapperWidth,
+          height: wrapperHeight,
+          borderWidth: debugAnimationFrame ? 2 : StyleSheet.hairlineWidth,
+          borderColor: debugAnimationFrame ? "red" : "transparent",
+        },
+      ]}
+    >
+      {debugAnimationFrame && (
+        <Text style={styles.debugLabel} numberOfLines={1}>
+          glow frame {wrapperWidth}×{Math.round(wrapperHeight)}
+        </Text>
+      )}
+
       <Container
         style={[styles.container, { width: size, height: artworkHeight }]}
         {...containerProps}
@@ -274,9 +316,22 @@ function HeliosEnergyCore({
           ]}
           pointerEvents="none"
         >
-          {/* Wave layers first = bottom of stack.
-              At 1.14x scale these extend ~10px outside the static image so
-              the outer orbital ring tips are visible as animated glow. */}
+          {/* ── 1. Static approved image — bottom of stack ──────────────── */}
+          {/* The H and orbital design stay perfectly still at full opacity. */}
+          <Image
+            source={APPROVED_CORE}
+            style={styles.image}
+            resizeMode="contain"
+            accessibilityIgnoresInvertColors
+          />
+
+          {/* ── 2-4. Animated wave layers — above the static image ───────── */}
+          {/* Low opacity so the static design shows through. The 10px GLOW_INSET
+              space around the artwork inside the wrapper lets these layers be
+              visible as a moving glow ring when they scale/drift outward.   */}
+          {debugAnimationFrame && (
+            <Text style={[styles.debugLayerLabel, { top: 2 }]}>drift</Text>
+          )}
           <Animated.Image
             source={APPROVED_WAVES}
             style={[
@@ -294,18 +349,26 @@ function HeliosEnergyCore({
             resizeMode="contain"
             accessibilityIgnoresInvertColors
           />
+
+          {debugAnimationFrame && (
+            <Text style={[styles.debugLayerLabel, { top: 14 }]}>opacity</Text>
+          )}
           <Animated.Image
             source={APPROVED_WAVES}
             style={[
               styles.image,
               {
                 opacity: opacityLayerOpacity,
-                transform: [{ scale: 1.10 }],
+                transform: [{ scale: 1.06 }],
               },
             ]}
             resizeMode="contain"
             accessibilityIgnoresInvertColors
           />
+
+          {debugAnimationFrame && (
+            <Text style={[styles.debugLayerLabel, { top: 26 }]}>scale</Text>
+          )}
           <Animated.Image
             source={APPROVED_WAVES}
             style={[
@@ -315,14 +378,6 @@ function HeliosEnergyCore({
                 transform: [{ scale: scaleLayerScale }],
               },
             ]}
-            resizeMode="contain"
-            accessibilityIgnoresInvertColors
-          />
-          {/* Static core image last = top of stack. Covers wave layers at the
-              center so the H and grey circle remain perfectly still. */}
-          <Image
-            source={APPROVED_CORE}
-            style={styles.image}
             resizeMode="contain"
             accessibilityIgnoresInvertColors
           />
@@ -340,6 +395,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     overflow: "visible",
+  },
+  debugLabel: {
+    position: "absolute",
+    top: -16,
+    left: 0,
+    color: "red",
+    fontSize: 9,
+    fontWeight: "700",
+    zIndex: 999,
+  },
+  debugLayerLabel: {
+    position: "absolute",
+    left: 2,
+    color: "red",
+    fontSize: 8,
+    fontWeight: "700",
+    zIndex: 999,
   },
   container: {
     alignItems: "center",
