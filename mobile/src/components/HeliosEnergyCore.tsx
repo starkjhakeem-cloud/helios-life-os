@@ -191,7 +191,7 @@ function HeliosEnergyCore({
 
   const glowOpacity = glow.interpolate({
     inputRange:  [0, 1],
-    outputRange: [0.18, 0.32],
+    outputRange: [0.30, 0.55],
   });
   const glowScale = glow.interpolate({
     inputRange:  [0, 1],
@@ -255,7 +255,7 @@ function HeliosEnergyCore({
             <Svg width={artworkHeight} height={artworkHeight}>
               <Defs>
                 <RadialGradient id="coreGlow" cx="50%" cy="50%" rx="50%" ry="50%">
-                  <Stop offset="0%" stopColor="#8A5CF6" stopOpacity="0.35" />
+                  <Stop offset="0%" stopColor="#8A5CF6" stopOpacity="0.55" />
                   <Stop offset="100%" stopColor="#8A5CF6" stopOpacity="0" />
                 </RadialGradient>
               </Defs>
