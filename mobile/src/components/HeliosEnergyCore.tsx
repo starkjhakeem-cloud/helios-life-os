@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Circle, Defs, RadialGradient, Stop, Svg } from "react-native-svg";
 import * as Haptics from "expo-haptics";
 
 export type CoreState =
@@ -82,6 +83,10 @@ function HeliosEnergyCore({
   const spinRef  = useRef<Animated.CompositeAnimation | null>(null);
   const pulseRef = useRef<Animated.CompositeAnimation | null>(null);
 
+  // Breathing glow — independent of state, fixed 3750ms cadence
+  const glow    = useRef(new Animated.Value(0)).current;
+  const glowRef = useRef<Animated.CompositeAnimation | null>(null);
+
   useEffect(() => {
     spinRef.current?.stop();
     pulseRef.current?.stop();
@@ -123,6 +128,27 @@ function HeliosEnergyCore({
     };
   }, [spinDuration, pulseDuration, spin, pulse]);
 
+  useEffect(() => {
+    glowRef.current = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glow, {
+          toValue: 1,
+          duration: 3750,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(glow, {
+          toValue: 0,
+          duration: 3750,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    glowRef.current.start();
+    return () => glowRef.current?.stop();
+  }, [glow]);
+
   const handlePress = useCallback(() => {
     if (Platform.OS === "ios") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     onPress?.();
@@ -161,6 +187,15 @@ function HeliosEnergyCore({
   const pulseOpacity = pulse.interpolate({
     inputRange:  [0, 1],
     outputRange: [0.45, 0.70],
+  });
+
+  const glowOpacity = glow.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [0.18, 0.32],
+  });
+  const glowScale = glow.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [1.0, 1.08],
   });
 
   const touchScale = touch.interpolate({
@@ -207,6 +242,32 @@ function HeliosEnergyCore({
           ]}
           pointerEvents="none"
         >
+          {/* Radial glow — bottommost layer, breathes on its own 3750ms cadence */}
+          <Animated.View
+            style={{
+              position: "absolute",
+              width: artworkHeight,
+              height: artworkHeight,
+              opacity: glowOpacity,
+              transform: [{ scale: glowScale }],
+            }}
+          >
+            <Svg width={artworkHeight} height={artworkHeight}>
+              <Defs>
+                <RadialGradient id="coreGlow" cx="50%" cy="50%" rx="50%" ry="50%">
+                  <Stop offset="0%" stopColor="#8A5CF6" stopOpacity="0.35" />
+                  <Stop offset="100%" stopColor="#8A5CF6" stopOpacity="0" />
+                </RadialGradient>
+              </Defs>
+              <Circle
+                cx={artworkHeight / 2}
+                cy={artworkHeight / 2}
+                r={artworkHeight / 2}
+                fill="url(#coreGlow)"
+              />
+            </Svg>
+          </Animated.View>
+
           {/* Static base — H stays perfectly still */}
           <Image
             source={APPROVED_CORE}
