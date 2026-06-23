@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -17,12 +17,48 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
+import { detectLocation, getDeviceTimezone } from "../../services/locationService";
 
 import { systemService, type VersionResponse } from "../../services/systemService";
 import { requestPermissions } from "../../services/notificationService";
-import { useAuthStore, useRemindersStore, useSettingsStore, useBackgroundJobsStore, type ReminderOut, type ThemePreference, type BackgroundJob, type JobType } from "../../store";
+import {
+  useAuthStore,
+  useRemindersStore,
+  useSettingsStore,
+  useBackgroundJobsStore,
+  useProfileStore,
+  SessionExpiredError,
+  type ReminderOut,
+  type ThemePreference,
+  type BackgroundJob,
+  type JobType,
+  type AssistantTone,
+  type LifeArea,
+} from "../../store";
 import { radius, spacing, typography, type ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const USER_ID_RE = /^[a-z0-9_.]{3,24}$/;
+
+const LIFE_AREA_OPTIONS: { value: LifeArea; label: string }[] = [
+  { value: "school", label: "School" },
+  { value: "work", label: "Work" },
+  { value: "family", label: "Family" },
+  { value: "health", label: "Health" },
+  { value: "finances", label: "Finances" },
+  { value: "creative_projects", label: "Creative Projects" },
+  { value: "fitness", label: "Fitness" },
+  { value: "business", label: "Business" },
+];
+
+const TONE_OPTIONS: { value: AssistantTone; label: string }[] = [
+  { value: "balanced", label: "Balanced" },
+  { value: "formal", label: "Formal" },
+  { value: "casual", label: "Casual" },
+  { value: "brief", label: "Brief" },
+];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -40,10 +76,6 @@ function formatMemberSince(isoString: string | undefined): string {
   const date = new Date(isoString);
   if (isNaN(date.getTime())) return "—";
   return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-}
-
-function truncateId(id: string): string {
-  return id.length > 16 ? `${id.slice(0, 8)}…${id.slice(-8)}` : id;
 }
 
 function formatLastRun(iso: string | null): string {
@@ -73,8 +105,11 @@ function formatRemindAt(iso: string): string {
   if (isToday) {
     return "Today " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   }
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) +
-    " " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return (
+    d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) +
+    " " +
+    d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+  );
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -83,11 +118,12 @@ type InfoRowProps = { label: string; value: string };
 function InfoRow({ label, value }: InfoRowProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-
   return (
     <View style={styles.infoRow}>
       <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>{label}</Text>
-      <Text style={[styles.infoValue, { color: colors.textPrimary }]} numberOfLines={1}>{value}</Text>
+      <Text style={[styles.infoValue, { color: colors.textPrimary }]} numberOfLines={1}>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -97,21 +133,31 @@ type ReminderRowProps = {
   onToggle: () => void;
   onDelete: () => void;
 };
-function ReminderRow({
-reminder, onToggle, onDelete }: ReminderRowProps) {
+function ReminderRow({ reminder, onToggle, onDelete }: ReminderRowProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-
   return (
     <View style={styles.reminderRow}>
-      <View style={[styles.reminderDot, { backgroundColor: reminder.is_enabled ? colors.accentCyan : colors.border }]} />
+      <View
+        style={[
+          styles.reminderDot,
+          { backgroundColor: reminder.is_enabled ? colors.accentCyan : colors.border },
+        ]}
+      />
       <View style={styles.reminderBody}>
-        <Text style={styles.reminderTitle} numberOfLines={1}>{reminder.title}</Text>
+        <Text style={styles.reminderTitle} numberOfLines={1}>
+          {reminder.title}
+        </Text>
         <Text style={styles.reminderTime}>{formatRemindAt(reminder.remind_at)}</Text>
       </View>
       <View style={styles.reminderActions}>
         <TouchableOpacity onPress={onToggle} style={styles.reminderToggle} activeOpacity={0.7}>
-          <Text style={[styles.reminderToggleText, { color: reminder.is_enabled ? colors.accentCyan : colors.textMuted }]}>
+          <Text
+            style={[
+              styles.reminderToggleText,
+              { color: reminder.is_enabled ? colors.accentCyan : colors.textMuted },
+            ]}
+          >
             {reminder.is_enabled ? "ON" : "OFF"}
           </Text>
         </TouchableOpacity>
@@ -132,8 +178,7 @@ type NewReminderModalProps = {
   isMutating: boolean;
 };
 
-function NewReminderModal({
-visible, onClose, onSubmit, isMutating }: NewReminderModalProps) {
+function NewReminderModal({ visible, onClose, onSubmit, isMutating }: NewReminderModalProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [title, setTitle] = useState("");
@@ -177,12 +222,10 @@ visible, onClose, onSubmit, isMutating }: NewReminderModalProps) {
       <TouchableWithoutFeedback onPress={resetAndClose}>
         <View style={styles.overlay} />
       </TouchableWithoutFeedback>
-
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalWrapper}>
         <View style={styles.sheet}>
           <View style={styles.sheetHandle} />
           <Text style={styles.sheetTitle}>NEW REMINDER</Text>
-
           <Text style={styles.fieldLabel}>REMINDER TITLE</Text>
           <TextInput
             style={styles.input}
@@ -192,7 +235,6 @@ visible, onClose, onSubmit, isMutating }: NewReminderModalProps) {
             placeholderTextColor={colors.textMuted}
             maxLength={200}
           />
-
           <Text style={styles.fieldLabel}>NOTE (OPTIONAL)</Text>
           <TextInput
             style={[styles.input, styles.inputMultiline]}
@@ -203,7 +245,6 @@ visible, onClose, onSubmit, isMutating }: NewReminderModalProps) {
             maxLength={500}
             multiline
           />
-
           <Text style={styles.fieldLabel}>REMIND AT</Text>
           <TextInput
             style={styles.input}
@@ -215,9 +256,7 @@ visible, onClose, onSubmit, isMutating }: NewReminderModalProps) {
             autoCorrect={false}
           />
           <Text style={styles.fieldHint}>Format: YYYY-MM-DD HH:MM (24h) or full ISO 8601</Text>
-
           {formError ? <Text style={styles.formError}>{formError}</Text> : null}
-
           <View style={styles.sheetActions}>
             <TouchableOpacity style={styles.cancelButton} onPress={resetAndClose} activeOpacity={0.7}>
               <Text style={styles.cancelButtonText}>CANCEL</Text>
@@ -241,13 +280,704 @@ visible, onClose, onSubmit, isMutating }: NewReminderModalProps) {
   );
 }
 
-// ── Background job definitions ────────────────────────────────────────────────
+// ── User ID Modal ─────────────────────────────────────────────────────────────
+
+type UserIdCheckResult = {
+  available: boolean;
+  reason: string;
+  message: string;
+};
+
+/** Map a check `reason` code to a human-readable sentence. */
+function formatCheckMessage(result: UserIdCheckResult): string {
+  if (result.available) return result.message;
+  switch (result.reason) {
+    case "too_short":
+      return "Username too short — needs at least 3 characters.";
+    case "too_long":
+      return "Username too long — 24 characters maximum.";
+    case "invalid_format":
+      return "Invalid format. Use a–z, 0–9, underscores, or periods.";
+    case "reserved":
+      return "This username is reserved and cannot be used.";
+    case "taken":
+      return "Username already taken. Please choose a different one.";
+    default:
+      return result.message || "Username not available.";
+  }
+}
+
+/** Map an API error HTTP status to a user-facing sentence. */
+function formatApiError(err: unknown): string {
+  if (!err || typeof err !== "object") return "Something went wrong. Try again.";
+  const e = err as { status?: number; message?: string };
+  if (e.status === 503) return "Unable to reach HELIOS services. Check your connection.";
+  if (e.status === 409) return e.message ?? "Username already taken.";
+  if (e.status === 422) return "Invalid username format.";
+  if (e.status === 401) return "Session expired. Please sign in again.";
+  if (e.message?.toLowerCase().includes("network"))
+    return "Network unavailable. Check your connection.";
+  return e.message ?? "Something went wrong. Try again.";
+}
+
+type UserIdModalProps = {
+  visible: boolean;
+  onClose: () => void;
+  currentId: string | null;
+  canChange: boolean;
+  userIdChanged: boolean;
+  accessToken: string;
+};
+
+function UserIdModal({
+  visible,
+  onClose,
+  currentId,
+  canChange,
+  userIdChanged,
+  accessToken,
+}: UserIdModalProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const { updateUserId, checkUserId, isSaving } = useProfileStore();
+
+  const [draft, setDraft] = useState(currentId ?? "");
+  const [checkResult, setCheckResult] = useState<UserIdCheckResult | null>(null);
+  const [isChecking, setIsChecking] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  // Reset state each time the modal opens.
+  useEffect(() => {
+    if (visible) {
+      setDraft(currentId ?? "");
+      setCheckResult(null);
+      setFormError(null);
+      setSuccess(false);
+    }
+  }, [visible]);
+
+  function resetAndClose() {
+    Keyboard.dismiss();
+    onClose();
+  }
+
+  async function handleCheck() {
+    const val = draft.trim().toLowerCase();
+
+    // Client-side fast-path validation — avoids a round-trip for obvious errors.
+    if (val.length < 3) {
+      setFormError("Username too short — needs at least 3 characters.");
+      setCheckResult(null);
+      return;
+    }
+    if (val.length > 24) {
+      setFormError("Username too long — 24 characters maximum.");
+      setCheckResult(null);
+      return;
+    }
+    if (!USER_ID_RE.test(val)) {
+      setFormError("Use only lowercase letters (a–z), numbers, underscores, or periods.");
+      setCheckResult(null);
+      return;
+    }
+
+    setFormError(null);
+    setCheckResult(null);
+    setIsChecking(true);
+    try {
+      const result = await checkUserId(accessToken, val);
+      setCheckResult(result);
+    } catch (err) {
+      // Network/server error — the check endpoint itself failed.
+      setFormError(formatApiError(err));
+    } finally {
+      setIsChecking(false);
+    }
+  }
+
+  async function handleSave() {
+    const val = draft.trim().toLowerCase();
+    if (val.length < 3) {
+      setFormError("Username too short — needs at least 3 characters.");
+      return;
+    }
+    if (!USER_ID_RE.test(val)) {
+      setFormError("Use only lowercase letters (a–z), numbers, underscores, or periods.");
+      return;
+    }
+    // Warn if the user skipped the check step, but don't block — the server will validate.
+    if (checkResult && !checkResult.available) {
+      setFormError(formatCheckMessage(checkResult));
+      return;
+    }
+    setFormError(null);
+    try {
+      await updateUserId(accessToken, val);
+      setSuccess(true);
+      setTimeout(resetAndClose, 900);
+    } catch (err) {
+      setFormError(formatApiError(err));
+    }
+  }
+
+  const isInitialSet = currentId === null;
+  const statusLine = canChange
+    ? isInitialSet
+      ? "Choose your @handle. You may change it once after setup."
+      : "You have 1 change remaining. Use it carefully."
+    : "Your username has been changed once and is now locked.";
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={resetAndClose}>
+      <TouchableWithoutFeedback onPress={resetAndClose}>
+        <View style={styles.overlay} />
+      </TouchableWithoutFeedback>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalWrapper}>
+        <View style={styles.sheet}>
+          <View style={styles.sheetHandle} />
+          <Text style={styles.sheetTitle}>
+            {isInitialSet ? "SET USERNAME" : canChange ? "CHANGE USERNAME" : "USERNAME"}
+          </Text>
+
+          <Text style={[styles.fieldHint, { marginTop: 0, marginBottom: spacing.md }]}>
+            {statusLine}
+          </Text>
+
+          {!canChange ? (
+            // Locked — read-only view.
+            <>
+              <View style={[styles.input, { justifyContent: "center", marginBottom: spacing.sm }]}>
+                <Text style={{ color: colors.textMuted, fontSize: 14 }}>@{currentId}</Text>
+              </View>
+              <Text style={[styles.fieldHint, { color: colors.danger }]}>
+                Your username has already been changed once and cannot be changed again.
+              </Text>
+            </>
+          ) : (
+            // Editable.
+            <>
+              <Text style={styles.fieldLabel}>USERNAME</Text>
+              <View style={styles.userIdRow}>
+                <Text style={styles.userIdAt}>@</Text>
+                <TextInput
+                  style={[styles.input, styles.userIdInput]}
+                  value={draft}
+                  onChangeText={(t) => {
+                    // Force lowercase, strip spaces.
+                    setDraft(t.toLowerCase().replace(/\s/g, ""));
+                    setCheckResult(null);
+                    setFormError(null);
+                  }}
+                  placeholder="yourhandle"
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  maxLength={24}
+                />
+                <TouchableOpacity
+                  style={[styles.checkButton, (isChecking || !draft.trim()) && { opacity: 0.5 }]}
+                  onPress={handleCheck}
+                  disabled={isChecking || !draft.trim()}
+                  activeOpacity={0.8}
+                >
+                  {isChecking ? (
+                    <ActivityIndicator size="small" color={colors.background} />
+                  ) : (
+                    <Text style={styles.checkButtonText}>CHECK</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.fieldHint}>3–24 chars · a–z · 0–9 · _ ·  .</Text>
+
+              {/* Check result */}
+              {checkResult && !formError ? (
+                <Text
+                  style={[
+                    styles.fieldHint,
+                    {
+                      color: checkResult.available ? colors.success : colors.danger,
+                      marginTop: spacing.xs,
+                      fontWeight: "600",
+                    },
+                  ]}
+                >
+                  {checkResult.available ? "✓ " : "✗ "}
+                  {formatCheckMessage(checkResult)}
+                </Text>
+              ) : null}
+
+              {/* Validation / API error */}
+              {formError ? (
+                <Text style={[styles.formError, { marginTop: spacing.xs }]}>{formError}</Text>
+              ) : null}
+
+              {/* Success banner */}
+              {success ? (
+                <Text style={[styles.fieldHint, { color: colors.success, fontWeight: "600" }]}>
+                  ✓ Username saved successfully.
+                </Text>
+              ) : null}
+            </>
+          )}
+
+          <View style={styles.sheetActions}>
+            <TouchableOpacity style={styles.cancelButton} onPress={resetAndClose} activeOpacity={0.7}>
+              <Text style={styles.cancelButtonText}>CANCEL</Text>
+            </TouchableOpacity>
+            {canChange && (
+              <TouchableOpacity
+                style={[
+                  styles.createButton,
+                  (isSaving || !draft.trim() || success) && { opacity: 0.5 },
+                ]}
+                onPress={handleSave}
+                disabled={isSaving || !draft.trim() || success}
+                activeOpacity={0.8}
+              >
+                {isSaving ? (
+                  <ActivityIndicator size="small" color={colors.background} />
+                ) : (
+                  <Text style={styles.createButtonText}>SAVE</Text>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+// ── Personal Information Modal ────────────────────────────────────────────────
+
+type PersonalInfoModalProps = {
+  visible: boolean;
+  onClose: () => void;
+  accessToken: string;
+};
+
+function PersonalInfoModal({ visible, onClose, accessToken }: PersonalInfoModalProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const profile = useProfileStore();
+  const user = useAuthStore((s) => s.user);
+
+  const [draft, setDraft] = useState({
+    first_name: profile.first_name ?? "",
+    last_name: profile.last_name ?? "",
+    display_name: profile.display_name ?? "",
+    phone_number: profile.phone_number ?? "",
+    date_of_birth: profile.date_of_birth ?? "",
+    address_line_1: profile.address_line_1 ?? "",
+    address_line_2: profile.address_line_2 ?? "",
+    city: profile.city ?? "",
+    state: profile.state ?? "",
+    postal_code: profile.postal_code ?? "",
+    country: profile.country ?? "",
+    timezone: profile.timezone ?? "",
+  });
+  const [formError, setFormError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setDraft({
+        first_name: profile.first_name ?? "",
+        last_name: profile.last_name ?? "",
+        display_name: profile.display_name ?? "",
+        phone_number: profile.phone_number ?? "",
+        date_of_birth: profile.date_of_birth ?? "",
+        address_line_1: profile.address_line_1 ?? "",
+        address_line_2: profile.address_line_2 ?? "",
+        city: profile.city ?? "",
+        state: profile.state ?? "",
+        postal_code: profile.postal_code ?? "",
+        country: profile.country ?? "",
+        timezone: profile.timezone ?? "",
+      });
+      setFormError(null);
+      setSuccess(false);
+    }
+  }, [visible]);
+
+  function resetAndClose() {
+    Keyboard.dismiss();
+    onClose();
+  }
+
+  async function handleSave() {
+    setFormError(null);
+    try {
+      await profile.updateProfile(accessToken, {
+        first_name: draft.first_name.trim() || null,
+        last_name: draft.last_name.trim() || null,
+        display_name: draft.display_name.trim() || null,
+        phone_number: draft.phone_number.trim() || null,
+        date_of_birth: draft.date_of_birth.trim() || null,
+        address_line_1: draft.address_line_1.trim() || null,
+        address_line_2: draft.address_line_2.trim() || null,
+        city: draft.city.trim() || null,
+        state: draft.state.trim() || null,
+        postal_code: draft.postal_code.trim() || null,
+        country: draft.country.trim() || null,
+        timezone: draft.timezone.trim() || null,
+      });
+      setSuccess(true);
+      setTimeout(resetAndClose, 800);
+    } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        // The global session-expired dialog in _layout.tsx will handle this.
+        resetAndClose();
+        return;
+      }
+      const msg = err instanceof Error ? err.message : "Failed to save. Try again.";
+      setFormError(msg);
+    }
+  }
+
+  const field = (label: string, key: keyof typeof draft, opts?: { placeholder?: string; optional?: boolean }) => (
+    <>
+      <Text style={styles.fieldLabel}>
+        {label}
+        {opts?.optional ? " (OPTIONAL)" : ""}
+      </Text>
+      <TextInput
+        style={[styles.input, { marginBottom: spacing.sm }]}
+        value={draft[key]}
+        onChangeText={(v) => setDraft((d) => ({ ...d, [key]: v }))}
+        placeholder={opts?.placeholder ?? ""}
+        placeholderTextColor={colors.textMuted}
+        autoCorrect={false}
+      />
+    </>
+  );
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={resetAndClose}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={[styles.overlay, { backgroundColor: "transparent" }]} />
+      </TouchableWithoutFeedback>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.modalWrapper}
+      >
+        <View style={[styles.sheet, { maxHeight: "90%" }]}>
+          <View style={styles.sheetHandle} />
+          <Text style={styles.sheetTitle}>PERSONAL INFORMATION</Text>
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            {field("FIRST NAME", "first_name")}
+            {field("LAST NAME", "last_name")}
+            {field("DISPLAY NAME / ORGANIZATION", "display_name", { optional: true, placeholder: "How you'd like to appear" })}
+            <Text style={styles.fieldLabel}>EMAIL ADDRESS</Text>
+            <View style={[styles.input, { justifyContent: "center", marginBottom: spacing.md }]}>
+              <Text style={{ color: colors.textMuted, fontSize: 14 }}>{user?.email ?? "—"}</Text>
+            </View>
+            {field("PHONE NUMBER", "phone_number", { optional: true, placeholder: "+1 555 000 0000" })}
+            {field("DATE OF BIRTH", "date_of_birth", { optional: true, placeholder: "YYYY-MM-DD" })}
+            {field("ADDRESS LINE 1", "address_line_1")}
+            {field("ADDRESS LINE 2", "address_line_2", { optional: true })}
+            {field("CITY", "city")}
+            {field("STATE / PROVINCE", "state")}
+            {field("ZIP / POSTAL CODE", "postal_code")}
+            {field("COUNTRY", "country")}
+            <Text style={styles.fieldLabel}>TIME ZONE</Text>
+            <View style={[styles.input, { justifyContent: "space-between", flexDirection: "row", alignItems: "center", marginBottom: spacing.sm }]}>
+              <Text style={{ color: draft.timezone ? colors.textPrimary : colors.textMuted, fontSize: 14, flex: 1 }}>
+                {draft.timezone || getDeviceTimezone()}
+              </Text>
+              <SymbolView name="location.fill" size={12} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+            </View>
+            <Text style={[styles.fieldHint, { marginBottom: spacing.md }]}>
+              Detected automatically from your device. Tap "Detect Location" on the Profile screen to refresh.
+            </Text>
+            {formError ? <Text style={[styles.formError, { marginBottom: spacing.sm }]}>{formError}</Text> : null}
+            {success ? (
+              <Text style={[styles.fieldHint, { color: colors.success, marginBottom: spacing.sm }]}>
+                ✓ Profile saved successfully.
+              </Text>
+            ) : null}
+            <View style={[styles.sheetActions, { marginBottom: spacing.xl }]}>
+              <TouchableOpacity style={styles.cancelButton} onPress={resetAndClose} activeOpacity={0.7}>
+                <Text style={styles.cancelButtonText}>CANCEL</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.createButton, profile.isSaving && { opacity: 0.5 }]}
+                onPress={handleSave}
+                disabled={profile.isSaving}
+                activeOpacity={0.8}
+              >
+                {profile.isSaving ? (
+                  <ActivityIndicator size="small" color={colors.background} />
+                ) : (
+                  <Text style={styles.createButtonText}>SAVE</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+// ── Personalization Modal ─────────────────────────────────────────────────────
+
+type PersonalizationModalProps = {
+  visible: boolean;
+  onClose: () => void;
+  accessToken: string;
+};
+
+function PersonalizationModal({ visible, onClose, accessToken }: PersonalizationModalProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const {
+    preferred_name,
+    assistant_tone,
+    primary_location,
+    work_focus,
+    daily_brief_time,
+    time_format,
+    important_life_areas,
+    isSaving,
+    updatePreferences,
+  } = useSettingsStore();
+
+  const [draft, setDraft] = useState({
+    preferred_name: preferred_name ?? "",
+    assistant_tone: assistant_tone,
+    primary_location: primary_location ?? "",
+    work_focus: work_focus ?? "",
+    daily_brief_time: daily_brief_time,
+    time_format: time_format,
+    important_life_areas: [...important_life_areas],
+  });
+  const [formError, setFormError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setDraft({
+        preferred_name: preferred_name ?? "",
+        assistant_tone: assistant_tone,
+        primary_location: primary_location ?? "",
+        work_focus: work_focus ?? "",
+        daily_brief_time: daily_brief_time,
+        time_format: time_format,
+        important_life_areas: [...important_life_areas],
+      });
+      setFormError(null);
+      setSuccess(false);
+    }
+  }, [visible]);
+
+  function toggleArea(area: LifeArea) {
+    setDraft((d) => {
+      const areas = d.important_life_areas.includes(area)
+        ? d.important_life_areas.filter((a) => a !== area)
+        : [...d.important_life_areas, area];
+      return { ...d, important_life_areas: areas };
+    });
+  }
+
+  function resetAndClose() {
+    Keyboard.dismiss();
+    onClose();
+  }
+
+  async function handleSave() {
+    setFormError(null);
+    try {
+      await updatePreferences(accessToken, {
+        preferred_name: draft.preferred_name.trim() || null,
+        assistant_tone: draft.assistant_tone,
+        primary_location: draft.primary_location.trim() || null,
+        work_focus: draft.work_focus.trim() || null,
+        daily_brief_time: draft.daily_brief_time,
+        time_format: draft.time_format,
+        important_life_areas: draft.important_life_areas as LifeArea[],
+      });
+      setSuccess(true);
+      setTimeout(resetAndClose, 800);
+    } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        resetAndClose();
+        return;
+      }
+      const msg = err instanceof Error ? err.message : "Failed to save. Try again.";
+      setFormError(msg);
+    }
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={resetAndClose}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={[styles.overlay, { backgroundColor: "transparent" }]} />
+      </TouchableWithoutFeedback>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.modalWrapper}
+      >
+        <View style={[styles.sheet, { maxHeight: "90%" }]}>
+          <View style={styles.sheetHandle} />
+          <Text style={styles.sheetTitle}>PERSONALIZATION</Text>
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            {/* Preferred Name */}
+            <Text style={styles.fieldLabel}>PREFERRED NAME</Text>
+            <TextInput
+              style={[styles.input, { marginBottom: spacing.md }]}
+              value={draft.preferred_name}
+              onChangeText={(v) => setDraft((d) => ({ ...d, preferred_name: v }))}
+              placeholder="How HELIOS should address you"
+              placeholderTextColor={colors.textMuted}
+              maxLength={100}
+            />
+
+            {/* Assistant Tone */}
+            <Text style={styles.fieldLabel}>ASSISTANT TONE</Text>
+            <View style={[styles.segmented, { marginBottom: spacing.md }]}>
+              {TONE_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[styles.segment, draft.assistant_tone === opt.value && styles.segmentActive]}
+                  onPress={() => setDraft((d) => ({ ...d, assistant_tone: opt.value }))}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      draft.assistant_tone === opt.value && styles.segmentTextActive,
+                    ]}
+                  >
+                    {opt.label.toUpperCase()}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Primary Location — auto-detected, editable override */}
+            <Text style={styles.fieldLabel}>PRIMARY LOCATION</Text>
+            <Text style={[styles.fieldHint, { marginBottom: spacing.xs }]}>
+              Auto-detected from GPS. Edit to override what HELIOS uses for AI context.
+            </Text>
+            <TextInput
+              style={[styles.input, { marginBottom: spacing.md }]}
+              value={draft.primary_location}
+              onChangeText={(v) => setDraft((d) => ({ ...d, primary_location: v }))}
+              placeholder="Auto-detected on login"
+              placeholderTextColor={colors.textMuted}
+              maxLength={120}
+            />
+
+            {/* Work Focus */}
+            <Text style={styles.fieldLabel}>WORK FOCUS</Text>
+            <TextInput
+              style={[styles.input, { marginBottom: spacing.md }]}
+              value={draft.work_focus}
+              onChangeText={(v) => setDraft((d) => ({ ...d, work_focus: v }))}
+              placeholder="e.g. Software engineering, law, nursing"
+              placeholderTextColor={colors.textMuted}
+              maxLength={200}
+            />
+
+            {/* Daily Brief Time */}
+            <Text style={styles.fieldLabel}>DAILY BRIEF TIME</Text>
+            <TextInput
+              style={[styles.input, { marginBottom: spacing.md }]}
+              value={draft.daily_brief_time}
+              onChangeText={(v) => setDraft((d) => ({ ...d, daily_brief_time: v }))}
+              placeholder="HH:MM (24-hour)"
+              placeholderTextColor={colors.textMuted}
+              maxLength={5}
+              keyboardType="numbers-and-punctuation"
+            />
+
+            {/* Time Format */}
+            <Text style={styles.fieldLabel}>TIME FORMAT</Text>
+            <View style={[styles.segmented, { marginBottom: spacing.md, alignSelf: "flex-start" }]}>
+              {(["12h", "24h"] as const).map((fmt) => (
+                <TouchableOpacity
+                  key={fmt}
+                  style={[styles.segment, draft.time_format === fmt && styles.segmentActive]}
+                  onPress={() => setDraft((d) => ({ ...d, time_format: fmt }))}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      draft.time_format === fmt && styles.segmentTextActive,
+                    ]}
+                  >
+                    {fmt.toUpperCase()}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Important Life Areas */}
+            <Text style={styles.fieldLabel}>IMPORTANT LIFE AREAS</Text>
+            <View style={styles.lifeAreaGrid}>
+              {LIFE_AREA_OPTIONS.map((area) => {
+                const active = draft.important_life_areas.includes(area.value);
+                return (
+                  <TouchableOpacity
+                    key={area.value}
+                    style={[styles.lifeAreaChip, active && styles.lifeAreaChipActive]}
+                    onPress={() => toggleArea(area.value)}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[styles.lifeAreaText, active && styles.lifeAreaTextActive]}
+                    >
+                      {area.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {formError ? (
+              <Text style={[styles.formError, { marginBottom: spacing.sm }]}>{formError}</Text>
+            ) : null}
+            {success ? (
+              <Text style={[styles.fieldHint, { color: colors.success, marginBottom: spacing.sm }]}>
+                ✓ Personalization saved.
+              </Text>
+            ) : null}
+
+            <View style={[styles.sheetActions, { marginBottom: spacing.xl }]}>
+              <TouchableOpacity style={styles.cancelButton} onPress={resetAndClose} activeOpacity={0.7}>
+                <Text style={styles.cancelButtonText}>CANCEL</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.createButton, isSaving && { opacity: 0.5 }]}
+                onPress={handleSave}
+                disabled={isSaving}
+                activeOpacity={0.8}
+              >
+                {isSaving ? (
+                  <ActivityIndicator size="small" color={colors.background} />
+                ) : (
+                  <Text style={styles.createButtonText}>SAVE</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+// ── Background job defs ───────────────────────────────────────────────────────
 
 const JOB_TYPE_DEFS: { type: JobType; label: string; icon: string; defaultSchedule: string }[] = [
-  { type: "daily_briefing_generation",  label: "Daily Briefing",       icon: "sun.horizon",       defaultSchedule: "Daily at 8:00 AM" },
-  { type: "proactive_suggestion_scan",  label: "Proactive Suggestions", icon: "lightbulb",         defaultSchedule: "Every 30 minutes" },
-  { type: "reminder_check",             label: "Reminder Check",        icon: "bell",              defaultSchedule: "Every hour" },
-  { type: "integration_sync_simulation",label: "Integration Sync",      icon: "arrow.triangle.2.circlepath", defaultSchedule: "Every 6 hours" },
+  { type: "daily_briefing_generation", label: "Daily Briefing", icon: "sun.horizon", defaultSchedule: "Daily at 8:00 AM" },
+  { type: "proactive_suggestion_scan", label: "Proactive Suggestions", icon: "lightbulb", defaultSchedule: "Every 30 minutes" },
+  { type: "reminder_check", label: "Reminder Check", icon: "bell", defaultSchedule: "Every hour" },
+  { type: "integration_sync_simulation", label: "Integration Sync", icon: "arrow.triangle.2.circlepath", defaultSchedule: "Every 6 hours" },
 ];
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -255,16 +985,24 @@ const JOB_TYPE_DEFS: { type: JobType; label: string; icon: string; defaultSchedu
 export default function ProfileScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-
   const insets = useSafeAreaInsets();
   const router = useRouter();
+
   const user = useAuthStore((s) => s.user);
   const accessToken = useAuthStore((s) => s.accessToken);
   const logout = useAuthStore((s) => s.logout);
   const deleteAccount = useAuthStore((s) => s.deleteAccount);
   const authLoading = useAuthStore((s) => s.isLoading);
+
+  const profile = useProfileStore();
+  const displayName = profile.display_name ?? user?.name ?? "—";
+  const avatarLabel = initials(displayName);
+
   const [version, setVersion] = useState<VersionResponse | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [reminderModalVisible, setReminderModalVisible] = useState(false);
+  const [userIdModalVisible, setUserIdModalVisible] = useState(false);
+  const [personalInfoModalVisible, setPersonalInfoModalVisible] = useState(false);
+  const [personalizationModalVisible, setPersonalizationModalVisible] = useState(false);
   const [permRequesting, setPermRequesting] = useState(false);
 
   const {
@@ -285,10 +1023,21 @@ export default function ProfileScreen() {
     notifications_enabled,
     reminder_notifications,
     default_planning_horizon,
+    location,
+    preferred_name,
+    assistant_tone,
+    primary_location,
+    work_focus,
+    daily_brief_time,
+    time_format,
+    important_life_areas,
     isSaving: prefsSaving,
     fetchPreferences,
     updatePreferences,
   } = useSettingsStore();
+
+  const [locationDraft, setLocationDraft] = useState(location);
+  const [isDetectingLocation, setIsDetectingLocation] = useState(false);
 
   const {
     jobs,
@@ -306,8 +1055,13 @@ export default function ProfileScreen() {
       fetchReminders(accessToken);
       fetchPreferences(accessToken);
       fetchJobs(accessToken);
+      profile.fetchProfile(accessToken);
     }
   }, [accessToken]);
+
+  useEffect(() => {
+    setLocationDraft(location);
+  }, [location]);
 
   function handlePrefChange<K extends keyof Parameters<typeof updatePreferences>[1]>(
     key: K,
@@ -316,6 +1070,48 @@ export default function ProfileScreen() {
     if (!accessToken) return;
     updatePreferences(accessToken, { [key]: value });
   }
+
+  function handleSaveLocation() {
+    const nextLocation = locationDraft.trim() || "New York";
+    setLocationDraft(nextLocation);
+    handlePrefChange("location", nextLocation);
+  }
+
+  const handleDetectLocation = useCallback(async () => {
+    if (!accessToken || isDetectingLocation) return;
+    setIsDetectingLocation(true);
+    try {
+      const detected = await detectLocation();
+      if (!detected.permissionGranted) {
+        Alert.alert(
+          "Location Permission Required",
+          "Allow HELIOS to access your location in Settings to auto-detect your city and timezone.",
+          [{ text: "OK" }],
+        );
+        return;
+      }
+
+      // Always sync timezone from device.
+      const timezone = getDeviceTimezone();
+      await profile.updateProfile(accessToken, {
+        timezone,
+        city: detected.city ?? undefined,
+        state: detected.state ?? undefined,
+        country: detected.country ?? undefined,
+      }).catch(() => {});
+
+      if (detected.locationLabel) {
+        const next = detected.locationLabel;
+        setLocationDraft(next);
+        await updatePreferences(accessToken, {
+          location: next,
+          primary_location: next,
+        }).catch(() => {});
+      }
+    } finally {
+      setIsDetectingLocation(false);
+    }
+  }, [accessToken, isDetectingLocation, profile, updatePreferences]);
 
   function handleLogout() {
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
@@ -327,14 +1123,10 @@ export default function ProfileScreen() {
   function handleDeleteAccount() {
     Alert.alert(
       "Delete Account",
-      "This will permanently delete your account and all data — goals, tasks, reminders, and conversations. This cannot be undone.",
+      "This will permanently delete your account and all data. This cannot be undone.",
       [
         { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete Account",
-          style: "destructive",
-          onPress: () => deleteAccount(),
-        },
+        { text: "Delete Account", style: "destructive", onPress: () => deleteAccount() },
       ],
     );
   }
@@ -359,7 +1151,7 @@ export default function ProfileScreen() {
       body: data.body || undefined,
       remind_at: data.remind_at,
     });
-    setModalVisible(false);
+    setReminderModalVisible(false);
   }
 
   function handleToggle(reminder: ReminderOut) {
@@ -371,23 +1163,49 @@ export default function ProfileScreen() {
     if (!accessToken) return;
     Alert.alert("Delete Reminder", "This reminder will be permanently deleted.", [
       { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => deleteReminder(accessToken, id),
-      },
+      { text: "Delete", style: "destructive", onPress: () => deleteReminder(accessToken, id) },
     ]);
   }
 
   const permLabel =
-    permissionStatus === "granted" ? "GRANTED"
-    : permissionStatus === "denied" ? "DENIED"
-    : "NOT REQUESTED";
-
+    permissionStatus === "granted"
+      ? "GRANTED"
+      : permissionStatus === "denied"
+      ? "DENIED"
+      : "NOT REQUESTED";
   const permColor =
-    permissionStatus === "granted" ? colors.accentCyan
-    : permissionStatus === "denied" ? colors.danger
-    : colors.textMuted;
+    permissionStatus === "granted"
+      ? colors.accentCyan
+      : permissionStatus === "denied"
+      ? colors.danger
+      : colors.textMuted;
+
+  // Build a compact summary for the personalization section card
+  const personalizationSummary: { label: string; value: string }[] = [];
+  if (preferred_name) personalizationSummary.push({ label: "Preferred Name", value: preferred_name });
+  if (assistant_tone) personalizationSummary.push({ label: "Tone", value: assistant_tone.charAt(0).toUpperCase() + assistant_tone.slice(1) });
+  if (primary_location) personalizationSummary.push({ label: "Primary Location", value: primary_location });
+  if (work_focus) personalizationSummary.push({ label: "Work Focus", value: work_focus });
+  if (daily_brief_time) personalizationSummary.push({ label: "Daily Brief", value: daily_brief_time });
+  personalizationSummary.push({ label: "Time Format", value: time_format });
+  if (important_life_areas.length > 0) {
+    const labels = important_life_areas.map((a) => LIFE_AREA_OPTIONS.find((o) => o.value === a)?.label ?? a);
+    personalizationSummary.push({ label: "Life Areas", value: labels.join(", ") });
+  }
+
+  // Build personal info summary
+  const personalSummary: { label: string; value: string }[] = [];
+  if (profile.first_name || profile.last_name) {
+    const name = [profile.first_name, profile.last_name].filter(Boolean).join(" ");
+    personalSummary.push({ label: "Name", value: name });
+  }
+  if (profile.display_name) personalSummary.push({ label: "Display Name", value: profile.display_name });
+  if (profile.phone_number) personalSummary.push({ label: "Phone", value: profile.phone_number });
+  if (profile.city) {
+    const loc = [profile.city, profile.state, profile.country].filter(Boolean).join(", ");
+    personalSummary.push({ label: "Location", value: loc });
+  }
+  if (profile.timezone) personalSummary.push({ label: "Timezone", value: profile.timezone });
 
   return (
     <>
@@ -396,36 +1214,86 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}
       >
-        {/* Hero */}
+        {/* ── Hero ─────────────────────────────────────────────────────────── */}
         <View style={styles.heroCard}>
-          <Text style={styles.heroLabel}>HELIOS ACCOUNT</Text>
+          <Text style={styles.heroLabel}>Account</Text>
           <View style={styles.avatarRow}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarInitials}>{user ? initials(user.name) : "?"}</Text>
+              <Text style={styles.avatarInitials}>{avatarLabel || "?"}</Text>
             </View>
             <View style={styles.avatarInfo}>
-              <Text style={styles.displayName} numberOfLines={1}>{user?.name ?? "—"}</Text>
+              <Text style={styles.displayName} numberOfLines={1}>{displayName}</Text>
               <Text style={styles.emailText} numberOfLines={1}>{user?.email ?? "—"}</Text>
+              {profile.custom_user_id ? (
+                <TouchableOpacity
+                  onPress={() => setUserIdModalVisible(true)}
+                  activeOpacity={0.7}
+                  style={styles.handleRow}
+                >
+                  <Text style={styles.handleText}>@{profile.custom_user_id}</Text>
+                  {profile.can_change_user_id && (
+                    <SymbolView
+                      name="pencil"
+                      size={10}
+                      tintColor={colors.textMuted}
+                      resizeMode="scaleAspectFit"
+                    />
+                  )}
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  onPress={() => setUserIdModalVisible(true)}
+                  activeOpacity={0.7}
+                  style={styles.handleRow}
+                >
+                  <Text style={styles.handlePrompt}>Set your @username</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </View>
 
-        {/* Account */}
+        {/* ── Account ───────────────────────────────────────────────────────── */}
         <Text style={styles.sectionLabel}>ACCOUNT</Text>
         <View style={styles.card}>
           <InfoRow label="Member Since" value={formatMemberSince(user?.created_at)} />
           <View style={styles.cardDivider} />
-          <InfoRow label="User ID" value={user ? truncateId(user.id) : "—"} />
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>User ID</Text>
+            <TouchableOpacity
+              onPress={() => setUserIdModalVisible(true)}
+              style={styles.userIdValueRow}
+              activeOpacity={0.7}
+            >
+              {profile.custom_user_id ? (
+                <Text style={[styles.infoValue, { color: colors.accentCyan }]}>
+                  @{profile.custom_user_id}
+                </Text>
+              ) : (
+                <Text style={[styles.infoValue, { color: colors.textMuted, fontStyle: "italic" }]}>
+                  Not set
+                </Text>
+              )}
+              {profile.can_change_user_id ? (
+                <Text style={styles.editChip}>{profile.custom_user_id ? "CHANGE" : "SET"}</Text>
+              ) : (
+                <SymbolView name="lock" size={11} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+              )}
+            </TouchableOpacity>
+          </View>
+          {!profile.can_change_user_id && (
+            <Text style={styles.lockNote}>User ID can only be changed once after setup.</Text>
+          )}
         </View>
 
-        {/* System */}
+        {/* ── System ────────────────────────────────────────────────────────── */}
         <Text style={styles.sectionLabel}>SYSTEM</Text>
         <View style={styles.card}>
           {version ? (
             <>
               <InfoRow label="App Version" value={version.version} />
               <View style={styles.cardDivider} />
-              <InfoRow label="API Version" value={version.api_version} />
+              <InfoRow label="API Version" value={version.helios_version ?? "HELIOS 2.6"} />
               <View style={styles.cardDivider} />
               <InfoRow label="Service" value={version.service} />
             </>
@@ -437,10 +1305,72 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* Notifications */}
-        <Text style={styles.sectionLabel}>NOTIFICATIONS</Text>
+        {/* ── Personal Information ─────────────────────────────────────────── */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionLabel}>PERSONAL INFORMATION</Text>
+          <TouchableOpacity
+            onPress={() => setPersonalInfoModalVisible(true)}
+            style={styles.sectionEditButton}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.sectionEditText}>EDIT</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.card}>
+          {personalSummary.length > 0 ? (
+            personalSummary.map((row, i) => (
+              <View key={row.label}>
+                {i > 0 && <View style={styles.cardDivider} />}
+                <InfoRow label={row.label} value={row.value} />
+              </View>
+            ))
+          ) : (
+            <TouchableOpacity
+              style={styles.emptySection}
+              onPress={() => setPersonalInfoModalVisible(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.emptyText}>
+                Tap Edit to add your personal information.
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
-        {/* Permission status card */}
+        {/* ── Personalization ───────────────────────────────────────────────── */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionLabel}>PERSONALIZATION</Text>
+          <TouchableOpacity
+            onPress={() => setPersonalizationModalVisible(true)}
+            style={styles.sectionEditButton}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.sectionEditText}>EDIT</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.card}>
+          {personalizationSummary.length > 0 ? (
+            personalizationSummary.map((row, i) => (
+              <View key={row.label}>
+                {i > 0 && <View style={styles.cardDivider} />}
+                <InfoRow label={row.label} value={row.value} />
+              </View>
+            ))
+          ) : (
+            <TouchableOpacity
+              style={styles.emptySection}
+              onPress={() => setPersonalizationModalVisible(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.emptyText}>
+                Tap Edit to configure how HELIOS personalizes for you.
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* ── Notifications ─────────────────────────────────────────────────── */}
+        <Text style={styles.sectionLabel}>NOTIFICATIONS</Text>
         <View style={styles.card}>
           <View style={styles.permRow}>
             <View style={styles.permLeft}>
@@ -467,27 +1397,23 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Reminders list */}
+        {/* ── Reminders ─────────────────────────────────────────────────────── */}
         <View style={styles.remindersHeader}>
           <Text style={styles.sectionLabel}>REMINDERS</Text>
           <View style={styles.remindersHeaderRight}>
-            {(remindersLoading || isMutating) ? (
+            {remindersLoading || isMutating ? (
               <ActivityIndicator size="small" color={colors.accentCyan} />
             ) : null}
             <TouchableOpacity
               style={styles.addButton}
-              onPress={() => setModalVisible(true)}
+              onPress={() => setReminderModalVisible(true)}
               activeOpacity={0.8}
             >
               <Text style={styles.addButtonText}>+ NEW</Text>
             </TouchableOpacity>
           </View>
         </View>
-
-        {remindersError ? (
-          <Text style={styles.errorText}>{remindersError}</Text>
-        ) : null}
-
+        {remindersError ? <Text style={styles.errorText}>{remindersError}</Text> : null}
         {!remindersLoading && reminders.length === 0 ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyText}>No reminders yet. Tap + NEW to add one.</Text>
@@ -507,13 +1433,46 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {/* Preferences */}
+        {/* ── Preferences ───────────────────────────────────────────────────── */}
         <View style={styles.prefHeader}>
           <Text style={styles.sectionLabel}>PREFERENCES</Text>
           {prefsSaving && <ActivityIndicator size="small" color={colors.accentCyan} />}
         </View>
-
         <View style={styles.card}>
+          {/* Location — auto-detected, with manual override */}
+          <View style={styles.locationPrefRow}>
+            <View style={styles.prefLabelGroup}>
+              <Text style={styles.prefLabel}>Location</Text>
+              <Text style={styles.prefSub}>Auto-detected · shown with local time</Text>
+            </View>
+            <View style={styles.locationEditor}>
+              <TextInput
+                style={styles.locationInput}
+                value={locationDraft}
+                onChangeText={setLocationDraft}
+                onSubmitEditing={handleSaveLocation}
+                returnKeyType="done"
+                maxLength={120}
+                placeholder="Detecting…"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="words"
+                accessibilityLabel="Profile location"
+              />
+              <TouchableOpacity
+                style={[styles.locationSaveButton, isDetectingLocation && styles.btnDisabled]}
+                onPress={handleDetectLocation}
+                disabled={isDetectingLocation}
+                activeOpacity={0.75}
+              >
+                {isDetectingLocation ? (
+                  <ActivityIndicator size="small" color={colors.accentCyan} />
+                ) : (
+                  <SymbolView name="location.fill" size={14} tintColor={colors.accentCyan} resizeMode="scaleAspectFit" />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+          <View style={styles.cardDivider} />
           {/* Theme */}
           <View style={styles.prefRow}>
             <Text style={styles.prefLabel}>Theme</Text>
@@ -525,16 +1484,19 @@ export default function ProfileScreen() {
                   onPress={() => handlePrefChange("theme_preference", opt)}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.segmentText, theme_preference === opt && styles.segmentTextActive]}>
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      theme_preference === opt && styles.segmentTextActive,
+                    ]}
+                  >
                     {opt.toUpperCase()}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
           </View>
-
           <View style={styles.cardDivider} />
-
           {/* Planning Horizon */}
           <View style={styles.prefRow}>
             <Text style={styles.prefLabel}>Plan Horizon</Text>
@@ -542,21 +1504,27 @@ export default function ProfileScreen() {
               {([3, 7, 14, 30] as const).map((days) => (
                 <TouchableOpacity
                   key={days}
-                  style={[styles.segment, default_planning_horizon === days && styles.segmentActive]}
+                  style={[
+                    styles.segment,
+                    default_planning_horizon === days && styles.segmentActive,
+                  ]}
                   onPress={() => handlePrefChange("default_planning_horizon", days)}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.segmentText, default_planning_horizon === days && styles.segmentTextActive]}>
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      default_planning_horizon === days && styles.segmentTextActive,
+                    ]}
+                  >
                     {days}D
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
           </View>
-
           <View style={styles.cardDivider} />
-
-          {/* Notification master toggle */}
+          {/* Notifications master */}
           <View style={styles.prefRow}>
             <View style={styles.prefLabelGroup}>
               <Text style={styles.prefLabel}>Notifications</Text>
@@ -567,18 +1535,23 @@ export default function ProfileScreen() {
               onPress={() => handlePrefChange("notifications_enabled", !notifications_enabled)}
               activeOpacity={0.7}
             >
-              <Text style={[styles.toggleText, { color: notifications_enabled ? colors.accentCyan : colors.textMuted }]}>
+              <Text
+                style={[
+                  styles.toggleText,
+                  { color: notifications_enabled ? colors.accentCyan : colors.textMuted },
+                ]}
+              >
                 {notifications_enabled ? "ON" : "OFF"}
               </Text>
             </TouchableOpacity>
           </View>
-
           <View style={styles.cardDivider} />
-
-          {/* Reminder notifications */}
+          {/* Reminder alerts */}
           <View style={styles.prefRow}>
             <View style={styles.prefLabelGroup}>
-              <Text style={[styles.prefLabel, !notifications_enabled && styles.prefLabelDisabled]}>
+              <Text
+                style={[styles.prefLabel, !notifications_enabled && styles.prefLabelDisabled]}
+              >
                 Reminder Alerts
               </Text>
               <Text style={styles.prefSub}>Local push for reminders</Text>
@@ -589,17 +1562,24 @@ export default function ProfileScreen() {
               disabled={!notifications_enabled}
               activeOpacity={0.7}
             >
-              <Text style={[styles.toggleText, {
-                color: notifications_enabled && reminder_notifications ? colors.accentCyan : colors.textMuted,
-              }]}>
+              <Text
+                style={[
+                  styles.toggleText,
+                  {
+                    color:
+                      notifications_enabled && reminder_notifications
+                        ? colors.accentCyan
+                        : colors.textMuted,
+                  },
+                ]}
+              >
                 {reminder_notifications ? "ON" : "OFF"}
               </Text>
             </TouchableOpacity>
           </View>
-
         </View>
 
-        {/* Integrations */}
+        {/* ── Integrations ──────────────────────────────────────────────────── */}
         <TouchableOpacity
           style={styles.integrationsButton}
           onPress={() => router.push("/(tabs)/integrations")}
@@ -622,7 +1602,7 @@ export default function ProfileScreen() {
           />
         </TouchableOpacity>
 
-        {/* Background Jobs */}
+        {/* ── Background Jobs ───────────────────────────────────────────────── */}
         <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>BACKGROUND JOBS</Text>
         <View style={styles.card}>
           {JOB_TYPE_DEFS.map((def, idx) => {
@@ -652,11 +1632,15 @@ export default function ProfileScreen() {
                     {job ? (
                       <>
                         <TouchableOpacity
-                          style={[styles.jobRunBtn, (!job.enabled || isMutating || jobsMutating) && styles.btnDisabled]}
+                          style={[
+                            styles.jobRunBtn,
+                            (!job.enabled || isMutating || jobsMutating) && styles.btnDisabled,
+                          ]}
                           onPress={() => {
                             if (!accessToken) return;
                             triggerJob(accessToken, job.id).then((result) => {
-                              if (result) Alert.alert("Job Triggered", result.result_summary, [{ text: "OK" }]);
+                              if (result)
+                                Alert.alert("Job Triggered", result.result_summary, [{ text: "OK" }]);
                             });
                           }}
                           disabled={!job.enabled || isMutating || jobsMutating}
@@ -665,42 +1649,58 @@ export default function ProfileScreen() {
                           <Text style={styles.jobRunBtnText}>RUN</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                          style={[styles.jobToggle, (isMutating || jobsMutating) && styles.btnDisabled]}
+                          style={[
+                            styles.jobToggle,
+                            (isMutating || jobsMutating) && styles.btnDisabled,
+                          ]}
                           onPress={() =>
-                            accessToken && updateJob(accessToken, job.id, { enabled: !job.enabled })
+                            accessToken &&
+                            updateJob(accessToken, job.id, { enabled: !job.enabled })
                           }
                           disabled={isMutating || jobsMutating}
                           activeOpacity={0.7}
                         >
-                          <Text style={[styles.jobToggleText, { color: job.enabled ? colors.accent : colors.textMuted }]}>
+                          <Text
+                            style={[
+                              styles.jobToggleText,
+                              { color: job.enabled ? colors.accent : colors.textMuted },
+                            ]}
+                          >
                             {job.enabled ? "ON" : "OFF"}
                           </Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                          style={[styles.jobDeleteBtn, (isMutating || jobsMutating) && styles.btnDisabled]}
+                          style={[
+                            styles.jobDeleteBtn,
+                            (isMutating || jobsMutating) && styles.btnDisabled,
+                          ]}
                           onPress={() => {
-                            Alert.alert(
-                              "Remove Job",
-                              `Remove the "${def.label}" background job?`,
-                              [
-                                { text: "Cancel", style: "cancel" },
-                                {
-                                  text: "Remove",
-                                  style: "destructive",
-                                  onPress: () => accessToken && deleteJob(accessToken, job.id),
-                                },
-                              ],
-                            );
+                            Alert.alert("Remove Job", `Remove the "${def.label}" background job?`, [
+                              { text: "Cancel", style: "cancel" },
+                              {
+                                text: "Remove",
+                                style: "destructive",
+                                onPress: () => accessToken && deleteJob(accessToken, job.id),
+                              },
+                            ]);
                           }}
                           disabled={isMutating || jobsMutating}
                           activeOpacity={0.7}
                         >
-                          <SymbolView name="trash" size={13} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+                          <SymbolView
+                            name="trash"
+                            size={13}
+                            tintColor={colors.textMuted}
+                            resizeMode="scaleAspectFit"
+                          />
                         </TouchableOpacity>
                       </>
                     ) : (
                       <TouchableOpacity
-                        style={[styles.jobAddBtn, (isMutating || jobsMutating) && styles.btnDisabled]}
+                        style={[
+                          styles.jobAddBtn,
+                          (isMutating || jobsMutating) && styles.btnDisabled,
+                        ]}
                         onPress={() =>
                           accessToken &&
                           createJob(accessToken, {
@@ -721,12 +1721,10 @@ export default function ProfileScreen() {
           })}
         </View>
 
-        {/* Logout */}
+        {/* ── Sign Out / Delete ──────────────────────────────────────────────── */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
           <Text style={styles.logoutText}>SIGN OUT</Text>
         </TouchableOpacity>
-
-        {/* Delete Account */}
         <TouchableOpacity
           style={styles.deleteAccountButton}
           onPress={handleDeleteAccount}
@@ -737,12 +1735,35 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </ScrollView>
 
+      {/* ── Modals ────────────────────────────────────────────────────────────── */}
       <NewReminderModal
-        visible={modalVisible}
-        onClose={() => setModalVisible(false)}
+        visible={reminderModalVisible}
+        onClose={() => setReminderModalVisible(false)}
         onSubmit={handleCreateReminder}
         isMutating={isMutating}
       />
+      {accessToken && (
+        <>
+          <UserIdModal
+            visible={userIdModalVisible}
+            onClose={() => setUserIdModalVisible(false)}
+            currentId={profile.custom_user_id}
+            canChange={profile.can_change_user_id}
+            userIdChanged={profile.user_id_changed}
+            accessToken={accessToken}
+          />
+          <PersonalInfoModal
+            visible={personalInfoModalVisible}
+            onClose={() => setPersonalInfoModalVisible(false)}
+            accessToken={accessToken}
+          />
+          <PersonalizationModal
+            visible={personalizationModalVisible}
+            onClose={() => setPersonalizationModalVisible(false)}
+            accessToken={accessToken}
+          />
+        </>
+      )}
     </>
   );
 }
@@ -751,593 +1772,629 @@ export default function ProfileScreen() {
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
-  container: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xxl * 2,
-  },
-
-  heroCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    padding: spacing.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: spacing.lg,
-  },
-
-  heroLabel: {
-    ...typography.label,
-    color: colors.accent,
-    marginBottom: spacing.lg,
-  },
-
-  avatarRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-  },
-
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.accent,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  avatarInitials: {
-    fontSize: 22,
-    fontWeight: "700" as const,
-    color: colors.textPrimary,
-    letterSpacing: 1,
-  },
-
-  avatarInfo: { flex: 1 },
-
-  displayName: {
-    ...typography.title,
-    color: colors.textPrimary,
-    marginBottom: spacing.xs,
-  },
-
-  emailText: {
-    ...typography.body,
-    color: colors.textMuted,
-  },
-
-  sectionLabel: {
-    ...typography.label,
-    color: colors.textMuted,
-    marginBottom: spacing.sm,
-  },
-
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.lg,
-    marginBottom: spacing.lg,
-    overflow: "hidden",
-  },
-
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: spacing.md,
-  },
-
-  infoLabel: {
-    ...typography.body,
-    color: colors.textSecondary,
-    flex: 1,
-  },
-
-  infoValue: {
-    ...typography.body,
-    color: colors.textPrimary,
-    flex: 1,
-    textAlign: "right",
-    fontWeight: "600" as const,
-  },
-
-  cardDivider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginHorizontal: -spacing.lg,
-  },
-
-  loadingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingVertical: spacing.md,
-  },
-
-  loadingText: {
-    ...typography.label,
-    color: colors.textMuted,
-  },
-
-  // Permission card
-  permRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: spacing.md,
-  },
-
-  permLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    flex: 1,
-  },
-
-  permDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    flexShrink: 0,
-  },
-
-  permTitle: {
-    ...typography.body,
-    color: colors.textPrimary,
-  },
-
-  permStatus: {
-    ...typography.label,
-    fontSize: 10,
-    marginTop: 2,
-  },
-
-  permButton: {
-    backgroundColor: colors.accent,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.sm,
-    minWidth: 72,
-    alignItems: "center",
-  },
-
-  permButtonText: {
-    ...typography.label,
-    color: colors.textPrimary,
-    fontSize: 10,
-  },
-
-  // Reminders section header
-  remindersHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: spacing.sm,
-  },
-
-  remindersHeaderRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-
-  addButton: {
-    backgroundColor: colors.accent,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.sm,
-  },
-
-  addButtonText: {
-    ...typography.label,
-    color: colors.textPrimary,
-    fontSize: 10,
-  },
-
-  errorText: {
-    ...typography.caption,
-    color: colors.danger,
-    marginBottom: spacing.sm,
-  },
-
-  emptyCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.xl,
-    alignItems: "center",
-    marginBottom: spacing.lg,
-  },
-
-  emptyText: {
-    ...typography.body,
-    color: colors.textMuted,
-    textAlign: "center",
-  },
-
-  // Reminder row
-  reminderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: spacing.md,
-    gap: spacing.md,
-  },
-
-  reminderDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    flexShrink: 0,
-  },
-
-  reminderBody: {
-    flex: 1,
-    gap: 2,
-  },
-
-  reminderTitle: {
-    ...typography.body,
-    color: colors.textPrimary,
-    fontSize: 14,
-    fontWeight: "600" as const,
-  },
-
-  reminderTime: {
-    ...typography.caption,
-    color: colors.textMuted,
-  },
-
-  reminderActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    flexShrink: 0,
-  },
-
-  reminderToggle: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-
-  reminderToggleText: {
-    ...typography.label,
-    fontSize: 9,
-  },
-
-  reminderDelete: {
-    padding: spacing.xs,
-  },
-
-  reminderDeleteText: {
-    color: colors.textMuted,
-    fontSize: 14,
-  },
-
-  // Preferences section
-  prefHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: spacing.sm,
-  },
-
-  prefRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: spacing.md,
-    gap: spacing.md,
-  },
-
-  prefLabel: {
-    ...typography.body,
-    color: colors.textPrimary,
-    fontSize: 14,
-  },
-
-  prefLabelDisabled: {
-    color: colors.textMuted,
-  },
-
-  prefLabelGroup: {
-    flex: 1,
-    gap: 2,
-  },
-
-  prefSub: {
-    ...typography.caption,
-    color: colors.textMuted,
-    fontSize: 11,
-  },
-
-  segmented: {
-    flexDirection: "row",
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: "hidden",
-    flexShrink: 0,
-  },
-
-  segment: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 5,
-  },
-
-  segmentActive: {
-    backgroundColor: colors.accent,
-  },
-
-  segmentText: {
-    ...typography.label,
-    fontSize: 9,
-    color: colors.textMuted,
-  },
-
-  segmentTextActive: {
-    color: colors.textPrimary,
-  },
-
-  togglePill: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    flexShrink: 0,
-  },
-
-  toggleText: {
-    ...typography.label,
-    fontSize: 9,
-  },
-
-  // Integrations nav
-  integrationsButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: `${colors.accentCyan}30`,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    marginTop: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-
-  integrationsButtonLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-
-  integrationsButtonText: {
-    ...typography.label,
-    color: colors.accentCyan,
-    fontSize: 12,
-  },
-
-  // Logout
-  logoutButton: {
-    backgroundColor: `${colors.danger}1e`,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: `${colors.danger}59`,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-    marginTop: spacing.sm,
-  },
-
-  logoutText: {
-    ...typography.label,
-    color: colors.danger,
-    fontSize: 13,
-  },
-
-  deleteAccountButton: {
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-    marginTop: spacing.sm,
-  },
-
-  deleteAccountText: {
-    ...typography.label,
-    color: colors.textMuted,
-    fontSize: 11,
-  },
-
-  // New reminder modal
-  overlay: {
-    flex: 1,
-    backgroundColor: colors.overlay,
-  },
-
-  modalWrapper: {
-    justifyContent: "flex-end",
-  },
-
-  sheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xxl,
-  },
-
-  sheetHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    alignSelf: "center",
-    marginBottom: spacing.lg,
-  },
-
-  sheetTitle: {
-    ...typography.label,
-    color: colors.accent,
-    marginBottom: spacing.lg,
-  },
-
-  fieldLabel: {
-    ...typography.label,
-    color: colors.textMuted,
-    marginBottom: spacing.sm,
-    marginTop: spacing.xs,
-  },
-
-  fieldHint: {
-    ...typography.caption,
-    color: colors.textMuted,
-    opacity: 0.7,
-    marginTop: -spacing.sm,
-    marginBottom: spacing.sm,
-  },
-
-  input: {
-    backgroundColor: colors.surfaceDark,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.borderDark,
-    color: colors.textPrimary,
-    ...typography.body,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    marginBottom: spacing.md,
-  },
-
-  inputMultiline: {
-    height: 72,
-    textAlignVertical: "top",
-  },
-
-  formError: {
-    ...typography.caption,
-    color: colors.danger,
-    marginBottom: spacing.sm,
-  },
-
-  sheetActions: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-  },
-
-  cancelButton: {
-    flex: 1,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.sm,
-    alignItems: "center",
-  },
-
-  cancelButtonText: {
-    ...typography.label,
-    color: colors.textMuted,
-    fontSize: 12,
-  },
-
-  createButton: {
-    flex: 1,
-    backgroundColor: colors.accentCyan,
-    borderRadius: radius.sm,
-    paddingVertical: spacing.sm,
-    alignItems: "center",
-  },
-
-  createButtonText: {
-    ...typography.label,
-    color: colors.background,
-    fontSize: 12,
-    fontWeight: "700" as const,
-  },
-
-  jobRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: spacing.md,
-  },
-  jobLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    flex: 1,
-  },
-  jobInfo: { flex: 1 },
-  jobName: { ...typography.body, color: colors.textPrimary, fontWeight: "600" as const },
-  jobSchedule: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
-  jobLastRun: { ...typography.caption, color: colors.textMuted, opacity: 0.6, marginTop: 1, fontSize: 10 },
-  jobRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  jobRunBtn: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs - 2,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.success,
-    backgroundColor: `${colors.success}14`,
-    alignItems: "center",
-  },
-  jobRunBtnText: {
-    fontSize: 9,
-    fontWeight: "700" as const,
-    letterSpacing: 0.8,
-    color: colors.success,
-  },
-  jobToggle: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs - 2,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    minWidth: 36,
-    alignItems: "center",
-  },
-  jobToggleText: {
-    fontSize: 10,
-    fontWeight: "700" as const,
-    letterSpacing: 0.5,
-  },
-  jobDeleteBtn: {
-    padding: spacing.xs,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  jobAddBtn: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs - 2,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.accentCyan,
-    backgroundColor: `${colors.accentCyan}0f`,
-    alignItems: "center",
-  },
-  jobAddBtnText: {
-    fontSize: 10,
-    fontWeight: "700" as const,
-    letterSpacing: 0.5,
-    color: colors.accentCyan,
-  },
-  btnDisabled: { opacity: 0.5 },
-});
+    container: {
+      paddingHorizontal: spacing.lg,
+      paddingBottom: spacing.xxl * 2,
+    },
+
+    // Hero
+    heroCard: {
+      backgroundColor: colors.surface,
+      borderRadius: radius.xl,
+      padding: spacing.xl,
+      borderWidth: 1,
+      borderColor: colors.border,
+      marginBottom: spacing.lg,
+    },
+    heroLabel: {
+      fontSize: 22,
+      fontWeight: "700" as const,
+      color: colors.textPrimary,
+      marginBottom: spacing.lg,
+      letterSpacing: -0.5,
+    },
+    avatarRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.md,
+    },
+    avatar: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: colors.accent,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    avatarInitials: {
+      fontSize: 22,
+      fontWeight: "700" as const,
+      color: colors.textPrimary,
+      letterSpacing: 1,
+    },
+    avatarInfo: { flex: 1 },
+    displayName: {
+      ...typography.title,
+      color: colors.textPrimary,
+      marginBottom: spacing.xs,
+    },
+    emailText: {
+      ...typography.body,
+      color: colors.textMuted,
+    },
+    handleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      marginTop: 3,
+    },
+    handleText: {
+      ...typography.label,
+      color: colors.accentCyan,
+      fontSize: 12,
+    },
+    handlePrompt: {
+      ...typography.label,
+      color: colors.textMuted,
+      fontSize: 11,
+      fontStyle: "italic",
+    },
+
+    // Section headers
+    sectionHeaderRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: spacing.sm,
+    },
+    sectionLabel: {
+      ...typography.label,
+      color: colors.textMuted,
+      marginBottom: spacing.sm,
+    },
+    sectionEditButton: {
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 3,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    sectionEditText: {
+      ...typography.label,
+      color: colors.accentCyan,
+      fontSize: 9,
+    },
+
+    // Cards
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: spacing.lg,
+      marginBottom: spacing.lg,
+      overflow: "hidden",
+    },
+    cardDivider: {
+      height: 1,
+      backgroundColor: colors.border,
+      marginHorizontal: -spacing.lg,
+    },
+
+    // Info rows
+    infoRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: spacing.md,
+    },
+    infoLabel: {
+      ...typography.body,
+      color: colors.textSecondary,
+      flex: 1,
+    },
+    infoValue: {
+      ...typography.body,
+      color: colors.textPrimary,
+      flex: 1,
+      textAlign: "right",
+      fontWeight: "600" as const,
+    },
+    userIdValueRow: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "flex-end",
+      gap: spacing.sm,
+    },
+    editChip: {
+      ...typography.label,
+      color: colors.accentCyan,
+      fontSize: 9,
+      borderWidth: 1,
+      borderColor: `${colors.accentCyan}40`,
+      borderRadius: radius.sm,
+      paddingHorizontal: 5,
+      paddingVertical: 2,
+    },
+    lockNote: {
+      ...typography.caption,
+      color: colors.textMuted,
+      fontSize: 10,
+      paddingBottom: spacing.sm,
+      fontStyle: "italic",
+    },
+
+    // Loading
+    loadingRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.sm,
+      paddingVertical: spacing.md,
+    },
+    loadingText: {
+      ...typography.label,
+      color: colors.textMuted,
+    },
+
+    // Empty sections
+    emptySection: {
+      paddingVertical: spacing.lg,
+      alignItems: "center",
+    },
+    emptyCard: {
+      backgroundColor: colors.surface,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: spacing.xl,
+      alignItems: "center",
+      marginBottom: spacing.lg,
+    },
+    emptyText: {
+      ...typography.body,
+      color: colors.textMuted,
+      textAlign: "center",
+    },
+
+    // Permission card
+    permRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: spacing.md,
+    },
+    permLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.md,
+      flex: 1,
+    },
+    permDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      flexShrink: 0,
+    },
+    permTitle: {
+      ...typography.body,
+      color: colors.textPrimary,
+    },
+    permStatus: {
+      ...typography.label,
+      fontSize: 10,
+      marginTop: 2,
+    },
+    permButton: {
+      backgroundColor: colors.accent,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs,
+      borderRadius: radius.sm,
+      minWidth: 72,
+      alignItems: "center",
+    },
+    permButtonText: {
+      ...typography.label,
+      color: colors.textPrimary,
+      fontSize: 10,
+    },
+
+    // Reminders
+    remindersHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: spacing.sm,
+    },
+    remindersHeaderRight: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.sm,
+    },
+    addButton: {
+      backgroundColor: colors.accent,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs,
+      borderRadius: radius.sm,
+    },
+    addButtonText: {
+      ...typography.label,
+      color: colors.textPrimary,
+      fontSize: 10,
+    },
+    errorText: {
+      ...typography.caption,
+      color: colors.danger,
+      marginBottom: spacing.sm,
+    },
+    reminderRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: spacing.md,
+      gap: spacing.md,
+    },
+    reminderDot: {
+      width: 7,
+      height: 7,
+      borderRadius: 4,
+      flexShrink: 0,
+    },
+    reminderBody: {
+      flex: 1,
+      gap: 2,
+    },
+    reminderTitle: {
+      ...typography.body,
+      color: colors.textPrimary,
+      fontSize: 14,
+      fontWeight: "600" as const,
+    },
+    reminderTime: {
+      ...typography.caption,
+      color: colors.textMuted,
+    },
+    reminderActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.sm,
+      flexShrink: 0,
+    },
+    reminderToggle: {
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 3,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    reminderToggleText: {
+      ...typography.label,
+      fontSize: 9,
+    },
+    reminderDelete: { padding: spacing.xs },
+    reminderDeleteText: { color: colors.textMuted, fontSize: 14 },
+
+    // Preferences
+    prefHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: spacing.sm,
+    },
+    prefRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: spacing.md,
+      gap: spacing.md,
+    },
+    locationPrefRow: {
+      paddingVertical: spacing.md,
+      gap: spacing.sm,
+    },
+    locationEditor: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.sm,
+    },
+    locationInput: {
+      flex: 1,
+      minHeight: 42,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceDark,
+      color: colors.textPrimary,
+      paddingHorizontal: spacing.md,
+      fontSize: 14,
+      fontWeight: "600" as const,
+    },
+    locationSaveButton: {
+      minHeight: 42,
+      justifyContent: "center",
+      paddingHorizontal: spacing.md,
+      borderRadius: radius.sm,
+      backgroundColor: colors.accent,
+    },
+    locationSaveText: {
+      ...typography.label,
+      color: colors.textPrimary,
+      fontSize: 9,
+    },
+    prefLabel: {
+      ...typography.body,
+      color: colors.textPrimary,
+      fontSize: 14,
+    },
+    prefLabelDisabled: { color: colors.textMuted },
+    prefLabelGroup: { flex: 1, gap: 2 },
+    prefSub: {
+      ...typography.caption,
+      color: colors.textMuted,
+      fontSize: 11,
+    },
+    segmented: {
+      flexDirection: "row",
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+      overflow: "hidden",
+      flexShrink: 0,
+    },
+    segment: {
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 5,
+    },
+    segmentActive: { backgroundColor: colors.accent },
+    segmentText: {
+      ...typography.label,
+      fontSize: 9,
+      color: colors.textMuted,
+    },
+    segmentTextActive: { color: colors.textPrimary },
+    togglePill: {
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 4,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+      flexShrink: 0,
+    },
+    toggleText: {
+      ...typography.label,
+      fontSize: 9,
+    },
+
+    // Integrations
+    integrationsButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      backgroundColor: colors.surface,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: `${colors.accentCyan}30`,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.lg,
+      marginTop: spacing.sm,
+      marginBottom: spacing.sm,
+    },
+    integrationsButtonLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.sm,
+    },
+    integrationsButtonText: {
+      ...typography.label,
+      color: colors.accentCyan,
+      fontSize: 12,
+    },
+
+    // Background jobs
+    jobRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: spacing.md,
+    },
+    jobLeft: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flex: 1 },
+    jobInfo: { flex: 1 },
+    jobName: { ...typography.body, color: colors.textPrimary, fontWeight: "600" as const },
+    jobSchedule: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
+    jobLastRun: { ...typography.caption, color: colors.textMuted, opacity: 0.6, marginTop: 1, fontSize: 10 },
+    jobRight: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+    jobRunBtn: {
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs - 2,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.success,
+      backgroundColor: `${colors.success}14`,
+      alignItems: "center",
+    },
+    jobRunBtnText: { fontSize: 9, fontWeight: "700" as const, letterSpacing: 0.8, color: colors.success },
+    jobToggle: {
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs - 2,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+      minWidth: 36,
+      alignItems: "center",
+    },
+    jobToggleText: { fontSize: 10, fontWeight: "700" as const, letterSpacing: 0.5 },
+    jobDeleteBtn: {
+      padding: spacing.xs,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    jobAddBtn: {
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs - 2,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.accentCyan,
+      backgroundColor: `${colors.accentCyan}0f`,
+      alignItems: "center",
+    },
+    jobAddBtnText: { fontSize: 10, fontWeight: "700" as const, letterSpacing: 0.5, color: colors.accentCyan },
+    btnDisabled: { opacity: 0.5 },
+
+    // Logout / Delete
+    logoutButton: {
+      backgroundColor: `${colors.danger}1e`,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: `${colors.danger}59`,
+      paddingVertical: spacing.md,
+      alignItems: "center",
+      marginTop: spacing.sm,
+    },
+    logoutText: { ...typography.label, color: colors.danger, fontSize: 13 },
+    deleteAccountButton: {
+      borderRadius: radius.md,
+      paddingVertical: spacing.md,
+      alignItems: "center",
+      marginTop: spacing.sm,
+    },
+    deleteAccountText: { ...typography.label, color: colors.textMuted, fontSize: 11 },
+
+    // Modals
+    overlay: {
+      flex: 1,
+      backgroundColor: colors.overlay,
+    },
+    modalWrapper: { justifyContent: "flex-end" },
+    sheet: {
+      backgroundColor: colors.surface,
+      borderTopLeftRadius: radius.xl,
+      borderTopRightRadius: radius.xl,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: spacing.lg,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.xxl,
+    },
+    sheetHandle: {
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: colors.border,
+      alignSelf: "center",
+      marginBottom: spacing.lg,
+    },
+    sheetTitle: {
+      ...typography.label,
+      color: colors.accent,
+      marginBottom: spacing.lg,
+    },
+    fieldLabel: {
+      ...typography.label,
+      color: colors.textMuted,
+      marginBottom: spacing.sm,
+      marginTop: spacing.xs,
+    },
+    fieldHint: {
+      ...typography.caption,
+      color: colors.textMuted,
+      opacity: 0.7,
+      marginTop: -spacing.sm,
+      marginBottom: spacing.sm,
+    },
+    input: {
+      backgroundColor: colors.surfaceDark,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.borderDark,
+      color: colors.textPrimary,
+      ...typography.body,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      marginBottom: spacing.md,
+    },
+    inputMultiline: { height: 72, textAlignVertical: "top" },
+    formError: { ...typography.caption, color: colors.danger, marginBottom: spacing.sm },
+    sheetActions: {
+      flexDirection: "row",
+      gap: spacing.sm,
+      marginTop: spacing.sm,
+    },
+    cancelButton: {
+      flex: 1,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingVertical: spacing.sm,
+      alignItems: "center",
+    },
+    cancelButtonText: { ...typography.label, color: colors.textMuted, fontSize: 12 },
+    createButton: {
+      flex: 1,
+      backgroundColor: colors.accentCyan,
+      borderRadius: radius.sm,
+      paddingVertical: spacing.sm,
+      alignItems: "center",
+    },
+    createButtonText: {
+      ...typography.label,
+      color: colors.background,
+      fontSize: 12,
+      fontWeight: "700" as const,
+    },
+
+    // User ID modal
+    userIdRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.sm,
+      marginBottom: spacing.xs,
+    },
+    userIdAt: {
+      ...typography.body,
+      color: colors.accentCyan,
+      fontWeight: "700" as const,
+      fontSize: 18,
+    },
+    userIdInput: {
+      flex: 1,
+      marginBottom: 0,
+    },
+    checkButton: {
+      backgroundColor: colors.accent,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: radius.sm,
+      alignItems: "center",
+      minWidth: 64,
+    },
+    checkButtonText: { ...typography.label, color: colors.textPrimary, fontSize: 10 },
+
+    // Life area chips
+    lifeAreaGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: spacing.sm,
+      marginBottom: spacing.lg,
+    },
+    lifeAreaChip: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: 6,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceDark,
+    },
+    lifeAreaChipActive: {
+      borderColor: colors.accentCyan,
+      backgroundColor: `${colors.accentCyan}1a`,
+    },
+    lifeAreaText: {
+      ...typography.label,
+      color: colors.textMuted,
+      fontSize: 11,
+    },
+    lifeAreaTextActive: { color: colors.accentCyan },
+  });
 }

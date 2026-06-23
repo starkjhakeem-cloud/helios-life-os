@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "dev-secret-change-in-production"
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 60
+    jwt_refresh_token_expire_days: int = 30
 
     # AI provider: "mock" (default), "openai", or "anthropic"
     ai_provider: str = "mock"

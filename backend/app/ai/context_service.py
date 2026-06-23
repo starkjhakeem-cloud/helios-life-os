@@ -29,6 +29,8 @@ from app.models.email import EmailMessage
 from app.models.goal import Goal
 from app.models.memory import AIMemory
 from app.models.task import Task
+from app.models.user_preferences import UserPreferences
+from app.models.user_profile import UserProfile
 
 
 # ── Scope ─────────────────────────────────────────────────────────────────────
@@ -109,6 +111,7 @@ def build_context(
     db: Session,
     *,
     user_name: str | None = None,
+    display_name: str | None = None,
 ) -> ContextResult:
     """
     Assemble a ContextResult for the given scope and user.
@@ -122,7 +125,7 @@ def build_context(
     sources: list[str] = []
 
     for name in section_names:
-        text, label = _call_section(name, user_id=user_id, db=db, user_name=user_name)
+        text, label = _call_section(name, user_id=user_id, db=db, user_name=user_name, display_name=display_name)
         if text:
             parts.append(text)
             sources.append(label)
@@ -138,10 +141,11 @@ def _call_section(
     user_id: str,
     db: Session,
     user_name: str | None,
+    display_name: str | None = None,
 ) -> tuple[str | None, str]:
     """Dispatch section name → builder. Returns (text | None, source_label)."""
     match name:
-        case "user_profile":  return _section_user_profile(user_name)
+        case "user_profile":  return _section_user_profile(user_name, user_id, db, display_name=display_name)
         case "goals":         return _section_goals(user_id, db)
         case "tasks":         return _section_tasks(user_id, db)
         case "memories":      return _section_memories(user_id, db)
@@ -154,10 +158,61 @@ def _call_section(
 
 # ── Section builders ──────────────────────────────────────────────────────────
 
-def _section_user_profile(user_name: str | None) -> tuple[str | None, str]:
-    if not user_name:
+def _section_user_profile(
+    user_name: str | None,
+    user_id: str,
+    db: Session,
+    *,
+    display_name: str | None = None,
+) -> tuple[str | None, str]:
+    import json as _json
+
+    prefs = db.execute(
+        select(UserPreferences).where(UserPreferences.user_id == user_id)
+    ).scalar_one_or_none()
+
+    profile = db.execute(
+        select(UserProfile).where(UserProfile.user_id == user_id)
+    ).scalar_one_or_none()
+
+    resolved_name = (
+        (prefs.preferred_name if prefs and prefs.preferred_name else None)
+        or display_name
+        or (profile.display_name if profile and profile.display_name else None)
+        or user_name
+    )
+    if not resolved_name:
         return None, "user_profile"
-    return f"OPERATOR: {user_name}", "user_profile"
+
+    lines = [f"OPERATOR: {resolved_name}"]
+
+    # Location context — prefer personalization primary_location, fall back to UI location
+    if prefs:
+        loc = prefs.primary_location or prefs.location
+        if loc:
+            lines.append(f"LOCATION: {loc}")
+        if prefs.work_focus:
+            lines.append(f"WORK FOCUS: {prefs.work_focus}")
+        if prefs.daily_brief_time:
+            lines.append(f"DAILY BRIEF TIME: {prefs.daily_brief_time}")
+        if prefs.assistant_tone and prefs.assistant_tone != "balanced":
+            lines.append(f"PREFERRED TONE: {prefs.assistant_tone}")
+        try:
+            areas = _json.loads(prefs.important_life_areas) if prefs.important_life_areas else []
+        except (ValueError, TypeError):
+            areas = []
+        if areas:
+            lines.append(f"IMPORTANT LIFE AREAS: {', '.join(areas)}")
+
+    if profile and profile.timezone:
+        lines.append(f"TIMEZONE: {profile.timezone}")
+    if profile and profile.city:
+        city_state = profile.city
+        if profile.state:
+            city_state += f", {profile.state}"
+        lines.append(f"CITY: {city_state}")
+
+    return "\n".join(lines), "user_profile"
 
 
 def _section_goals(user_id: str, db: Session) -> tuple[str | None, str]:

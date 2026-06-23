@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { useCurrentDateTime } from "../../hooks/useCurrentDateTime";
 import {
   Animated,
   View,
@@ -9,6 +10,8 @@ import {
   RefreshControl,
   TouchableOpacity,
   Alert,
+  AppState,
+  type AppStateStatus,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,7 +20,10 @@ import * as Haptics from "expo-haptics";
 
 import { spacing, radius, typography, type ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
-import { useAuthStore, useAutonomyStore, useNotificationsStore, useBackgroundJobsStore } from "../../store";
+import {
+  useAuthStore, useAutonomyStore, useNotificationsStore, useBackgroundJobsStore,
+  useGoalsStore, useTasksStore, useConversationStore,
+} from "../../store";
 import type {
   AutonomyAuditLogEntry,
   AutonomyExecuteResult,
@@ -28,11 +34,11 @@ import type {
   BackgroundJobTriggerResult,
   DailyPlan,
   FocusBlock,
-  PriorityTask,
-  QueueStatus,
   RiskLevel,
   SuggestionItem,
 } from "../../store";
+import type { Goal } from "../../services/goalsService";
+import type { Task } from "../../services/tasksService";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -60,9 +66,6 @@ const ACTION_DURATION: Record<string, string> = {
 function getEnergyColors(c: ThemeColors): Record<string, string> {
   return { high: c.accent, medium: c.warning, low: c.textMuted };
 }
-function getPriorityColors(c: ThemeColors): Record<string, string> {
-  return { critical: c.danger, high: c.warning, medium: c.accentCyan, low: c.textMuted };
-}
 function getRiskColors(c: ThemeColors): Record<string, string> {
   return { low: c.success, medium: c.warning, high: c.danger };
 }
@@ -82,6 +85,239 @@ function agentLabel(name: string): string {
   return AGENT_LABELS[name] ?? name.replace(/_/g, " ").toUpperCase();
 }
 
+// ── Local recommendation fallback ─────────────────────────────────────────────
+
+type LocalRecommendation = {
+  id: string;
+  title: string;
+  subtitle: string;
+  icon: Parameters<typeof SymbolView>[0]["name"];
+  priority: "high" | "medium" | "low";
+};
+
+function generateLocalRecommendations(opts: {
+  unreadCount: number;
+  pendingCount: number;
+  hasDailyPlan: boolean;
+  goals: Goal[];
+  tasks: Task[];
+  bgJobs: BackgroundJob[];
+}): LocalRecommendation[] {
+  const { unreadCount, pendingCount, hasDailyPlan, goals, tasks, bgJobs } = opts;
+  const recs: LocalRecommendation[] = [];
+
+  const failedJob = bgJobs.find((j) => j.status === "failed");
+  if (failedJob) {
+    recs.push({
+      id: "local_job_failed",
+      title: `Investigate failed job: ${JOB_LABELS[failedJob.job_type] ?? failedJob.job_type}`,
+      subtitle: "A background service needs your attention",
+      icon: "exclamationmark.triangle.fill",
+      priority: "high",
+    });
+  }
+
+  if (pendingCount > 0) {
+    recs.push({
+      id: "local_pending",
+      title: `Review ${pendingCount} suggestion${pendingCount === 1 ? "" : "s"}`,
+      subtitle: "HELIOS is waiting for your approval before proceeding",
+      icon: "tray.full.fill",
+      priority: "high",
+    });
+  }
+
+  if (unreadCount > 0) {
+    recs.push({
+      id: "local_unread",
+      title: `Review ${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}`,
+      subtitle: "Stay informed on recent HELIOS activity",
+      icon: "bell.badge.fill",
+      priority: "medium",
+    });
+  }
+
+  if (!hasDailyPlan) {
+    recs.push({
+      id: "local_plan",
+      title: "Generate today's plan",
+      subtitle: "HELIOS will intelligently organize your day",
+      icon: "calendar.badge.clock",
+      priority: "medium",
+    });
+  }
+
+  const activeTask = tasks.find((t) => t.status === "in_progress");
+  if (activeTask) {
+    recs.push({
+      id: "local_active_task",
+      title: `Continue: ${activeTask.title}`,
+      subtitle: "You have an in-progress task awaiting action",
+      icon: "arrow.right.circle.fill",
+      priority: "medium",
+    });
+  } else {
+    const nextTask = tasks.find((t) => t.status === "todo" || t.status === "pending");
+    if (nextTask) {
+      recs.push({
+        id: "local_next_task",
+        title: `Start: ${nextTask.title}`,
+        subtitle: `${tasks.filter((t) => t.status === "todo" || t.status === "pending").length} tasks ready to begin`,
+        icon: "checkmark.circle",
+        priority: "low",
+      });
+    }
+  }
+
+  const latestGoal = goals[0];
+  if (latestGoal) {
+    recs.push({
+      id: "local_goal",
+      title: `Continue milestone: ${latestGoal.title}`,
+      subtitle: "Review your goal progress and next steps",
+      icon: "target",
+      priority: "low",
+    });
+  }
+
+  return recs.slice(0, 5);
+}
+
+// ── Job run stages ─────────────────────────────────────────────────────────────
+
+const JOB_RUN_STAGES = [
+  "Connecting…",
+  "Loading context…",
+  "Analyzing goals…",
+  "Generating output…",
+  "Saving results…",
+];
+
+// ── Shared time formatter ─────────────────────────────────────────────────────
+
+function formatRelativeTime(iso: string, now: Date): string {
+  try {
+    const d = new Date(iso);
+    const timeStr = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    const isToday =
+      d.getDate() === now.getDate() &&
+      d.getMonth() === now.getMonth() &&
+      d.getFullYear() === now.getFullYear();
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday =
+      d.getDate() === yesterday.getDate() &&
+      d.getMonth() === yesterday.getMonth() &&
+      d.getFullYear() === yesterday.getFullYear();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const isTomorrow =
+      d.getDate() === tomorrow.getDate() &&
+      d.getMonth() === tomorrow.getMonth() &&
+      d.getFullYear() === tomorrow.getFullYear();
+    if (isToday)     return `Today • ${timeStr}`;
+    if (isTomorrow)  return `Tomorrow • ${timeStr}`;
+    if (isYesterday) return `Yesterday • ${timeStr}`;
+    return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} • ${timeStr}`;
+  } catch {
+    return iso;
+  }
+}
+
+// ── Error helpers ──────────────────────────────────────────────────────────────
+
+function mapToFriendlyError(raw: string): string {
+  const lower = raw.toLowerCase();
+  if (lower.includes("internal server error") || lower.includes("500")) {
+    return "HELIOS couldn't reach the service. This is a temporary issue.";
+  }
+  if (lower.includes("network") || lower.includes("timeout") || lower.includes("fetch")) {
+    return "Network unavailable. Check your connection and try again.";
+  }
+  if (lower.includes("unavailable") || lower.includes("503")) {
+    return "Service temporarily unavailable. We'll retry automatically.";
+  }
+  if (lower.includes("not found") || lower.includes("404")) {
+    return "The requested resource could not be found.";
+  }
+  if (lower.includes("something went wrong")) {
+    return "An unexpected error occurred. Please try again.";
+  }
+  return raw;
+}
+
+type ErrorCardProps = {
+  title?: string;
+  message: string;
+  onRetry?: () => void;
+  endpoint?: string;
+};
+
+function ErrorCard({ title = "Something went wrong", message, onRetry, endpoint }: ErrorCardProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const [showDetails, setShowDetails] = useState(false);
+  const friendlyMessage = mapToFriendlyError(message);
+
+  return (
+    <View style={styles.errorCard}>
+      <View style={styles.errorCardTop}>
+        <View style={styles.errorCardIconWrap}>
+          <SymbolView name="exclamationmark.triangle.fill" size={15} tintColor={colors.danger} resizeMode="scaleAspectFit" />
+        </View>
+        <View style={styles.errorCardBody}>
+          <Text style={styles.errorCardTitle}>{title}</Text>
+          <Text style={styles.errorCardMessage}>{friendlyMessage}</Text>
+        </View>
+        {onRetry ? (
+          <TouchableOpacity
+            style={styles.errorRetryBtn}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onRetry(); }}
+            activeOpacity={0.75}
+          >
+            <Text style={styles.errorRetryText}>Retry</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+      {endpoint ? (
+        <TouchableOpacity
+          onPress={() => setShowDetails((v) => !v)}
+          style={styles.errorDetailsToggle}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.errorDetailsToggleText}>
+            {showDetails ? "Hide details" : "View details"}
+          </Text>
+          <SymbolView
+            name={showDetails ? "chevron.up" : "chevron.down"}
+            size={9}
+            tintColor={colors.textMuted}
+            resizeMode="scaleAspectFit"
+          />
+        </TouchableOpacity>
+      ) : null}
+      {endpoint && showDetails ? (
+        <View style={styles.errorDetailsBox}>
+          <Text style={styles.errorDetailRow}>
+            <Text style={styles.errorDetailKey}>Timestamp  </Text>
+            {new Date().toISOString()}
+          </Text>
+          {endpoint ? (
+            <Text style={styles.errorDetailRow}>
+              <Text style={styles.errorDetailKey}>Endpoint   </Text>
+              {endpoint}
+            </Text>
+          ) : null}
+          <Text style={styles.errorDetailRow}>
+            <Text style={styles.errorDetailKey}>Detail     </Text>
+            {message}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 // ── Shared badge ──────────────────────────────────────────────────────────────
 
 type BadgeProps = { label: string; color: string };
@@ -96,123 +332,111 @@ function Badge({ label, color }: BadgeProps) {
   );
 }
 
-// ── Today's Mission card ──────────────────────────────────────────────────────
-
-type TodaysMissionProps = {
-  suggestion: SuggestionItem | null;
-  anim: Animated.Value;
-  onStartSession: () => void;
-};
-
-function TodaysMissionCard({ suggestion, anim, onStartSession }: TodaysMissionProps) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => createStyles(colors), [colors]);
-
-  if (!suggestion) return null;
-
-  const riskColor =
-    suggestion.risk_level === "high"   ? colors.danger :
-    suggestion.risk_level === "medium" ? colors.warning : colors.accentCyan;
-  const priorityLabel =
-    suggestion.risk_level === "high"   ? "HIGH PRIORITY" :
-    suggestion.risk_level === "medium" ? "MEDIUM PRIORITY" : "STANDARD";
-  const duration = ACTION_DURATION[suggestion.suggested_action_type] ?? "~20 min";
-
-  const slideStyle = {
-    opacity: anim,
-    transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
-  };
-
-  return (
-    <Animated.View style={[styles.missionCard, slideStyle]}>
-      <View style={styles.missionAccentBar} />
-      <View style={styles.missionContent}>
-        <View style={styles.missionHeader}>
-          <View style={styles.missionHeaderLeft}>
-            <SymbolView name="sparkles" size={12} tintColor={colors.accent} resizeMode="scaleAspectFit" />
-            <Text style={styles.missionLabel}>TODAY'S MISSION</Text>
-          </View>
-          <View style={[styles.missionPriorityBadge, { borderColor: `${riskColor}55`, backgroundColor: `${riskColor}15` }]}>
-            <Text style={[styles.missionPriorityText, { color: riskColor }]}>{priorityLabel}</Text>
-          </View>
-        </View>
-
-        <Text style={styles.missionTitle} numberOfLines={2}>{suggestion.title}</Text>
-        <Text style={styles.missionDescription} numberOfLines={2}>{suggestion.description}</Text>
-
-        <View style={styles.missionFooter}>
-          <View style={styles.missionMeta}>
-            <SymbolView name="clock" size={11} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
-            <Text style={styles.missionMetaText}>{duration}</Text>
-            <View style={styles.missionMetaDot} />
-            <Text style={styles.missionMetaText}>{agentLabel(suggestion.source_agent)}</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.missionStartBtn}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              onStartSession();
-            }}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.missionStartBtnText}>Start Session</Text>
-            <SymbolView name="arrow.right" size={11} tintColor={colors.background} resizeMode="scaleAspectFit" />
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Animated.View>
-  );
-}
-
 // ── Job card ──────────────────────────────────────────────────────────────────
 
 type JobCardProps = {
   job: BackgroundJob;
   isMutating: boolean;
   onTrigger: (id: string) => Promise<BackgroundJobTriggerResult | null>;
+  now: Date;
 };
 
-function JobCard({ job, isMutating, onTrigger }: JobCardProps) {
+function JobCard({ job, isMutating, onTrigger, now }: JobCardProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const [runPhase, setRunPhase] = useState<"idle" | "running" | "done">("idle");
+  const [runPhase, setRunPhase] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [runStage, setRunStage] = useState(0);
+  const [runAttempt, setRunAttempt] = useState(0);
+  const [runError, setRunError] = useState<string | null>(null);
+  const stageIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (stageIntervalRef.current) clearInterval(stageIntervalRef.current);
+    };
+  }, []);
+
+  // DELAYED: job is enabled + idle + its next_run_at is already in the past
+  const isDelayed =
+    job.enabled &&
+    job.status === "idle" &&
+    !!job.next_run_at &&
+    new Date(job.next_run_at) < now;
 
   const healthStatus =
     job.status === "failed"  ? "FAILED"   :
     !job.enabled             ? "DISABLED" :
-    job.status === "running" ? "RUNNING"  : "HEALTHY";
+    job.status === "running" ? "RUNNING"  :
+    isDelayed                ? "DELAYED"  : "HEALTHY";
+
   const healthColor =
     job.status === "failed"  ? colors.danger  :
     !job.enabled             ? colors.textMuted :
-    job.status === "running" ? colors.warning : colors.success;
+    job.status === "running" ? colors.warning :
+    isDelayed                ? colors.warning  : colors.success;
 
-  const formatTime = (iso: string | null) => {
-    if (!iso) return "Never";
-    return new Date(iso).toLocaleString("en-US", {
-      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-    });
-  };
+  const formatJobTime = (iso: string | null): string =>
+    iso ? formatRelativeTime(iso, now) : "—";
 
   const handleRun = async () => {
     if (isMutating || runPhase === "running") return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setRunPhase("running");
-    const result = await onTrigger(job.id);
+    setRunStage(0);
+    setRunError(null);
+    setRunAttempt(1);
+
+    // Advance through visual stages
+    let stageIdx = 0;
+    stageIntervalRef.current = setInterval(() => {
+      stageIdx = Math.min(stageIdx + 1, JOB_RUN_STAGES.length - 2);
+      setRunStage(stageIdx);
+    }, 750);
+
+    // 3-attempt retry with exponential backoff
+    let result: BackgroundJobTriggerResult | null = null;
+    const RETRY_DELAYS_MS = [0, 1200, 2400];
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        setRunAttempt(attempt + 1);
+        await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+      }
+      result = await onTrigger(job.id);
+      if (result !== null) break;
+    }
+
+    if (stageIntervalRef.current) {
+      clearInterval(stageIntervalRef.current);
+      stageIntervalRef.current = null;
+    }
+
+    if (result === null) {
+      setRunPhase("error");
+      setRunAttempt(0);
+      setRunError("Service unavailable after 3 attempts. Please try again later.");
+      setTimeout(() => { setRunPhase("idle"); setRunError(null); }, 5000);
+      return;
+    }
+
+    // Success: show final stage briefly, then "done"
+    setRunStage(JOB_RUN_STAGES.length - 1);
+    setRunAttempt(0);
+    await new Promise((r) => setTimeout(r, 400));
     setRunPhase("done");
     setTimeout(() => setRunPhase("idle"), 2500);
-    if (result) Alert.alert("Job Triggered", result.result_summary, [{ text: "OK" }]);
-  };
-
-  const handleCardPress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Alert.alert("Job Triggered", result.result_summary, [{ text: "OK" }]);
   };
 
   const iconName = JOB_ICONS[job.job_type] ?? "gearshape.fill";
+  const runStageLabel =
+    runAttempt > 1
+      ? `Retrying (${runAttempt}/3)…`
+      : JOB_RUN_STAGES[runStage] ?? "Running…";
 
   return (
     <TouchableOpacity
       style={styles.jobCard}
-      onPress={handleCardPress}
+      onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
       activeOpacity={0.88}
     >
       {/* Header row */}
@@ -236,14 +460,27 @@ function JobCard({ job, isMutating, onTrigger }: JobCardProps) {
       <View style={styles.jobMetaRow}>
         <View style={styles.jobMetaItem}>
           <Text style={styles.jobMetaLabel}>LAST RUN</Text>
-          <Text style={styles.jobMetaValue}>{formatTime(job.last_run_at)}</Text>
+          <Text style={styles.jobMetaValue}>{formatJobTime(job.last_run_at)}</Text>
         </View>
         <View style={styles.jobMetaDivider} />
         <View style={styles.jobMetaItem}>
           <Text style={styles.jobMetaLabel}>NEXT RUN</Text>
-          <Text style={styles.jobMetaValue}>{formatTime(job.next_run_at)}</Text>
+          <Text style={[
+            styles.jobMetaValue,
+            isDelayed && { color: colors.warning },
+          ]}>{formatJobTime(job.next_run_at)}</Text>
         </View>
       </View>
+
+      {/* Last error row — shown when job is in failed state or after a failed manual run */}
+      {(job.status === "failed" || runPhase === "error") ? (
+        <View style={styles.jobErrorRow}>
+          <SymbolView name="exclamationmark.circle.fill" size={11} tintColor={colors.danger} resizeMode="scaleAspectFit" />
+          <Text style={styles.jobErrorText} numberOfLines={2}>
+            {runError ?? "Last run failed. Tap Run Now to retry."}
+          </Text>
+        </View>
+      ) : null}
 
       {/* Run button */}
       {job.enabled ? (
@@ -252,6 +489,7 @@ function JobCard({ job, isMutating, onTrigger }: JobCardProps) {
             styles.jobRunBtn,
             runPhase === "running" && styles.jobRunBtnRunning,
             runPhase === "done"    && styles.jobRunBtnDone,
+            runPhase === "error"   && styles.jobRunBtnError,
             (isMutating || runPhase === "running") && styles.btnDisabled,
           ]}
           onPress={handleRun}
@@ -261,12 +499,19 @@ function JobCard({ job, isMutating, onTrigger }: JobCardProps) {
           {runPhase === "running" ? (
             <>
               <ActivityIndicator size="small" color={colors.warning} style={{ width: 12, height: 12 }} />
-              <Text style={[styles.jobRunBtnText, { color: colors.warning }]}>RUNNING…</Text>
+              <Text style={[styles.jobRunBtnText, { color: colors.warning }]} numberOfLines={1}>
+                {runStageLabel}
+              </Text>
             </>
           ) : runPhase === "done" ? (
             <>
               <SymbolView name="checkmark.circle.fill" size={12} tintColor={colors.success} resizeMode="scaleAspectFit" />
               <Text style={[styles.jobRunBtnText, { color: colors.success }]}>COMPLETED</Text>
+            </>
+          ) : runPhase === "error" ? (
+            <>
+              <SymbolView name="exclamationmark.circle" size={12} tintColor={colors.danger} resizeMode="scaleAspectFit" />
+              <Text style={[styles.jobRunBtnText, { color: colors.danger }]}>FAILED — TAP TO RETRY</Text>
             </>
           ) : (
             <>
@@ -292,57 +537,126 @@ type SuggestionCardProps = {
   isQueued: boolean;
   isMutating: boolean;
   onAddToQueue: (suggestion: SuggestionItem) => void;
+  onRunNow: (suggestion: SuggestionItem) => Promise<AutonomyExecuteResult | null>;
 };
 
-function SuggestionCard({ item, isQueued, isMutating, onAddToQueue }: SuggestionCardProps) {
+function getRecommendationDetails(item: SuggestionItem) {
+  const confidence =
+    typeof item.payload_preview.confidence === "number"
+      ? Math.round(item.payload_preview.confidence * (item.payload_preview.confidence <= 1 ? 100 : 1))
+      : item.risk_level === "low" ? 94 : item.risk_level === "medium" ? 88 : 82;
+  const expectedBenefit =
+    typeof item.payload_preview.expected_benefit === "string"
+      ? item.payload_preview.expected_benefit
+      : item.reason;
+  return {
+    confidence: Math.max(0, Math.min(100, confidence)),
+    expectedBenefit,
+    duration: ACTION_DURATION[item.suggested_action_type] ?? "~20 min",
+  };
+}
+
+function SuggestionCard({ item, isQueued, isMutating, onAddToQueue, onRunNow }: SuggestionCardProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const handleAdd = () => {
+  const [isRunning, setIsRunning] = useState(false);
+  const details = getRecommendationDetails(item);
+  const priorityColor = getRiskColors(colors)[item.risk_level] ?? colors.textMuted;
+
+  const handleReview = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Alert.alert(
-      "Add to Review Queue",
-      `Queue "${item.title}" for review?\n\nYou can approve and execute it from the queue below.`,
+      item.title,
+      `${item.description}\n\nExpected benefit\n${details.expectedBenefit}\n\nEstimated time: ${details.duration}\nConfidence: ${details.confidence}%`,
+      [{ text: "Done" }],
+    );
+  };
+
+  const handleRunNow = () => {
+    Alert.alert(
+      "Run this action now?",
+      `HELIOS will execute “${item.title}” immediately after your confirmation.`,
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Add to Queue", onPress: () => onAddToQueue(item) },
+        {
+          text: "Run Now",
+          onPress: async () => {
+            setIsRunning(true);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            const result = await onRunNow(item);
+            setIsRunning(false);
+            if (result) Alert.alert("Completed", result.message, [{ text: "Done" }]);
+          },
+        },
       ],
     );
   };
 
   return (
-    <View style={[styles.card, isQueued && styles.cardQueued]}>
-      <View style={styles.cardHeader}>
-        <View style={styles.cardMeta}>
-          <Badge label={agentLabel(item.source_agent)} color={colors.accent} />
-          <Badge label={item.risk_level.toUpperCase()} color={getRiskColors(colors)[item.risk_level] ?? colors.textMuted} />
+    <View style={[styles.recommendationCard, isQueued && styles.cardQueued]}>
+      <View style={styles.recommendationGlow} />
+      <View style={styles.recommendationHeader}>
+        <View style={[styles.priorityPill, { backgroundColor: `${priorityColor}18`, borderColor: `${priorityColor}55` }]}>
+          <View style={[styles.priorityDot, { backgroundColor: priorityColor }]} />
+          <Text style={[styles.priorityPillText, { color: priorityColor }]}>
+            {item.risk_level.toUpperCase()}
+          </Text>
         </View>
-        <Badge
-          label={item.suggested_action_type.replace(/_/g, " ").toUpperCase()}
-          color={colors.accentCyan}
-        />
+        <View style={styles.confidenceWrap}>
+          <Text style={styles.recommendationMetaLabel}>Confidence</Text>
+          <Text style={styles.confidenceValue}>{details.confidence}%</Text>
+        </View>
       </View>
 
-      <Text style={styles.cardTitle}>{item.title}</Text>
-      <Text style={styles.cardDescription}>{item.description}</Text>
+      <Text style={styles.recommendationTitle}>{item.title}</Text>
+      <Text style={styles.recommendationDescription}>{item.description}</Text>
 
-      <View style={styles.reasonBox}>
-        <Text style={styles.reasonLabel}>HELIOS INSIGHT</Text>
-        <Text style={styles.reasonText}>{item.reason}</Text>
+      <View style={styles.recommendationDetails}>
+        <View style={styles.benefitBlock}>
+          <Text style={styles.recommendationMetaLabel}>Expected benefit</Text>
+          <Text style={styles.benefitText}>{details.expectedBenefit}</Text>
+        </View>
+        <View style={styles.durationBlock}>
+          <SymbolView name="clock" size={13} tintColor={colors.accentCyan} resizeMode="scaleAspectFit" />
+          <View>
+            <Text style={styles.recommendationMetaLabel}>Estimated time</Text>
+            <Text style={styles.durationValue}>{details.duration}</Text>
+          </View>
+        </View>
       </View>
 
       {isQueued ? (
         <View style={styles.queuedRow}>
           <SymbolView name="checkmark.circle.fill" size={14} tintColor={colors.success} resizeMode="scaleAspectFit" />
-          <Text style={styles.queuedText}>Added to Review Queue</Text>
+          <Text style={styles.queuedText}>Waiting for your review</Text>
         </View>
       ) : (
-        <TouchableOpacity
-          style={[styles.actionBtn, styles.addToQueueBtn, isMutating && styles.btnDisabled]}
-          onPress={handleAdd}
-          disabled={isMutating}
-          activeOpacity={0.75}
-        >
-          <Text style={styles.addToQueueBtnText}>Add to Queue</Text>
-        </TouchableOpacity>
+        <View style={styles.recommendationActions}>
+          <TouchableOpacity style={styles.secondaryActionBtn} onPress={handleReview} activeOpacity={0.75}>
+            <Text style={styles.secondaryActionText}>Review</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.runNowBtn, (isMutating || isRunning) && styles.btnDisabled]}
+            onPress={handleRunNow}
+            disabled={isMutating || isRunning}
+            activeOpacity={0.75}
+          >
+            {isRunning ? (
+              <ActivityIndicator color={colors.background} size="small" />
+            ) : (
+              <SymbolView name="bolt.fill" size={12} tintColor={colors.background} resizeMode="scaleAspectFit" />
+            )}
+            <Text style={styles.runNowText}>{isRunning ? "Running" : "Run Now"}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.secondaryActionBtn, isMutating && styles.btnDisabled]}
+            onPress={() => onAddToQueue(item)}
+            disabled={isMutating}
+            activeOpacity={0.75}
+          >
+            <Text style={styles.secondaryActionText}>Ask First</Text>
+          </TouchableOpacity>
+        </View>
       )}
     </View>
   );
@@ -371,7 +685,7 @@ function QueueCard({
   const handleApprove = () => {
     Alert.alert(
       "Approve Action",
-      `Approve "${item.title}"?\n\nNo automatic execution will occur.`,
+      `Approve "${item.title}"?\n\nHELIOS will wait for your next step.`,
       [
         { text: "Cancel", style: "cancel" },
         { text: "Approve", onPress: () => onApprove(item.id) },
@@ -464,7 +778,7 @@ function QueueCard({
         isBlocked ? (
           <View style={styles.blockedRow}>
             <SymbolView name="lock.fill" size={12} tintColor={colors.danger} resizeMode="scaleAspectFit" />
-            <Text style={styles.blockedText}>BLOCKED BY RULE — update rules to allow execution</Text>
+            <Text style={styles.blockedText}>Needs a permission update before HELIOS can continue</Text>
           </View>
         ) : isExecuting ? (
           <View style={styles.executingRow}>
@@ -486,182 +800,473 @@ function QueueCard({
   );
 }
 
-// ── Daily plan section ────────────────────────────────────────────────────────
+// ── Compact plan card ─────────────────────────────────────────────────────────
 
-type DailyPlanSectionProps = {
+type CompactPlanCardProps = {
   plan: DailyPlan | null;
   isLoading: boolean;
   error: string | null;
-  isMutating: boolean;
-  queuedIds: string[];
-  onGenerate: () => void;
-  onAddToQueue: (item: SuggestionItem) => void;
+  now: Date;
+  onGenerate: () => Promise<DailyPlan | null>;
 };
 
-function DailyPlanSection({
-  plan, isLoading, error, isMutating, queuedIds, onGenerate, onAddToQueue,
-}: DailyPlanSectionProps) {
+const PLAN_STAGES = [
+  "Connecting to HELIOS…",
+  "Loading your context…",
+  "Analyzing goals & tasks…",
+  "Reviewing your calendar…",
+  "Building your plan…",
+  "Saving results…",
+];
+
+function CompactPlanCard({ plan, isLoading, error, now, onGenerate }: CompactPlanCardProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const handleAdd = (item: SuggestionItem) => {
+  const [generationStep, setGenerationStep] = useState(0);
+  const [isOrchestrating, setIsOrchestrating] = useState(false);
+
+  const handleGenerate = async () => {
+    if (isLoading || isOrchestrating) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setGenerationStep(0);
+    setIsOrchestrating(true);
+    const interval = setInterval(
+      () => setGenerationStep((s) => Math.min(s + 1, PLAN_STAGES.length - 2)),
+      640,
+    );
+    await Promise.all([
+      onGenerate(),
+      new Promise((r) => setTimeout(r, 3500)),
+    ]);
+    clearInterval(interval);
+    setGenerationStep(PLAN_STAGES.length - 1);
+    setIsOrchestrating(false);
+  };
+
+  const effectiveLoading = isLoading || isOrchestrating;
+  const generatedStr = plan ? formatRelativeTime(plan.generated_at, now) : null;
+
+  return (
+    <View style={styles.compactPlanCard}>
+      <View style={styles.compactPlanHeader}>
+        <Text style={styles.sectionLabel}>{"TODAY'S PLAN"}</Text>
+        {plan && !effectiveLoading ? (
+          <TouchableOpacity
+            onPress={handleGenerate}
+            style={styles.compactPlanRefreshBtn}
+            activeOpacity={0.7}
+            accessibilityLabel="Refresh today's plan"
+          >
+            <SymbolView name="arrow.clockwise" size={13} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+            <Text style={styles.compactPlanRefreshText}>Refresh</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
+      {error ? (
+        <ErrorCard
+          title="Unable to generate today's plan"
+          message={error}
+          onRetry={handleGenerate}
+          endpoint="/api/v1/autonomy/daily-plan"
+        />
+      ) : effectiveLoading ? (
+        <View style={styles.compactPlanLoadingCard}>
+          <ActivityIndicator color={colors.accent} size="small" />
+          <View style={{ flex: 1, gap: 6 }}>
+            <Text style={styles.compactPlanLoadingLabel}>{PLAN_STAGES[generationStep]}</Text>
+            <View style={styles.generationProgress}>
+              {PLAN_STAGES.map((_, i) => (
+                <View
+                  key={i}
+                  style={[styles.generationProgressSegment, i <= generationStep && styles.generationProgressSegmentActive]}
+                />
+              ))}
+            </View>
+          </View>
+        </View>
+      ) : plan ? (
+        <View style={styles.compactPlanBody}>
+          <View style={styles.compactPlanTop}>
+            <View style={styles.livePlanPill}>
+              <View style={styles.livePlanDot} />
+              <Text style={styles.livePlanText}>PLAN READY</Text>
+            </View>
+            {generatedStr ? (
+              <Text style={styles.compactPlanGenTime}>Generated: {generatedStr}</Text>
+            ) : null}
+          </View>
+          <Text style={styles.compactPlanOverview} numberOfLines={3}>{plan.overview}</Text>
+          <View style={styles.compactPlanMetrics}>
+            <View style={styles.compactPlanMetric}>
+              <Text style={styles.compactPlanMetricValue}>{plan.focus_blocks.length}</Text>
+              <Text style={styles.compactPlanMetricLabel}>blocks</Text>
+            </View>
+            <View style={styles.compactPlanMetricDivider} />
+            <View style={styles.compactPlanMetric}>
+              <Text style={styles.compactPlanMetricValue}>{plan.priority_tasks.length}</Text>
+              <Text style={styles.compactPlanMetricLabel}>priorities</Text>
+            </View>
+            <View style={styles.compactPlanMetricDivider} />
+            <View style={styles.compactPlanMetric}>
+              <Text style={[styles.compactPlanMetricValue, plan.schedule_conflicts.length > 0 && { color: colors.warning }]}>
+                {plan.schedule_conflicts.length}
+              </Text>
+              <Text style={styles.compactPlanMetricLabel}>conflicts</Text>
+            </View>
+          </View>
+          {plan.schedule_conflicts.length > 0 ? (
+            <View style={styles.compactPlanConflict}>
+              <SymbolView name="exclamationmark.triangle.fill" size={12} tintColor={colors.warning} resizeMode="scaleAspectFit" />
+              <Text style={styles.compactPlanConflictText} numberOfLines={2}>{plan.schedule_conflicts[0]}</Text>
+            </View>
+          ) : null}
+        </View>
+      ) : (
+        <View style={styles.compactPlanEmpty}>
+          <SymbolView name="calendar.badge.clock" size={22} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+          <View style={{ flex: 1, gap: spacing.xs }}>
+            <Text style={styles.compactPlanEmptyTitle}>No plan yet.</Text>
+            <Text style={styles.compactPlanEmptyBody}>
+              Generate a plan and HELIOS will organize your goals, tasks, calendar, and reminders.
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.compactPlanGenBtn}
+            onPress={handleGenerate}
+            activeOpacity={0.8}
+          >
+            <SymbolView name="bolt.fill" size={11} tintColor={colors.background} resizeMode="scaleAspectFit" />
+            <Text style={styles.compactPlanGenBtnText}>Generate</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ── Quick actions row ─────────────────────────────────────────────────────────
+
+type QuickAction = {
+  id: string;
+  label: string;
+  icon: Parameters<typeof SymbolView>[0]["name"];
+  onPress: () => void;
+  badge?: number;
+};
+
+function QuickActionsRow({ actions }: { actions: QuickAction[] }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.quickActionsRow}
+    >
+      {actions.map((action) => (
+        <TouchableOpacity
+          key={action.id}
+          style={styles.quickActionChip}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            action.onPress();
+          }}
+          activeOpacity={0.72}
+        >
+          <SymbolView name={action.icon} size={12} tintColor={colors.textPrimary} resizeMode="scaleAspectFit" />
+          <Text style={styles.quickActionLabel}>{action.label}</Text>
+          {action.badge && action.badge > 0 ? (
+            <View style={styles.quickActionBadge}>
+              <Text style={styles.quickActionBadgeText}>{action.badge > 9 ? "9+" : action.badge}</Text>
+            </View>
+          ) : null}
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  );
+}
+
+// ── System status card ────────────────────────────────────────────────────────
+
+type SystemService = {
+  id: string;
+  label: string;
+  icon: Parameters<typeof SymbolView>[0]["name"];
+  statusText: string;
+  dotColor: string;
+  onPress?: () => void;
+};
+
+function SystemStatusCard({ services }: { services: SystemService[] }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  return (
+    <View style={styles.systemStatusCard}>
+      {services.map((svc, i) => (
+        <View key={svc.id}>
+          <TouchableOpacity
+            style={styles.serviceRow}
+            onPress={svc.onPress}
+            activeOpacity={svc.onPress ? 0.7 : 1}
+            disabled={!svc.onPress}
+          >
+            <View style={styles.serviceRowLeft}>
+              <SymbolView name={svc.icon} size={13} tintColor={svc.dotColor} resizeMode="scaleAspectFit" />
+              <Text style={styles.serviceLabel}>{svc.label}</Text>
+            </View>
+            <View style={styles.serviceStatusWrap}>
+              <View style={[styles.serviceStatusDot, { backgroundColor: svc.dotColor }]} />
+              <Text style={[styles.serviceStatusText, { color: svc.dotColor }]}>{svc.statusText}</Text>
+              {svc.onPress ? (
+                <SymbolView name="chevron.right" size={10} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+              ) : null}
+            </View>
+          </TouchableOpacity>
+          {i < services.length - 1 ? <View style={styles.serviceDivider} /> : null}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+// ── Recommendation list section ───────────────────────────────────────────────
+
+type RecommendationListSectionProps = {
+  suggestions: SuggestionItem[];
+  localFallback: LocalRecommendation[];
+  isLoading: boolean;
+  error: string | null;
+  isMutating: boolean;
+  onAddToQueue: (s: SuggestionItem) => void;
+  onRunNow: (s: SuggestionItem) => Promise<AutonomyExecuteResult | null>;
+  onRetry: () => void;
+};
+
+function RecommendationListSection({
+  suggestions, localFallback, isLoading, error, isMutating, onAddToQueue, onRunNow, onRetry,
+}: RecommendationListSectionProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
+  const handleAIRowPress = (item: SuggestionItem) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Alert.alert(
-      "Add to Queue",
-      `Add "${item.title}" to the autonomy queue for review?`,
+      item.title,
+      item.description,
       [
-        { text: "Cancel", style: "cancel" },
-        { text: "Add to Queue", onPress: () => onAddToQueue(item) },
+        { text: "Dismiss", style: "cancel" },
+        { text: "Ask First", onPress: () => onAddToQueue(item) },
+        {
+          text: "Run Now",
+          onPress: async () => {
+            const result = await onRunNow(item);
+            if (result) Alert.alert("Completed", result.message, [{ text: "Done" }]);
+          },
+        },
       ],
     );
   };
 
+  const showAI   = suggestions.length > 0;
+  const showLocal = !showAI && localFallback.length > 0;
+  const totalCount = showAI ? suggestions.length : localFallback.length;
+
   return (
-    <>
-      <View style={styles.planSectionHeader}>
-        <Text style={styles.sectionLabel}>TODAY'S EXECUTION PLAN</Text>
-        <TouchableOpacity
-          onPress={onGenerate}
-          disabled={isLoading}
-          activeOpacity={0.75}
-          style={[styles.generateBtn, isLoading && styles.btnDisabled]}
-        >
-          {isLoading ? (
-            <ActivityIndicator color={colors.accent} size="small" />
-          ) : (
-            <Text style={styles.generateBtnText}>
-              {plan ? "Regenerate Plan" : "Generate Today's Plan"}
-            </Text>
-          )}
-        </TouchableOpacity>
+    <View>
+      <View style={styles.sectionHeaderRow}>
+        <Text style={styles.sectionLabel}>HELIOS RECOMMENDATIONS</Text>
+        {totalCount > 0 ? (
+          <View style={styles.countPill}>
+            <Text style={styles.countPillText}>{totalCount}</Text>
+          </View>
+        ) : null}
       </View>
 
-      {error ? (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{error}</Text>
+      {isLoading ? (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={colors.accent} size="small" />
+          <Text style={styles.loadingText}>Scanning for recommendations…</Text>
         </View>
-      ) : !plan && !isLoading ? (
-        <View style={styles.emptyState}>
-          <SymbolView name="calendar.badge.clock" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
-          <Text style={styles.emptyText}>No execution plan yet.</Text>
-          <Text style={styles.emptySubtext}>
-            Tap "Generate Today's Plan" and HELIOS will build your full operational schedule.
-          </Text>
-        </View>
-      ) : plan ? (
+      ) : (
         <>
-          <View style={styles.planOverviewCard}>
-            <Text style={styles.planDate}>{plan.plan_date}</Text>
-            <Text style={styles.planOverview}>{plan.overview}</Text>
-          </View>
-
-          <Text style={styles.planSubLabel}>FOCUS BLOCKS</Text>
-          {plan.focus_blocks.map((block: FocusBlock, idx: number) => (
-            <View key={idx} style={styles.focusBlockRow}>
-              <View style={styles.focusBlockLeft}>
-                <Text style={styles.focusTimeRange}>{block.time_range}</Text>
-                <Text style={styles.focusActivity}>{block.activity}</Text>
-              </View>
-              <View style={[styles.energyDot, { backgroundColor: getEnergyColors(colors)[block.energy_level] ?? colors.textMuted }]} />
+          {/* Error notice (non-blocking — local fallback shown below) */}
+          {error ? (
+            <View style={styles.recommendationErrorNotice}>
+              <SymbolView name="wifi.slash" size={12} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+              <Text style={styles.recommendationErrorText}>
+                {"Couldn't reach the recommendation service. Showing local intelligence."}
+              </Text>
+              <TouchableOpacity onPress={onRetry} style={styles.recommendationErrorRetry}>
+                <Text style={styles.recommendationErrorRetryText}>Retry</Text>
+              </TouchableOpacity>
             </View>
-          ))}
+          ) : null}
 
-          <Text style={[styles.planSubLabel, { marginTop: spacing.md }]}>PRIORITY TASKS</Text>
-          {plan.priority_tasks.map((task: PriorityTask) => (
-            <View key={task.rank} style={styles.priorityTaskRow}>
-              <View style={styles.priorityTaskHeader}>
-                <Text style={styles.priorityRank}>#{task.rank}</Text>
-                <Badge
-                  label={task.priority.toUpperCase()}
-                  color={getPriorityColors(colors)[task.priority] ?? colors.textMuted}
-                />
-                <Text style={styles.priorityDuration}>{task.estimated_duration}</Text>
-              </View>
-              <Text style={styles.priorityTaskTitle}>{task.title}</Text>
-              <Text style={styles.priorityTaskReason}>{task.reason}</Text>
-            </View>
-          ))}
-
-          {plan.suggested_queue_items.length > 0 ? (
-            <>
-              <Text style={[styles.planSubLabel, { marginTop: spacing.md }]}>SUGGESTED ACTIONS</Text>
-              {plan.suggested_queue_items.map((item: SuggestionItem) => {
-                const isQueued = queuedIds.includes(item.id);
+          {/* AI suggestions */}
+          {showAI ? (
+            <View style={styles.recommendationListCard}>
+              {suggestions.map((item, i) => {
+                const dotColor = getRiskColors(colors)[item.risk_level] ?? colors.textMuted;
                 return (
-                  <View key={item.id} style={[styles.card, isQueued && styles.cardQueued]}>
-                    <View style={styles.cardHeader}>
-                      <View style={styles.cardMeta}>
-                        <Badge label={agentLabel(item.source_agent)} color={colors.accent} />
-                        <Badge label={item.risk_level.toUpperCase()} color={getRiskColors(colors)[item.risk_level] ?? colors.textMuted} />
+                  <View key={item.id}>
+                    <TouchableOpacity
+                      style={styles.recommendationListRow}
+                      onPress={() => handleAIRowPress(item)}
+                      activeOpacity={0.75}
+                      disabled={isMutating}
+                    >
+                      <View style={[styles.recommendationListDot, { backgroundColor: dotColor }]} />
+                      <Text style={styles.recommendationListName} numberOfLines={1}>{item.title}</Text>
+                      <View style={styles.recommendationListMeta}>
+                        <Text style={styles.recommendationListAgent}>{agentLabel(item.source_agent)}</Text>
+                        <SymbolView name="chevron.right" size={11} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
                       </View>
-                      <Badge label={item.suggested_action_type.replace(/_/g, " ").toUpperCase()} color={colors.accentCyan} />
-                    </View>
-                    <Text style={styles.cardTitle}>{item.title}</Text>
-                    <Text style={styles.cardDescription}>{item.description}</Text>
-                    <View style={styles.reasonBox}>
-                      <Text style={styles.reasonLabel}>WHY THIS IS SUGGESTED</Text>
-                      <Text style={styles.reasonText}>{item.reason}</Text>
-                    </View>
-                    {isQueued ? (
-                      <View style={styles.queuedRow}>
-                        <SymbolView name="checkmark.circle.fill" size={14} tintColor={colors.success} resizeMode="scaleAspectFit" />
-                        <Text style={styles.queuedText}>Added to Queue</Text>
-                      </View>
-                    ) : (
-                      <TouchableOpacity
-                        style={[styles.actionBtn, styles.addToQueueBtn, isMutating && styles.btnDisabled]}
-                        onPress={() => handleAdd(item)}
-                        disabled={isMutating}
-                        activeOpacity={0.75}
-                      >
-                        <Text style={styles.addToQueueBtnText}>Add to Queue</Text>
-                      </TouchableOpacity>
-                    )}
+                    </TouchableOpacity>
+                    {i < suggestions.length - 1 ? <View style={styles.recommendationListDivider} /> : null}
                   </View>
                 );
               })}
-            </>
-          ) : null}
-
-          {plan.risks.length > 0 ? (
-            <>
-              <Text style={[styles.planSubLabel, { marginTop: spacing.md }]}>RISKS</Text>
-              <View style={styles.planListCard}>
-                {plan.risks.map((risk, idx) => (
-                  <Text key={idx} style={styles.planListItem}>
-                    <Text style={styles.planBullet}>• </Text>{risk}
-                  </Text>
-                ))}
-              </View>
-            </>
-          ) : null}
-
-          {plan.recommended_agent_actions.length > 0 ? (
-            <>
-              <Text style={[styles.planSubLabel, { marginTop: spacing.md }]}>AGENT RECOMMENDATIONS</Text>
-              <View style={styles.planListCard}>
-                {plan.recommended_agent_actions.map((action, idx) => (
-                  <Text key={idx} style={styles.planListItem}>
-                    <Text style={styles.planBullet}>→ </Text>{action}
-                  </Text>
-                ))}
-              </View>
-            </>
-          ) : null}
-
-          {plan.schedule_conflicts.length > 0 ? (
-            <>
-              <Text style={[styles.planSubLabel, { marginTop: spacing.md }]}>SCHEDULE CONFLICTS</Text>
-              <View style={[styles.planListCard, styles.conflictCard]}>
-                {plan.schedule_conflicts.map((conflict, idx) => (
-                  <Text key={idx} style={[styles.planListItem, { color: colors.warning }]}>
-                    <Text style={{ color: colors.warning }}>⚠ </Text>{conflict}
-                  </Text>
-                ))}
-              </View>
-            </>
+            </View>
+          ) : showLocal ? (
+            /* Local HELIOS intelligence fallback */
+            <View style={styles.recommendationListCard}>
+              {localFallback.map((item, i) => {
+                const dotColor =
+                  item.priority === "high" ? colors.warning :
+                  item.priority === "medium" ? colors.accentCyan : colors.textMuted;
+                return (
+                  <View key={item.id}>
+                    <View style={styles.recommendationListRow}>
+                      <SymbolView name={item.icon} size={14} tintColor={dotColor} resizeMode="scaleAspectFit" />
+                      <View style={{ flex: 1, gap: 1 }}>
+                        <Text style={styles.recommendationListName} numberOfLines={1}>{item.title}</Text>
+                        <Text style={styles.recommendationListSubtitle} numberOfLines={1}>{item.subtitle}</Text>
+                      </View>
+                      <SymbolView name="chevron.right" size={11} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+                    </View>
+                    {i < localFallback.length - 1 ? <View style={styles.recommendationListDivider} /> : null}
+                  </View>
+                );
+              })}
+            </View>
           ) : null}
         </>
-      ) : null}
-    </>
+      )}
+    </View>
+  );
+}
+
+// ── Recent activity section ───────────────────────────────────────────────────
+
+type RecentActivitySectionProps = {
+  entries: AutonomyAuditLogEntry[];
+  isLoading: boolean;
+  now: Date;
+  onPressEntry?: (entry: AutonomyAuditLogEntry) => void;
+};
+
+function RecentActivitySection({ entries, isLoading, now, onPressEntry }: RecentActivitySectionProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
+  return (
+    <View>
+      <Text style={styles.sectionLabel}>RECENT ACTIVITY</Text>
+      {isLoading ? (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={colors.accent} size="small" />
+          <Text style={styles.loadingText}>Loading activity…</Text>
+        </View>
+      ) : entries.length === 0 ? (
+        <View style={styles.emptyState}>
+          <SymbolView name="clock.arrow.circlepath" size={28} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+          <Text style={styles.emptyText}>No activity yet.</Text>
+          <Text style={styles.emptySubtext}>
+            HELIOS logs every autonomous decision here — approvals, executions, and system events appear as they happen.
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.activityCard}>
+          {entries.map((entry, i) => {
+            const color    = getAuditEventColors(colors)[entry.event_type] ?? colors.textMuted;
+            const label    = AUDIT_EVENT_LABELS[entry.event_type] ?? entry.event_type.replace(/_/g, " ");
+            const iconName = AUDIT_EVENT_ICONS[entry.event_type] ?? "circle.fill";
+            return (
+              <View key={entry.id}>
+                <TouchableOpacity
+                  style={styles.activityRow}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    if (onPressEntry) {
+                      onPressEntry(entry);
+                    } else {
+                      Alert.alert(label, entry.message || "No additional details.", [{ text: "Done" }]);
+                    }
+                  }}
+                  activeOpacity={0.75}
+                >
+                  <View style={[styles.activityIconWrap, { backgroundColor: `${color}18` }]}>
+                    <SymbolView name={iconName} size={12} tintColor={color} resizeMode="scaleAspectFit" />
+                  </View>
+                  <Text style={styles.activityLabel} numberOfLines={1}>{label}</Text>
+                  <Text style={styles.activityTime}>{formatRelativeTime(entry.created_at, now)}</Text>
+                </TouchableOpacity>
+                {i < entries.length - 1 ? <View style={styles.activityDivider} /> : null}
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ── AI confidence card ────────────────────────────────────────────────────────
+
+type AIConfidenceCardProps = {
+  score: number;
+  goalsCount: number;
+  tasksCount: number;
+  hasPlan: boolean;
+  hasSuggestions: boolean;
+  hasActivity: boolean;
+};
+
+function AIConfidenceCard({ score, goalsCount, tasksCount, hasPlan, hasSuggestions, hasActivity }: AIConfidenceCardProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
+  const sources: string[] = [];
+  if (goalsCount > 0)   sources.push("Goals");
+  if (tasksCount > 0)   sources.push("Tasks");
+  if (hasPlan)          sources.push("Execution Plan");
+  if (hasSuggestions)   sources.push("AI Signals");
+  if (hasActivity)      sources.push("Activity Log");
+  if (sources.length === 0) sources.push("Basic profile");
+
+  const barColor = score >= 80 ? colors.success : score >= 55 ? colors.warning : colors.danger;
+
+  return (
+    <View style={styles.confidenceCard}>
+      <View style={styles.confidenceHeader}>
+        <SymbolView name="brain.head.profile" size={14} tintColor={colors.accentCyan} resizeMode="scaleAspectFit" />
+        <Text style={styles.confidenceTitle}>PLANNING CONFIDENCE</Text>
+      </View>
+      <View style={styles.confidenceBody}>
+        <Text style={[styles.confidenceScore, { color: barColor }]}>{score}%</Text>
+        <View style={styles.confidenceTrackWrap}>
+          <View style={styles.confidenceTrack}>
+            <View style={{ flex: score, height: 5, backgroundColor: barColor, borderRadius: 3 }} />
+            <View style={{ flex: Math.max(0, 100 - score) }} />
+          </View>
+          <Text style={styles.confidenceScoreLabel}>
+            {score >= 80 ? "High confidence" : score >= 55 ? "Moderate" : "Low — add more context"}
+          </Text>
+        </View>
+      </View>
+      <Text style={styles.confidenceSources}>Based on: {sources.join(" · ")}</Text>
+    </View>
   );
 }
 
@@ -873,13 +1478,23 @@ function RuleCard({ rule, isMutating, onToggleExecution, onDelete }: RuleCardPro
 // ── Audit log section ─────────────────────────────────────────────────────────
 
 const AUDIT_EVENT_LABELS: Record<string, string> = {
-  suggestion_created:        "Suggestions generated",
-  queue_item_created:        "Item added to queue",
-  queue_item_approved:       "Item approved",
-  queue_item_rejected:       "Item rejected",
-  queue_item_executed:       "Execution succeeded",
-  execution_blocked_by_rule: "Execution blocked",
+  suggestion_created:        "AI recommendations refreshed",
+  queue_item_created:        "Action queued for review",
+  queue_item_approved:       "Action approved",
+  queue_item_rejected:       "Action dismissed",
+  queue_item_executed:       "Action executed successfully",
+  execution_blocked_by_rule: "Execution blocked by rule",
   execution_failed:          "Execution failed",
+};
+
+const AUDIT_EVENT_ICONS: Record<string, Parameters<typeof SymbolView>[0]["name"]> = {
+  suggestion_created:        "lightbulb.fill",
+  queue_item_created:        "plus.circle.fill",
+  queue_item_approved:       "checkmark.circle.fill",
+  queue_item_rejected:       "xmark.circle.fill",
+  queue_item_executed:       "bolt.fill",
+  execution_blocked_by_rule: "lock.fill",
+  execution_failed:          "exclamationmark.circle.fill",
 };
 
 function getAuditEventColors(c: ThemeColors): Record<string, string> {
@@ -932,9 +1547,10 @@ type AuditLogSectionProps = {
   entries: AutonomyAuditLogEntry[];
   isLoading: boolean;
   error: string | null;
+  onRetry?: () => void;
 };
 
-function AuditLogSection({ entries, isLoading, error }: AuditLogSectionProps) {
+function AuditLogSection({ entries, isLoading, error, onRetry }: AuditLogSectionProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   return (
@@ -951,9 +1567,12 @@ function AuditLogSection({ entries, isLoading, error }: AuditLogSectionProps) {
           <Text style={styles.loadingText}>Loading audit log…</Text>
         </View>
       ) : error ? (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
+        <ErrorCard
+          title="Audit log unavailable"
+          message={error}
+          onRetry={onRetry}
+          endpoint="/api/v1/autonomy/audit-log"
+        />
       ) : entries.length === 0 ? (
         <View style={styles.emptyState}>
           <SymbolView name="doc.text.magnifyingglass" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
@@ -983,23 +1602,25 @@ export default function AutonomyScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const now = useCurrentDateTime();
   const accessToken = useAuthStore((s) => s.accessToken);
 
   const {
     items, isLoading, isMutating, executingItemId, error,
-    suggestions, isSuggestionsLoading, suggestionsError, queuedSuggestionIds,
-    dailyPlan, isDailyPlanLoading, dailyPlanError, dailyPlanQueuedIds,
-    rules, isRulesLoading, rulesError, isRulesMutating,
-    auditLog, isAuditLogLoading, auditLogError,
+    suggestions, isSuggestionsLoading, suggestionsError, suggestionsDegraded, queuedSuggestionIds,
+    dailyPlan, isDailyPlanLoading, dailyPlanError,
+    rules, isRulesLoading,
     fetchQueue, fetchSuggestions, approveItem, rejectItem, executeItem,
-    addSuggestionToQueue, generateDailyPlan, addDailyPlanItemToQueue,
-    fetchRules, createRule, updateRule, deleteRule, fetchAuditLog,
+    addSuggestionToQueue, runSuggestionNow, generateDailyPlan,
+    fetchRules,
   } = useAutonomyStore();
 
-  const [showAddRuleForm, setShowAddRuleForm] = useState(false);
-
-  const { unreadCount } = useNotificationsStore();
-  const { jobs: bgJobs, isMutating: bgJobsMutating, fetchJobs, triggerJob } = useBackgroundJobsStore();
+  const unreadCount    = useNotificationsStore((s) => s.notifications.filter((n) => !n.is_read).length);
+  const aiSendError    = useConversationStore((s) => s.sendError);
+  const goals          = useGoalsStore((s) => s.goals);
+  const tasks          = useTasksStore((s) => s.tasks);
+  const tasksError     = useTasksStore((s) => s.error);
+  const { jobs: bgJobs, fetchJobs } = useBackgroundJobsStore();
 
   // ── Entrance animations ──────────────────────────────────────────────────────
   const fadeAnims = useRef(
@@ -1013,7 +1634,7 @@ export default function AutonomyScreen() {
         Animated.timing(a, { toValue: 1, duration: 380, useNativeDriver: true })
       )
     ).start();
-  }, []);
+  }, [fadeAnims]);
 
   const slideStyle = (idx: number) => ({
     opacity: fadeAnims[idx],
@@ -1022,9 +1643,8 @@ export default function AutonomyScreen() {
 
   // ── Scroll navigation ────────────────────────────────────────────────────────
   const scrollRef = useRef<ScrollView>(null);
-  const jobsY     = useRef(0);
   const pendingY  = useRef(0);
-  const approvedY = useRef(0);
+  const planY     = useRef(0);
 
   const scrollTo = (y: number) =>
     scrollRef.current?.scrollTo({ y: Math.max(0, y - spacing.md), animated: true });
@@ -1035,11 +1655,40 @@ export default function AutonomyScreen() {
     fetchQueue(accessToken);
     fetchSuggestions(accessToken);
     fetchRules(accessToken);
-    fetchAuditLog(accessToken);
     fetchJobs(accessToken);
-  }, [accessToken, fetchQueue, fetchSuggestions, fetchRules, fetchAuditLog, fetchJobs]);
+  }, [accessToken, fetchQueue, fetchSuggestions, fetchRules, fetchJobs]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  // ── Auto-refresh every 60 s while the app is active ──────────────────────────
+  useEffect(() => {
+    const intervalRef = { current: null as ReturnType<typeof setInterval> | null };
+
+    const start = () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = setInterval(() => {
+        if (accessToken) {
+          fetchSuggestions(accessToken);
+          fetchQueue(accessToken);
+          fetchJobs(accessToken);
+        }
+      }, 60_000);
+    };
+
+    start();
+
+    const sub = AppState.addEventListener("change", (s: AppStateStatus) => {
+      if (s === "active") { loadAll(); start(); }
+      else if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+    });
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      sub.remove();
+    };
+  // intentional: only restarts when token changes; individual fetch fns are stable
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken]);
 
   const handleApprove = useCallback(
     (id: string) => { if (accessToken) approveItem(accessToken, id); },
@@ -1069,46 +1718,136 @@ export default function AutonomyScreen() {
     [accessToken, addSuggestionToQueue],
   );
   const handleGenerateDailyPlan = useCallback(
-    () => { if (accessToken) generateDailyPlan(accessToken); },
+    () => accessToken ? generateDailyPlan(accessToken) : Promise.resolve(null),
     [accessToken, generateDailyPlan],
   );
-  const handleAddDailyPlanItemToQueue = useCallback(
-    (item: SuggestionItem) => { if (accessToken) addDailyPlanItemToQueue(accessToken, item); },
-    [accessToken, addDailyPlanItemToQueue],
+  const handleRunSuggestionNow = useCallback(
+    (suggestion: SuggestionItem) =>
+      accessToken ? runSuggestionNow(accessToken, suggestion) : Promise.resolve(null),
+    [accessToken, runSuggestionNow],
   );
-  const handleCreateRule = useCallback(
-    (data: AutonomyRuleCreate) => {
-      if (!accessToken) return;
-      createRule(accessToken, data).then(() => setShowAddRuleForm(false));
-    },
-    [accessToken, createRule],
-  );
-  const handleToggleRuleExecution = useCallback(
-    (id: string, newValue: boolean) => { if (accessToken) updateRule(accessToken, id, { allow_execution: newValue }); },
-    [accessToken, updateRule],
-  );
-  const handleDeleteRule = useCallback(
-    (id: string) => { if (accessToken) deleteRule(accessToken, id); },
-    [accessToken, deleteRule],
-  );
-
   const pending  = items.filter((i) => i.status === "pending");
-  const approved = items.filter((i) => i.status === "approved");
-  const resolved = items.filter((i) => i.status === "rejected" || i.status === "completed");
-  const isRefreshing = isLoading || isSuggestionsLoading || isRulesLoading || isAuditLogLoading;
-  const enabledBgJobs = bgJobs.filter((j) => j.enabled);
-  const topSuggestion = suggestions[0] ?? null;
+  const isRefreshing = isLoading || isSuggestionsLoading || isRulesLoading;
+  const incorporatedSuggestionKeys = useMemo(() => {
+    if (!dailyPlan) return new Set<string>();
+    return new Set(
+      dailyPlan.suggested_queue_items.flatMap((item) => [
+        item.id,
+        item.title.trim().toLowerCase(),
+      ]),
+    );
+  }, [dailyPlan]);
+  const visibleSuggestions = suggestions.filter(
+    (suggestion) =>
+      !queuedSuggestionIds.includes(suggestion.id) &&
+      !incorporatedSuggestionKeys.has(suggestion.id) &&
+      !incorporatedSuggestionKeys.has(suggestion.title.trim().toLowerCase()),
+  );
 
   const getIsBlocked = useCallback(
     (item: AutonomyQueueItem) => isBlockedByRules(item, rules),
     [rules],
   );
 
-  const heroSubtitle = suggestions.length > 0
-    ? `${suggestions.length} Recommendation${suggestions.length !== 1 ? "s" : ""} Ready`
-    : pending.length > 0
-      ? `${pending.length} Pending Review`
-      : "All systems clear.";
+  const jobsRunning = bgJobs.some((j) => j.status === "running");
+
+  // ── Dynamic assistant status ───────────────────────────────────────────────
+  const assistantStatus = (() => {
+    const hasError = !!error || !!suggestionsError || !!dailyPlanError || !!aiSendError;
+    const isWorking = isDailyPlanLoading || jobsRunning;
+    if (hasError)   return { text: "Needs your attention", dotColor: colors.warning };
+    if (isWorking)  return {
+      text: isDailyPlanLoading ? "Planning your day" : "Working in the background",
+      dotColor: colors.accentCyan,
+    };
+    if (pending.length > 0) return {
+      text: `${pending.length} suggestion${pending.length === 1 ? "" : "s"} need your approval`,
+      dotColor: colors.warning,
+    };
+    if (dailyPlan)  return { text: "Ready to help", dotColor: colors.success };
+    if (visibleSuggestions.length > 0) return {
+      text: `${visibleSuggestions.length} recommendation${visibleSuggestions.length === 1 ? "" : "s"} ready`,
+      dotColor: colors.accentCyan,
+    };
+    return { text: "Ready to help", dotColor: colors.success };
+  })();
+
+  // ── Assistant status rows ──────────────────────────────────────────────────
+  const assistantServices: SystemService[] = [
+    {
+      id: "assistant", label: "Assistant", icon: "sparkles",
+      statusText: assistantStatus.text,
+      dotColor: assistantStatus.dotColor,
+      onPress: () => router.push("/(tabs)/assistant"),
+    },
+    {
+      id: "plan", label: "Today", icon: "calendar.badge.clock",
+      statusText: isDailyPlanLoading ? "Planning your day" : dailyPlan ? "Plan ready" : "No plan yet",
+      dotColor: isDailyPlanLoading ? colors.accentCyan : dailyPlan ? colors.success : colors.textMuted,
+      onPress: () => scrollTo(planY.current),
+    },
+    {
+      id: "approval", label: "Approval", icon: "hand.raised.fill",
+      statusText: pending.length > 0 ? `${pending.length} waiting` : "All clear",
+      dotColor: pending.length > 0 ? colors.warning : colors.success,
+      onPress: () => scrollTo(pendingY.current),
+    },
+    {
+      id: "notifications", label: "Notifications", icon: "bell.fill",
+      statusText: unreadCount > 0 ? `${unreadCount} unread` : "All clear",
+      dotColor: unreadCount > 0 ? colors.warning : colors.success,
+      onPress: () => router.push("/(tabs)/notifications"),
+    },
+    {
+      id: "tasks", label: "Tasks", icon: "checklist",
+      statusText: tasksError ? "Needs attention" : tasks.length > 0 ? `${tasks.length} available` : "All clear",
+      dotColor: tasksError ? colors.danger : tasks.length > 0 ? colors.success : colors.textMuted,
+      onPress: () => router.push("/(tabs)/tasks"),
+    },
+  ];
+
+  // ── Local recommendation fallback ─────────────────────────────────────────
+  const localRecommendations = generateLocalRecommendations({
+    unreadCount,
+    pendingCount: pending.length,
+    hasDailyPlan: !!dailyPlan,
+    goals,
+    tasks,
+    bgJobs,
+  });
+
+  // ── Quick actions ─────────────────────────────────────────────────────────
+  const quickActions: QuickAction[] = [
+    {
+      id: "qa_plan",
+      label: "Plan Today",
+      icon: "bolt.fill",
+      onPress: () => {
+        scrollTo(planY.current);
+        handleGenerateDailyPlan();
+      },
+    },
+    {
+      id: "qa_refresh",
+      label: "Refresh",
+      icon: "arrow.clockwise",
+      onPress: loadAll,
+    },
+    {
+      id: "qa_review",
+      label: "Review",
+      icon: "hand.raised.fill",
+      badge: pending.length,
+      onPress: () => scrollTo(pendingY.current),
+    },
+    {
+      id: "qa_inbox",
+      label: "Open Inbox",
+      icon: "envelope.fill",
+      badge: unreadCount,
+      onPress: () => router.push("/(tabs)/notifications"),
+    },
+  ];
 
   return (
     <ScrollView
@@ -1117,7 +1856,7 @@ export default function AutonomyScreen() {
       contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
       showsVerticalScrollIndicator={false}
       refreshControl={
-        <RefreshControl refreshing={isRefreshing} onRefresh={loadAll} tintColor={colors.accent} />
+        <RefreshControl refreshing={isRefreshing} onRefresh={loadAll} tintColor={colors.accentCyan} />
       }
     >
       {/* ── Hero ────────────────────────────────────────────────────────── */}
@@ -1127,194 +1866,79 @@ export default function AutonomyScreen() {
           <View style={styles.heroInner}>
             <View style={styles.heroTop}>
               <View>
-                <Text style={styles.heroLabel}>HELIOS AUTONOMY</Text>
-                <Text style={styles.heroTitle}>Command Center</Text>
+                <Text style={styles.heroLabel}>ASSISTANT STATUS</Text>
+                <Text style={styles.heroTitle}>What can HELIOS help with?</Text>
               </View>
-              <View style={styles.heroStatusDot}>
-                <View style={[styles.heroPulseDot, { backgroundColor: suggestions.length > 0 ? colors.accent : colors.success }]} />
+              <View style={[styles.heroStatusDot, { borderColor: `${assistantStatus.dotColor}40` }]}>
+                <View style={[styles.heroPulseDot, { backgroundColor: assistantStatus.dotColor }]} />
               </View>
             </View>
-            <Text style={styles.heroSubtitle}>{heroSubtitle}</Text>
+            <Text style={styles.heroSubtitle}>{assistantStatus.text}</Text>
           </View>
         </View>
       </Animated.View>
 
-      {/* ── Today's Mission ─────────────────────────────────────────────── */}
-      {topSuggestion ? (
-        <TodaysMissionCard
-          suggestion={topSuggestion}
-          anim={fadeAnims[1]}
-          onStartSession={() => router.push("/(tabs)/assistant")}
+      {/* ── Today’s Brief ───────────────────────────────────────────────── */}
+      <Animated.View
+        style={slideStyle(1)}
+        onLayout={(e) => { planY.current = e.nativeEvent.layout.y; }}
+      >
+        <CompactPlanCard
+          plan={dailyPlan}
+          isLoading={isDailyPlanLoading}
+          error={dailyPlanError}
+          now={now}
+          onGenerate={handleGenerateDailyPlan}
         />
-      ) : null}
-
-      {/* ── Stats row ───────────────────────────────────────────────────── */}
-      <Animated.View style={[styles.ccRow, slideStyle(2)]}>
-        <TouchableOpacity
-          style={styles.ccStat}
-          activeOpacity={0.7}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            scrollTo(pendingY.current);
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={`${pending.length} pending items. Tap to review.`}
-        >
-          <Text style={[styles.ccStatValue, pending.length > 0 && { color: colors.accentCyan }]}>
-            {pending.length}
-          </Text>
-          <Text style={styles.ccStatLabel}>PENDING</Text>
-        </TouchableOpacity>
-
-        <View style={styles.ccDivider} />
-
-        <TouchableOpacity
-          style={styles.ccStat}
-          activeOpacity={0.7}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            scrollTo(approvedY.current);
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={`${approved.length} approved items awaiting execution.`}
-        >
-          <Text style={[styles.ccStatValue, approved.length > 0 && { color: colors.success }]}>
-            {approved.length}
-          </Text>
-          <Text style={styles.ccStatLabel}>APPROVED</Text>
-        </TouchableOpacity>
-
-        <View style={styles.ccDivider} />
-
-        <TouchableOpacity
-          style={styles.ccStat}
-          activeOpacity={0.7}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.push("/(tabs)/notifications");
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={`${unreadCount} unread notifications. Tap to view inbox.`}
-        >
-          <Text style={[styles.ccStatValue, unreadCount > 0 && { color: colors.accent }]}>
-            {unreadCount}
-          </Text>
-          <Text style={styles.ccStatLabel}>INBOX</Text>
-        </TouchableOpacity>
-
-        <View style={styles.ccDivider} />
-
-        <TouchableOpacity
-          style={styles.ccStat}
-          activeOpacity={0.7}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            scrollTo(jobsY.current);
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={`${enabledBgJobs.length} scheduled jobs active. Tap to view.`}
-        >
-          <Text style={styles.ccStatValue}>{enabledBgJobs.length}</Text>
-          <Text style={styles.ccStatLabel}>JOBS</Text>
-        </TouchableOpacity>
       </Animated.View>
 
-      {/* ── Scheduled Jobs ──────────────────────────────────────────────── */}
-      {bgJobs.length > 0 ? (
-        <Animated.View style={slideStyle(3)}>
-          <View
-            style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.lg }}
-            onLayout={(e) => { jobsY.current = e.nativeEvent.layout.y; }}
-          />
-          <Text style={styles.sectionLabel}>SCHEDULED JOBS</Text>
-          <Text style={styles.rulesDescription}>
-            Tap "Run Now" to trigger a job manually. Created items enter the review queue.
-          </Text>
-          <View style={styles.bgJobsCard}>
-            {bgJobs.map((job) => (
-              <JobCard
-                key={job.id}
-                job={job}
-                isMutating={bgJobsMutating}
-                onTrigger={async (id) => {
-                  if (!accessToken) return null;
-                  return triggerJob(accessToken, id);
-                }}
-              />
-            ))}
-          </View>
-        </Animated.View>
-      ) : null}
+      {/* ── Assistant Status ─────────────────────────────────────────────── */}
+      <Animated.View style={slideStyle(2)}>
+        <Text style={[styles.sectionLabel, { marginTop: spacing.md }]}>ASSISTANT STATUS</Text>
+        <SystemStatusCard services={assistantServices} />
+      </Animated.View>
 
-      {/* ── Global error + initial load ──────────────────────────────────── */}
-      {error ? (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{error}</Text>
+      {/* ── Quick Actions ───────────────────────────────────────────────── */}
+      <Animated.View style={[slideStyle(2), { marginHorizontal: -spacing.lg, marginTop: spacing.sm }]}>
+        <QuickActionsRow actions={quickActions} />
+      </Animated.View>
+
+      {/* ── Recommendations (compact list) ──────────────────────────────── */}
+      <Animated.View style={slideStyle(2)}>
+        <View style={{ marginTop: spacing.lg }}>
+          <RecommendationListSection
+            suggestions={visibleSuggestions}
+            localFallback={localRecommendations}
+            isLoading={isSuggestionsLoading && suggestions.length === 0}
+            error={suggestionsError}
+            isMutating={isMutating}
+            onAddToQueue={handleAddToQueue}
+            onRunNow={handleRunSuggestionNow}
+            onRetry={() => { if (accessToken) fetchSuggestions(accessToken); }}
+          />
         </View>
+      </Animated.View>
+
+      {/* ── Global queue error / initial load ───────────────────────────── */}
+      {error ? (
+        <ErrorCard title="Unable to load suggestions" message={error} onRetry={loadAll} />
       ) : null}
       {isLoading && items.length === 0 ? (
         <ActivityIndicator color={colors.accent} style={{ marginTop: spacing.xl }} />
       ) : null}
 
-      {/* ── Today's Execution Plan ───────────────────────────────────────── */}
+      {/* ── Approval review ──────────────────────────────────────────────── */}
       <Animated.View style={slideStyle(4)}>
-        <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.lg }} />
-        <DailyPlanSection
-          plan={dailyPlan}
-          isLoading={isDailyPlanLoading}
-          error={dailyPlanError}
-          isMutating={isMutating}
-          queuedIds={dailyPlanQueuedIds}
-          onGenerate={handleGenerateDailyPlan}
-          onAddToQueue={handleAddDailyPlanItemToQueue}
-        />
-
-        <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.lg }} />
-
-        {/* ── Proactive Suggestions ──────────────────────────────────────── */}
-        <Text style={styles.sectionLabel}>PROACTIVE RECOMMENDATIONS</Text>
-        {isSuggestionsLoading && suggestions.length === 0 ? (
-          <View style={styles.loadingRow}>
-            <ActivityIndicator color={colors.accent} size="small" />
-            <Text style={styles.loadingText}>HELIOS is analyzing your priorities…</Text>
-          </View>
-        ) : suggestionsError ? (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>{suggestionsError}</Text>
-          </View>
-        ) : suggestions.length === 0 ? (
-          <View style={styles.emptyState}>
-            <SymbolView name="sparkles" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
-            <Text style={styles.emptyText}>Quiet briefing — no recommendations queued.</Text>
-            <Text style={styles.emptySubtext}>
-              HELIOS is monitoring your goals and tasks. Pull to refresh for the latest analysis.
-            </Text>
-          </View>
-        ) : (
-          suggestions.map((s) => (
-            <SuggestionCard
-              key={s.id}
-              item={s}
-              isQueued={queuedSuggestionIds.includes(s.id)}
-              isMutating={isMutating}
-              onAddToQueue={handleAddToQueue}
-            />
-          ))
-        )}
-
-        {/* ── Pending Review ─────────────────────────────────────────────── */}
         {(!isLoading || items.length > 0) ? (
           <>
-            <View
-              onLayout={(e) => { pendingY.current = e.nativeEvent.layout.y; }}
-            >
-              <Text style={[styles.sectionLabel, { marginTop: spacing.xl }]}>PENDING REVIEW</Text>
+            <View onLayout={(e) => { pendingY.current = e.nativeEvent.layout.y; }}>
+              <Text style={[styles.sectionLabel, { marginTop: spacing.xl }]}>NEEDS YOUR APPROVAL</Text>
               {pending.length === 0 ? (
                 <View style={styles.emptyState}>
-                  <SymbolView name="checkmark.seal" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
-                  <Text style={styles.emptyText}>Queue is clear.</Text>
+                  <SymbolView name="checkmark.seal" size={30} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+                  <Text style={styles.emptyText}>Nothing needs your approval right now.</Text>
                   <Text style={styles.emptySubtext}>
-                    All proposals have been reviewed. Add a recommendation to the queue to continue.
+                    Everything looks good. HELIOS is ready whenever you are.
                   </Text>
                 </View>
               ) : (
@@ -1332,110 +1956,8 @@ export default function AutonomyScreen() {
                 ))
               )}
             </View>
-
-            {/* ── Approved ─────────────────────────────────────────────────── */}
-            {approved.length > 0 ? (
-              <View onLayout={(e) => { approvedY.current = e.nativeEvent.layout.y; }}>
-                <Text style={[styles.sectionLabel, { marginTop: spacing.xl }]}>
-                  APPROVED — READY TO EXECUTE
-                </Text>
-                {approved.map((item) => (
-                  <QueueCard
-                    key={item.id}
-                    item={item}
-                    isMutating={isMutating}
-                    isExecuting={executingItemId === item.id}
-                    isBlocked={getIsBlocked(item)}
-                    onApprove={handleApprove}
-                    onReject={handleReject}
-                    onExecute={handleExecute}
-                  />
-                ))}
-              </View>
-            ) : null}
-
-            {/* ── Resolved ─────────────────────────────────────────────────── */}
-            {resolved.length > 0 ? (
-              <>
-                <Text style={[styles.sectionLabel, { marginTop: spacing.xl }]}>RESOLVED</Text>
-                {resolved.map((item) => (
-                  <QueueCard
-                    key={item.id}
-                    item={item}
-                    isMutating={isMutating}
-                    isExecuting={false}
-                    isBlocked={false}
-                    onApprove={handleApprove}
-                    onReject={handleReject}
-                    onExecute={handleExecute}
-                  />
-                ))}
-              </>
-            ) : null}
           </>
         ) : null}
-
-        {/* ── Approval Rules ───────────────────────────────────────────────── */}
-        <View style={{ height: 1, backgroundColor: colors.border, marginVertical: spacing.lg }} />
-        <View style={styles.planSectionHeader}>
-          <Text style={styles.sectionLabel}>APPROVAL RULES</Text>
-          <TouchableOpacity
-            onPress={() => setShowAddRuleForm((v) => !v)}
-            style={styles.generateBtn}
-            activeOpacity={0.75}
-          >
-            <Text style={styles.generateBtnText}>{showAddRuleForm ? "Cancel" : "Add Rule"}</Text>
-          </TouchableOpacity>
-        </View>
-        <Text style={styles.rulesDescription}>
-          Configure which action types require extra review or are blocked from execution entirely.
-        </Text>
-
-        {rulesError ? (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>{rulesError}</Text>
-          </View>
-        ) : null}
-
-        {showAddRuleForm ? (
-          <AddRuleForm
-            onSave={handleCreateRule}
-            onCancel={() => setShowAddRuleForm(false)}
-            isMutating={isRulesMutating}
-          />
-        ) : null}
-
-        {isRulesLoading && rules.length === 0 ? (
-          <View style={styles.loadingRow}>
-            <ActivityIndicator color={colors.accent} size="small" />
-            <Text style={styles.loadingText}>Loading rules…</Text>
-          </View>
-        ) : rules.length === 0 && !showAddRuleForm ? (
-          <View style={styles.emptyState}>
-            <SymbolView name="slider.horizontal.3" size={36} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
-            <Text style={styles.emptyText}>No rules configured.</Text>
-            <Text style={styles.emptySubtext}>
-              HELIOS defaults to requiring your explicit approval before any execution. Add a rule to restrict specific action types.
-            </Text>
-          </View>
-        ) : (
-          rules.map((rule) => (
-            <RuleCard
-              key={rule.id}
-              rule={rule}
-              isMutating={isRulesMutating}
-              onToggleExecution={handleToggleRuleExecution}
-              onDelete={handleDeleteRule}
-            />
-          ))
-        )}
-
-        {/* ── Audit Log ────────────────────────────────────────────────────── */}
-        <AuditLogSection
-          entries={auditLog}
-          isLoading={isAuditLogLoading}
-          error={auditLogError}
-        />
       </Animated.View>
 
       <View style={{ height: spacing.xl * 2 }} />
@@ -1448,15 +1970,15 @@ export default function AutonomyScreen() {
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content:   { paddingHorizontal: spacing.md },
+  content:   { paddingHorizontal: spacing.lg },
 
   // ── Hero ───────────────────────────────────────────────────────────────────
   heroCard: {
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: spacing.md,
+    marginBottom: spacing.lg,
     overflow: "hidden",
   },
   heroAccentBar: {
@@ -1464,7 +1986,7 @@ function createStyles(colors: ThemeColors) {
     backgroundColor: colors.accent,
   },
   heroInner: {
-    padding: spacing.lg,
+    padding: spacing.xl,
     gap: spacing.xs,
   },
   heroTop: {
@@ -1602,6 +2124,541 @@ function createStyles(colors: ThemeColors) {
     letterSpacing: 2,
     marginBottom: spacing.sm,
     marginTop: spacing.sm,
+  },
+  sectionDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: spacing.lg,
+    opacity: 0.75,
+  },
+
+  // ── Premium execution plan ────────────────────────────────────────────────
+  executionSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.md,
+    marginTop: spacing.sm,
+  },
+  executionEyebrow: {
+    fontSize: 9,
+    fontWeight: "700" as const,
+    letterSpacing: 1.8,
+    color: colors.accent,
+    marginBottom: spacing.xs,
+  },
+  executionTitle: {
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: "800" as const,
+    color: colors.textPrimary,
+    letterSpacing: -0.5,
+  },
+  rebuildBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  planEmptyCard: {
+    alignItems: "center",
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: `${colors.accent}38`,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xl,
+    overflow: "hidden",
+  },
+  planEmptyIcon: {
+    width: 62,
+    height: 62,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: `${colors.accent}16`,
+    borderWidth: 1,
+    borderColor: `${colors.accent}35`,
+    marginBottom: spacing.lg,
+  },
+  planEmptyTitle: {
+    fontSize: 19,
+    lineHeight: 26,
+    fontWeight: "700" as const,
+    color: colors.textPrimary,
+    textAlign: "center",
+    maxWidth: 310,
+  },
+  planEmptyBody: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 22,
+    marginTop: spacing.sm,
+    maxWidth: 340,
+  },
+  recommendationSignal: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    backgroundColor: `${colors.accentCyan}10`,
+    borderWidth: 1,
+    borderColor: `${colors.accentCyan}30`,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  recommendationSignalText: {
+    fontSize: 12,
+    fontWeight: "600" as const,
+    color: colors.accentCyan,
+    flexShrink: 1,
+  },
+  estimateRow: {
+    alignItems: "center",
+    marginTop: spacing.lg,
+    marginBottom: spacing.md,
+    gap: 3,
+  },
+  estimateLabel: {
+    fontSize: 11,
+    color: colors.textMuted,
+  },
+  estimateValue: {
+    fontSize: 13,
+    fontWeight: "700" as const,
+    color: colors.textSecondary,
+  },
+  primaryPlanCta: {
+    minHeight: 56,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
+    backgroundColor: colors.accent,
+    shadowColor: colors.accent,
+    shadowOpacity: 0.32,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  primaryPlanCtaText: {
+    fontSize: 15,
+    fontWeight: "800" as const,
+    color: colors.background,
+    letterSpacing: 0.1,
+  },
+  planLoadingCard: {
+    alignItems: "center",
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: `${colors.accent}45`,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xl,
+  },
+  orbitWrap: {
+    width: 64,
+    height: 64,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: spacing.lg,
+  },
+  orbitCore: {
+    position: "absolute",
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceDark,
+  },
+  planLoadingTitle: {
+    fontSize: 18,
+    fontWeight: "700" as const,
+    color: colors.textPrimary,
+  },
+  planLoadingSubtext: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: "center",
+    marginTop: spacing.xs,
+  },
+  generationProgress: {
+    alignSelf: "stretch",
+    flexDirection: "row",
+    gap: spacing.xs,
+    marginTop: spacing.lg,
+  },
+  generationProgressSegment: {
+    flex: 1,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+  },
+  generationProgressSegmentActive: {
+    backgroundColor: colors.accent,
+  },
+  missionSummaryCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: `${colors.accent}40`,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  missionSummaryTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  livePlanPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: radius.sm,
+    backgroundColor: `${colors.success}14`,
+    borderWidth: 1,
+    borderColor: `${colors.success}35`,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  livePlanDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.success,
+  },
+  livePlanText: {
+    fontSize: 8,
+    fontWeight: "800" as const,
+    letterSpacing: 1,
+    color: colors.success,
+  },
+  missionSummaryLabel: {
+    fontSize: 11,
+    fontWeight: "700" as const,
+    letterSpacing: 1,
+    color: colors.accent,
+    textTransform: "uppercase",
+    marginBottom: spacing.xs,
+  },
+  planAtGlance: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: spacing.lg,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  planMetric: {
+    flex: 1,
+    alignItems: "center",
+    gap: 2,
+  },
+  planMetricValue: {
+    fontSize: 20,
+    fontWeight: "800" as const,
+    color: colors.textPrimary,
+  },
+  planMetricLabel: {
+    fontSize: 10,
+    color: colors.textMuted,
+  },
+  planMetricDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: colors.border,
+  },
+  timelineCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.sm,
+  },
+  timelineRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    minHeight: 78,
+  },
+  timelineTime: {
+    width: 54,
+    paddingTop: 1,
+    fontSize: 12,
+    fontWeight: "700" as const,
+    color: colors.accentCyan,
+    fontVariant: ["tabular-nums"],
+  },
+  timelineRail: {
+    width: 24,
+    alignItems: "center",
+  },
+  timelineDot: {
+    width: 13,
+    height: 13,
+    borderRadius: 7,
+    borderWidth: 3,
+    backgroundColor: colors.surfaceDark,
+    zIndex: 1,
+  },
+  timelineLine: {
+    width: 1,
+    flex: 1,
+    backgroundColor: colors.border,
+    marginTop: 3,
+  },
+  timelineContent: {
+    flex: 1,
+    paddingLeft: spacing.sm,
+    paddingBottom: spacing.lg,
+  },
+  timelineActivity: {
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: "700" as const,
+    color: colors.textPrimary,
+  },
+  timelineTask: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: 3,
+  },
+  timelineRange: {
+    fontSize: 10,
+    color: colors.textMuted,
+    marginTop: spacing.xs,
+  },
+  attentionCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+    backgroundColor: `${colors.warning}0F`,
+    borderWidth: 1,
+    borderColor: `${colors.warning}35`,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginTop: spacing.md,
+  },
+  attentionTitle: {
+    fontSize: 12,
+    fontWeight: "700" as const,
+    color: colors.warning,
+    marginBottom: 3,
+  },
+  attentionText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+
+  // ── Recommended next actions ──────────────────────────────────────────────
+  recommendationsHeading: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  recommendationsTitle: {
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: "800" as const,
+    color: colors.textPrimary,
+    letterSpacing: -0.35,
+  },
+  recommendationsSubtitle: {
+    ...typography.caption,
+    color: colors.textMuted,
+    lineHeight: 18,
+    marginTop: spacing.xs,
+    maxWidth: 300,
+  },
+  recommendationCountPill: {
+    minWidth: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: `${colors.accent}18`,
+    borderWidth: 1,
+    borderColor: `${colors.accent}40`,
+  },
+  recommendationCountText: {
+    fontSize: 12,
+    fontWeight: "800" as const,
+    color: colors.accent,
+  },
+  recommendationCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    overflow: "hidden",
+  },
+  recommendationGlow: {
+    position: "absolute",
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    right: -52,
+    top: -58,
+    backgroundColor: `${colors.accent}0D`,
+  },
+  recommendationHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.md,
+  },
+  priorityPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  priorityDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  priorityPillText: {
+    fontSize: 9,
+    fontWeight: "800" as const,
+    letterSpacing: 1,
+  },
+  confidenceWrap: {
+    alignItems: "flex-end",
+    gap: 1,
+  },
+  recommendationMetaLabel: {
+    fontSize: 10,
+    color: colors.textMuted,
+  },
+  confidenceValue: {
+    fontSize: 16,
+    fontWeight: "800" as const,
+    color: colors.accentCyan,
+  },
+  recommendationTitle: {
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: "700" as const,
+    color: colors.textPrimary,
+  },
+  recommendationDescription: {
+    ...typography.body,
+    color: colors.textSecondary,
+    lineHeight: 21,
+    marginTop: spacing.xs,
+  },
+  recommendationDetails: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  benefitBlock: {
+    flex: 1,
+    backgroundColor: colors.surfaceDark,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderDark,
+    padding: spacing.sm,
+    gap: 4,
+  },
+  benefitText: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textSecondary,
+  },
+  durationBlock: {
+    width: 108,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    backgroundColor: colors.surfaceDark,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderDark,
+    padding: spacing.sm,
+  },
+  durationValue: {
+    fontSize: 12,
+    fontWeight: "700" as const,
+    color: colors.textPrimary,
+    marginTop: 2,
+  },
+  recommendationActions: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  secondaryActionBtn: {
+    flex: 1,
+    minHeight: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceDark,
+  },
+  secondaryActionText: {
+    fontSize: 12,
+    fontWeight: "700" as const,
+    color: colors.textSecondary,
+  },
+  runNowBtn: {
+    flex: 1.25,
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderRadius: radius.md,
+    backgroundColor: colors.accent,
+  },
+  runNowText: {
+    fontSize: 12,
+    fontWeight: "800" as const,
+    color: colors.background,
+  },
+  recommendationsClearCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    backgroundColor: `${colors.success}0C`,
+    borderWidth: 1,
+    borderColor: `${colors.success}30`,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+  },
+  recommendationsClearTitle: {
+    fontSize: 14,
+    fontWeight: "700" as const,
+    color: colors.textPrimary,
+  },
+  recommendationsClearText: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginTop: 2,
   },
 
   // ── Loading row ────────────────────────────────────────────────────────────
@@ -2066,6 +3123,553 @@ function createStyles(colors: ThemeColors) {
     letterSpacing: 0.8,
     color: colors.textMuted,
     opacity: 0.6,
+  },
+
+  // ── Job error row ──────────────────────────────────────────────────────────
+  jobErrorRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.xs,
+    backgroundColor: `${colors.danger}0f`,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: `${colors.danger}35`,
+    padding: spacing.sm,
+  },
+  jobErrorText: {
+    fontSize: 11,
+    color: colors.danger,
+    flex: 1,
+    lineHeight: 16,
+  },
+  jobRunBtnError: {
+    borderColor: colors.danger,
+    backgroundColor: `${colors.danger}14`,
+  },
+
+  // ── Error card ─────────────────────────────────────────────────────────────
+  errorCard: {
+    backgroundColor: `${colors.danger}0f`,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: `${colors.danger}35`,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  errorCardTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+  },
+  errorCardIconWrap: {
+    marginTop: 2,
+    flexShrink: 0,
+  },
+  errorCardBody: {
+    flex: 1,
+    gap: 3,
+  },
+  errorCardTitle: {
+    fontSize: 13,
+    fontWeight: "700" as const,
+    color: colors.danger,
+  },
+  errorCardMessage: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    lineHeight: 17,
+  },
+  errorRetryBtn: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.danger,
+    backgroundColor: `${colors.danger}1a`,
+    flexShrink: 0,
+  },
+  errorRetryText: {
+    fontSize: 10,
+    fontWeight: "700" as const,
+    color: colors.danger,
+    letterSpacing: 0.5,
+  },
+  errorDetailsToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 2,
+    alignSelf: "flex-start",
+  },
+  errorDetailsToggleText: {
+    fontSize: 10,
+    color: colors.textMuted,
+    textDecorationLine: "underline" as const,
+  },
+  errorDetailsBox: {
+    backgroundColor: colors.surfaceDark,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.borderDark,
+    padding: spacing.sm,
+    gap: 4,
+  },
+  errorDetailRow: {
+    fontSize: 10,
+    color: colors.textMuted,
+    lineHeight: 16,
+  },
+  errorDetailKey: {
+    fontWeight: "700" as const,
+    color: colors.textSecondary,
+  },
+
+  // ── Compact plan card ──────────────────────────────────────────────────────
+  compactPlanCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  compactPlanHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.sm,
+  },
+  compactPlanRefreshBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  compactPlanRefreshText: {
+    fontSize: 11,
+    color: colors.textMuted,
+    fontWeight: "500" as const,
+  },
+  compactPlanLoadingCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  compactPlanLoadingLabel: {
+    fontSize: 13,
+    fontWeight: "600" as const,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
+  },
+  compactPlanBody: { gap: spacing.md },
+  compactPlanTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
+  compactPlanGenTime: {
+    fontSize: 11,
+    color: colors.textMuted,
+    fontWeight: "500" as const,
+  },
+  compactPlanOverview: {
+    ...typography.body,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  compactPlanMetrics: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surfaceDark,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
+  },
+  compactPlanMetric: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: spacing.sm,
+    gap: 1,
+  },
+  compactPlanMetricValue: {
+    fontSize: 18,
+    fontWeight: "700" as const,
+    color: colors.textPrimary,
+  },
+  compactPlanMetricLabel: {
+    fontSize: 9,
+    color: colors.textMuted,
+    letterSpacing: 0.5,
+  },
+  compactPlanMetricDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: colors.border,
+  },
+  compactPlanConflict: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.xs,
+    backgroundColor: `${colors.warning}10`,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: `${colors.warning}30`,
+    padding: spacing.sm,
+  },
+  compactPlanConflictText: {
+    flex: 1,
+    fontSize: 11,
+    color: colors.warning,
+    lineHeight: 16,
+  },
+  compactPlanEmpty: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  compactPlanEmptyTitle: {
+    fontSize: 13,
+    fontWeight: "600" as const,
+    color: colors.textPrimary,
+    marginBottom: 2,
+  },
+  compactPlanEmptyBody: {
+    fontSize: 12,
+    color: colors.textMuted,
+    lineHeight: 17,
+  },
+  compactPlanGenBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: colors.accent,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    flexShrink: 0,
+  },
+  compactPlanGenBtnText: {
+    fontSize: 11,
+    fontWeight: "700" as const,
+    color: colors.background,
+    letterSpacing: 0.2,
+  },
+
+  // ── System status card ─────────────────────────────────────────────────────
+  systemStatusCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.lg,
+    overflow: "hidden",
+  },
+  serviceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 13,
+  },
+  serviceRowLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  serviceLabel: {
+    fontSize: 13,
+    fontWeight: "500" as const,
+    color: colors.textPrimary,
+  },
+  serviceStatusWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  serviceStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  serviceStatusText: {
+    fontSize: 12,
+    fontWeight: "600" as const,
+  },
+  serviceDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginHorizontal: spacing.lg,
+    opacity: 0.6,
+  },
+
+  // ── Recommendation list ────────────────────────────────────────────────────
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  countPill: {
+    backgroundColor: `${colors.accent}20`,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: `${colors.accent}40`,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  countPillText: {
+    fontSize: 10,
+    fontWeight: "700" as const,
+    color: colors.accent,
+    letterSpacing: 0.5,
+  },
+  recommendationListCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
+  },
+  recommendationListRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 13,
+    gap: spacing.sm,
+  },
+  recommendationListDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    flexShrink: 0,
+  },
+  recommendationListName: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "500" as const,
+    color: colors.textPrimary,
+  },
+  recommendationListMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    flexShrink: 0,
+  },
+  recommendationListAgent: {
+    fontSize: 10,
+    fontWeight: "600" as const,
+    color: colors.textMuted,
+    letterSpacing: 0.5,
+  },
+  recommendationListDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginHorizontal: spacing.lg,
+    opacity: 0.6,
+  },
+
+  // ── Recent activity ────────────────────────────────────────────────────────
+  activityCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
+  },
+  activityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 10,
+    gap: spacing.sm,
+  },
+  activityDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    flexShrink: 0,
+  },
+  activityLabel: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "500" as const,
+    color: colors.textPrimary,
+  },
+  activityTime: {
+    fontSize: 11,
+    color: colors.textMuted,
+    fontWeight: "500" as const,
+    flexShrink: 0,
+  },
+  activityDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginHorizontal: spacing.lg,
+    opacity: 0.6,
+  },
+
+  // ── AI confidence card ─────────────────────────────────────────────────────
+  confidenceCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  confidenceHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  confidenceTitle: {
+    ...typography.caption,
+    color: colors.textMuted,
+    letterSpacing: 2,
+  },
+  confidenceBody: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  confidenceScore: {
+    fontSize: 28,
+    fontWeight: "800" as const,
+    letterSpacing: -0.5,
+    minWidth: 60,
+  },
+  confidenceTrackWrap: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  confidenceTrack: {
+    flexDirection: "row",
+    height: 5,
+    borderRadius: 3,
+    overflow: "hidden",
+    backgroundColor: colors.surfaceDark,
+  },
+  confidenceScoreLabel: {
+    fontSize: 11,
+    color: colors.textMuted,
+    fontWeight: "500" as const,
+  },
+  confidenceSources: {
+    fontSize: 11,
+    color: colors.textMuted,
+    lineHeight: 16,
+  },
+
+  // ── Quick actions ──────────────────────────────────────────────────────────
+  quickActionsRow: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+    flexDirection: "row",
+  },
+  quickActionChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 9,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexShrink: 0,
+  },
+  quickActionLabel: {
+    fontSize: 12,
+    fontWeight: "600" as const,
+    color: colors.textPrimary,
+    letterSpacing: 0.1,
+  },
+  quickActionBadge: {
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+  },
+  quickActionBadgeText: {
+    fontSize: 9,
+    fontWeight: "700" as const,
+    color: colors.background,
+  },
+
+  // ── Activity icon wrap ─────────────────────────────────────────────────────
+  activityIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+
+  // ── Recommendation error notice ────────────────────────────────────────────
+  recommendationErrorNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.surfaceDark,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  recommendationErrorText: {
+    flex: 1,
+    fontSize: 11,
+    color: colors.textMuted,
+    lineHeight: 16,
+  },
+  recommendationErrorRetry: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  recommendationErrorRetryText: {
+    fontSize: 10,
+    fontWeight: "700" as const,
+    color: colors.textSecondary,
+    letterSpacing: 0.3,
+  },
+  recommendationListSubtitle: {
+    fontSize: 11,
+    color: colors.textMuted,
+    lineHeight: 15,
+  },
+
+  // ── Legacy admin divider styles ────────────────────────────────────────────
+  governanceDivider: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    marginVertical: spacing.xl,
+  },
+  governanceLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+    opacity: 0.6,
+  },
+  governanceLabel: {
+    ...typography.caption,
+    color: colors.textMuted,
+    letterSpacing: 3,
+    fontSize: 9,
   },
 });
 }

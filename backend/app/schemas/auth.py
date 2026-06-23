@@ -27,6 +27,10 @@ class LoginRequest(BaseModel):
         return v.strip().lower()
 
 
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
 class UserOut(BaseModel):
     id: str
     name: str
@@ -37,5 +41,6 @@ class UserOut(BaseModel):
 class AuthResponse(BaseModel):
     user: UserOut
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     message: str

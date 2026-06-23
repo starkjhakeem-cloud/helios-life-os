@@ -1,9 +1,10 @@
 import { apiClient } from "./apiClient";
 import { API_ENDPOINTS } from "../config/api";
 
-type AuthApiResponse = {
+export type AuthApiResponse = {
   user: { id: string; name: string; email: string; created_at: string };
   access_token: string;
+  refresh_token: string;
   token_type: string;
   message: string;
 };
@@ -21,6 +22,12 @@ export const authService = {
 
   signup: (name: string, email: string, password: string) =>
     apiClient.post<AuthApiResponse>(API_ENDPOINTS.auth.signup, { name, email, password }),
+
+  /** Exchange a refresh token for a new access+refresh pair. Never retried on 401. */
+  refresh: (refreshToken: string) =>
+    apiClient.postRaw<AuthApiResponse>(API_ENDPOINTS.auth.refresh, {
+      refresh_token: refreshToken,
+    }),
 
   me: (token: string) =>
     apiClient.get<MeResponse>(API_ENDPOINTS.auth.me, token),

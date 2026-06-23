@@ -14,6 +14,14 @@ from app.schemas.dashboard import DashboardSummary, MetricItem, SectionItem
 router = APIRouter()
 
 
+def _normalise_status(status: str | None) -> str:
+    return (status or "").strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def _is_active_goal_status(status: str | None) -> bool:
+    return _normalise_status(status) in {"active", "in_progress"}
+
+
 @router.get("/summary", response_model=DashboardSummary)
 def get_dashboard_summary(
     current_user: User = Depends(get_current_user),
@@ -29,7 +37,7 @@ def get_dashboard_summary(
 
     today = date.today().isoformat()
 
-    active_goals    = sum(1 for g in goals if g.status == "active")
+    active_goals    = sum(1 for g in goals if _is_active_goal_status(g.status))
     total_tasks     = len(tasks)
     completed_tasks = sum(1 for t in tasks if t.status == "done")
     open_tasks      = total_tasks - completed_tasks

@@ -161,6 +161,38 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
+        name="assistant-settings"
+        options={{
+          href: null,
+          title: "Assistant Settings",
+        }}
+      />
+
+      <Tabs.Screen
+        name="assistant-permissions"
+        options={{
+          href: null,
+          title: "Assistant Permissions",
+        }}
+      />
+
+      <Tabs.Screen
+        name="developer-options"
+        options={{
+          href: null,
+          title: "Developer Options",
+        }}
+      />
+
+      <Tabs.Screen
+        name="audit-log"
+        options={{
+          href: null,
+          title: "Audit Log",
+        }}
+      />
+
+      <Tabs.Screen
         name="email"
         options={{
           href: null,

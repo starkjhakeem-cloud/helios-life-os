@@ -25,7 +25,7 @@ class EmailMessage(Base):
     received_at: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     # "low" | "normal" | "high" | "urgent"
     importance: Mapped[str] = mapped_column(String(20), nullable=False, default="normal")
-    # "unread" | "read" | "archived"
+    # "unread" | "read" | "archived" | "trashed"
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="unread", index=True)
     # "manual" = added in HELIOS; future values: "gmail", "outlook"
     source: Mapped[str] = mapped_column(String(30), nullable=False, default="manual")

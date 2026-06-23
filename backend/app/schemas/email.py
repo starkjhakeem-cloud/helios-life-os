@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 MessageImportance = Literal["low", "normal", "high", "urgent"]
-MessageStatus = Literal["unread", "read", "archived"]
+MessageStatus = Literal["unread", "read", "archived", "trashed"]
 MessageSource = Literal["manual", "gmail", "outlook"]
 
 

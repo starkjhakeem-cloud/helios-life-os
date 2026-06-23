@@ -172,46 +172,123 @@ def get_suggestions(
     Generate proactive planning suggestions from the operator's unified context.
     Suggestions are ephemeral — not stored in the database.
     Call POST /queue to promote a suggestion into the review queue.
+
+    Always returns a 200 with at least rule-based suggestions.
+    `degraded=True` indicates AI failed and fallback suggestions were used.
     """
-    planning_ctx = build_context(
-        ContextScope.PLANNING,
-        user_id=current_user.id,
-        db=db,
-        user_name=current_user.name,
+    logger.info(
+        "suggestions.request user_id=%s limit=%d", current_user.id, limit
     )
 
+    now = datetime.now(timezone.utc).isoformat()
+    degraded = False
+    degraded_message: str | None = None
+    source = "local"
+
+    # ── Build user context ────────────────────────────────────────────────────
+    user_context: str | None = None
+    try:
+        planning_ctx = build_context(
+            ContextScope.PLANNING,
+            user_id=current_user.id,
+            db=db,
+            user_name=current_user.name,
+        )
+        user_context = planning_ctx.text
+        logger.info(
+            "suggestions.context_built user_id=%s sources=%s",
+            current_user.id, planning_ctx.sources,
+        )
+    except Exception as ctx_exc:
+        logger.exception(
+            "suggestions.context_failed user_id=%s — proceeding with empty context",
+            current_user.id,
+        )
+        degraded = True
+        degraded_message = "Context service unavailable — showing default recommendations."
+        _ = ctx_exc  # referenced to silence linters
+
+    # ── Generate suggestions ──────────────────────────────────────────────────
+    suggestions: list = []
     try:
         suggestions = get_ai_provider().generate_suggestions(
             user_name=current_user.name,
-            user_context=planning_ctx.text,
+            user_context=user_context,
         )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        # Both AnthropicProvider and OpenAIProvider currently delegate to
+        # MockAIProvider, which generates rule-based context-aware suggestions.
+        source = "local"
+        logger.info(
+            "suggestions.generated user_id=%s count=%d source=%s degraded=%s",
+            current_user.id, len(suggestions), source, degraded,
+        )
+    except RuntimeError as ai_exc:
+        logger.warning(
+            "suggestions.ai_provider_failed user_id=%s error=%s",
+            current_user.id, str(ai_exc),
+        )
+        degraded = True
+        if not degraded_message:
+            degraded_message = "Recommendation service unavailable — showing default recommendations."
+    except Exception as unexpected_exc:
+        logger.exception(
+            "suggestions.unexpected_error user_id=%s", current_user.id
+        )
+        degraded = True
+        if not degraded_message:
+            degraded_message = "An unexpected error occurred — showing default recommendations."
+        _ = unexpected_exc
 
-    now = datetime.now(timezone.utc).isoformat()
+    # ── Fallback: generate minimal rule-based suggestions from DB ─────────────
+    if not suggestions:
+        try:
+            from app.ai.mock_provider import MockAIProvider
+            suggestions = MockAIProvider().generate_suggestions(
+                user_name=current_user.name,
+                user_context=None,
+            )
+            logger.info(
+                "suggestions.fallback_used user_id=%s count=%d",
+                current_user.id, len(suggestions),
+            )
+        except Exception:
+            logger.exception(
+                "suggestions.fallback_failed user_id=%s — returning empty list",
+                current_user.id,
+            )
+
     trimmed = suggestions[:limit]
 
-    _record_audit(
-        db,
-        current_user.id,
-        "suggestion_created",
-        f"{len(trimmed)} suggestion(s) generated.",
-        metadata={"count": len(trimmed)},
-    )
-
+    # ── Audit + notification (only on success) ────────────────────────────────
     if trimmed:
-        _emit_notification(
+        _record_audit(
             db,
             current_user.id,
-            "new_suggestion",
-            "New Suggestions Available",
-            f"HELIOS generated {len(trimmed)} proactive suggestion{'s' if len(trimmed) != 1 else ''} for your review.",
+            "suggestion_created",
+            f"{len(trimmed)} suggestion(s) generated.",
+            metadata={"count": len(trimmed), "source": source, "degraded": degraded},
         )
+        if not degraded:
+            _emit_notification(
+                db,
+                current_user.id,
+                "new_suggestion",
+                "New Suggestions Available",
+                f"HELIOS generated {len(trimmed)} proactive suggestion{'s' if len(trimmed) != 1 else ''} for your review.",
+            )
+
+    logger.info(
+        "suggestions.response user_id=%s count=%d source=%s degraded=%s",
+        current_user.id, len(trimmed), source, degraded,
+    )
 
     return SuggestionsResponse(
         suggestions=trimmed,
         total=len(trimmed),
         generated_at=now,
+        source=source,
+        degraded=degraded,
+        message=degraded_message,
     )
 
 

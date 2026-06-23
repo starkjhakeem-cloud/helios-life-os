@@ -29,6 +29,8 @@ type AutonomyState = {
   suggestions: SuggestionItem[];
   isSuggestionsLoading: boolean;
   suggestionsError: string | null;
+  // true when the backend degraded gracefully (AI failed, rule-based fallback used)
+  suggestionsDegraded: boolean;
   // IDs of suggestions already promoted to the queue this session.
   queuedSuggestionIds: string[];
 
@@ -48,8 +50,9 @@ type AutonomyState = {
 
   fetchSuggestions: (token: string) => Promise<void>;
   addSuggestionToQueue: (token: string, suggestion: SuggestionItem) => Promise<void>;
+  runSuggestionNow: (token: string, suggestion: SuggestionItem) => Promise<AutonomyExecuteResult | null>;
 
-  generateDailyPlan: (token: string) => Promise<void>;
+  generateDailyPlan: (token: string) => Promise<DailyPlan | null>;
   addDailyPlanItemToQueue: (token: string, item: SuggestionItem) => Promise<void>;
 
   // Rules
@@ -87,6 +90,7 @@ export const useAutonomyStore = create<AutonomyState>()((set, get) => ({
   suggestions: [],
   isSuggestionsLoading: false,
   suggestionsError: null,
+  suggestionsDegraded: false,
   queuedSuggestionIds: [],
 
   dailyPlan: null,
@@ -199,7 +203,13 @@ export const useAutonomyStore = create<AutonomyState>()((set, get) => ({
     set({ isSuggestionsLoading: true, suggestionsError: null });
     try {
       const data = await autonomyService.getSuggestions(token);
-      set({ suggestions: data.suggestions, isSuggestionsLoading: false });
+      // suggestionsError stays null even when degraded — degraded means the
+      // backend returned fallback suggestions successfully, not a failure.
+      set({
+        suggestions: data.suggestions,
+        suggestionsDegraded: data.degraded ?? false,
+        isSuggestionsLoading: false,
+      });
     } catch (err) {
       set({ suggestionsError: extractMessage(err), isSuggestionsLoading: false });
     }
@@ -227,6 +237,40 @@ export const useAutonomyStore = create<AutonomyState>()((set, get) => ({
     }
   },
 
+  runSuggestionNow: async (token, suggestion) => {
+    set({ isMutating: true, error: null });
+    try {
+      const queuedItem = await autonomyService.create(token, {
+        title: suggestion.title,
+        description: suggestion.description,
+        source_agent: suggestion.source_agent,
+        proposed_action_type: suggestion.suggested_action_type,
+        payload_preview: suggestion.payload_preview,
+        risk_level: suggestion.risk_level,
+      });
+      await autonomyService.updateStatus(token, queuedItem.id, { status: "approved" });
+      const result = await autonomyService.execute(token, queuedItem.id);
+      set((s) => ({
+        queuedSuggestionIds: [...s.queuedSuggestionIds, suggestion.id],
+        isMutating: false,
+      }));
+      await get().fetchQueue(token);
+      if (
+        result.action_type === "create_task" ||
+        result.action_type === "update_task_status"
+      ) {
+        useTasksStore.getState().fetchTasks(token).catch(() => {});
+      }
+      if (result.action_type === "create_goal") {
+        useGoalsStore.getState().fetchGoals(token).catch(() => {});
+      }
+      return result;
+    } catch (err) {
+      set({ error: extractMessage(err), isMutating: false });
+      return null;
+    }
+  },
+
   // ── Daily plan actions ────────────────────────────────────────────────────
 
   generateDailyPlan: async (token) => {
@@ -234,8 +278,10 @@ export const useAutonomyStore = create<AutonomyState>()((set, get) => ({
     try {
       const plan = await autonomyService.generateDailyPlan(token);
       set({ dailyPlan: plan, isDailyPlanLoading: false, dailyPlanQueuedIds: [] });
+      return plan;
     } catch (err) {
       set({ dailyPlanError: extractMessage(err), isDailyPlanLoading: false });
+      return null;
     }
   },
 
@@ -330,6 +376,7 @@ export const useAutonomyStore = create<AutonomyState>()((set, get) => ({
       suggestions: [],
       isSuggestionsLoading: false,
       suggestionsError: null,
+      suggestionsDegraded: false,
       queuedSuggestionIds: [],
       dailyPlan: null,
       isDailyPlanLoading: false,

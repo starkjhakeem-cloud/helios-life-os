@@ -51,6 +51,13 @@
           "color": "#7c3aed",
           "sounds": []
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "HELIOS uses your location to show local time, weather context, and personalise AI recommendations.",
+          "locationWhenInUsePermission": "HELIOS uses your location to show local time, weather context, and personalise AI recommendations."
+        }
       ]
     ],
     "experiments": {

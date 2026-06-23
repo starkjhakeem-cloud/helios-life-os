@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
@@ -8,7 +9,7 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User
 from app.models.user_preferences import UserPreferences
-from app.schemas.settings import PreferencesOut, PreferencesUpdate
+from app.schemas.settings import PreferencesOut, PreferencesUpdate, VALID_LIFE_AREAS
 
 router = APIRouter()
 
@@ -18,6 +19,14 @@ _DEFAULTS = {
     "reminder_notifications": True,
     "ai_notifications": False,
     "default_planning_horizon": 7,
+    "location": "New York",
+    "preferred_name": None,
+    "assistant_tone": "balanced",
+    "primary_location": None,
+    "work_focus": None,
+    "daily_brief_time": "08:00",
+    "time_format": "12h",
+    "important_life_areas": None,
 }
 
 
@@ -41,6 +50,12 @@ def _get_or_create(db: Session, user_id: str) -> UserPreferences:
 
 
 def _to_out(p: UserPreferences) -> PreferencesOut:
+    raw_areas = p.important_life_areas
+    try:
+        areas: list[str] = json.loads(raw_areas) if raw_areas else []
+    except (ValueError, TypeError):
+        areas = []
+
     return PreferencesOut(
         user_id=p.user_id,
         theme_preference=p.theme_preference,  # type: ignore[arg-type]
@@ -48,6 +63,14 @@ def _to_out(p: UserPreferences) -> PreferencesOut:
         reminder_notifications=p.reminder_notifications,
         ai_notifications=p.ai_notifications,
         default_planning_horizon=p.default_planning_horizon,
+        location=p.location,
+        preferred_name=p.preferred_name,
+        assistant_tone=p.assistant_tone,  # type: ignore[arg-type]
+        primary_location=p.primary_location,
+        work_focus=p.work_focus,
+        daily_brief_time=p.daily_brief_time,
+        time_format=p.time_format,  # type: ignore[arg-type]
+        important_life_areas=areas,
         updated_at=p.updated_at.isoformat(),
     )
 
@@ -80,6 +103,23 @@ def update_preferences(
         prefs.ai_notifications = payload.ai_notifications
     if payload.default_planning_horizon is not None:
         prefs.default_planning_horizon = payload.default_planning_horizon
+    if payload.location is not None:
+        prefs.location = payload.location.strip() or "New York"
+    if "preferred_name" in payload.model_fields_set:
+        prefs.preferred_name = payload.preferred_name
+    if payload.assistant_tone is not None:
+        prefs.assistant_tone = payload.assistant_tone
+    if "primary_location" in payload.model_fields_set:
+        prefs.primary_location = payload.primary_location
+    if "work_focus" in payload.model_fields_set:
+        prefs.work_focus = payload.work_focus
+    if payload.daily_brief_time is not None:
+        prefs.daily_brief_time = payload.daily_brief_time
+    if payload.time_format is not None:
+        prefs.time_format = payload.time_format
+    if payload.important_life_areas is not None:
+        valid = [a for a in payload.important_life_areas if a in VALID_LIFE_AREAS]
+        prefs.important_life_areas = json.dumps(valid)
 
     prefs.updated_at = datetime.now(timezone.utc)
     db.commit()

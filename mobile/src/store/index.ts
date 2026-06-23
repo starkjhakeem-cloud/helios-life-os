@@ -3,6 +3,7 @@ export type { SystemStatus } from "./useAppStore";
 export { useDashboardStore } from "./useDashboardStore";
 export { useAuthStore } from "./useAuthStore";
 export type { User } from "./useAuthStore";
+export { SessionExpiredError } from "../services/apiClient";
 export { useAIStore } from "./useAIStore";
 export type { ChatMessage, RecommendedAction } from "./useAIStore";
 export { useAgentsStore } from "./useAgentsStore";
@@ -31,3 +32,6 @@ export type { BackgroundJob, BackgroundJobTriggerResult, JobType, JobStatus } fr
 export { useNotificationsStore } from "./useNotificationsStore";
 export type { InboxNotification, NotificationEventType } from "../services/inboxService";
 export type { AutonomyAuditLogEntry, AutonomyQueueItem, AutonomyExecuteResult, SuggestionItem, DailyPlan, FocusBlock, PriorityTask, AutonomyRule, AutonomyRuleCreate, AutonomyRuleUpdate, QueueStatus, RiskLevel } from "../services/autonomyService";
+export { useProfileStore } from "./useProfileStore";
+export type { ProfileOut, ProfileUpdate, UserIdCheckResponse } from "../services/profileService";
+export type { AssistantTone, LifeArea, TimeFormat } from "../services/settingsService";

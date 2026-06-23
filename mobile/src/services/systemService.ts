@@ -10,6 +10,7 @@ export type HealthResponse = {
 export type VersionResponse = {
   version: string;
   api_version: string;
+  helios_version: string;
   service: string;
 };
 

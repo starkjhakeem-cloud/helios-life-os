@@ -1,28 +1,19 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   Animated,
   Dimensions,
-  Easing,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { SFSymbol } from "sf-symbols-typescript";
-import Svg, {
-  Circle,
-  Defs,
-  G,
-  LinearGradient,
-  Path,
-  RadialGradient,
-  Stop,
-} from "react-native-svg";
 
+import HeliosEnergyCore, { type CoreState } from "../../components/HeliosEnergyCore";
 import {
   useAuthStore,
   useAutonomyStore,
@@ -31,10 +22,23 @@ import {
   useGoalsStore,
   useIntegrationStore,
   useNotificationsStore,
+  useProfileStore,
+  useSettingsStore,
   useTasksStore,
 } from "../../store";
 import { useTheme } from "../../theme/ThemeContext";
 import type { ThemeColors } from "../../theme/theme";
+import {
+  formatActiveGoalsSubtitle,
+  formatSafeDashboardMetricValue,
+  formatSafeMetricPercent,
+  formatHeroDate,
+  formatHeroTime,
+  formatHeroTimeLocation,
+  getTimeBasedGreeting,
+  isActiveGoalStatus,
+} from "../../utils/homeFormatting";
+import { useCurrentDateTime } from "../../hooks/useCurrentDateTime";
 
 const { width } = Dimensions.get("window");
 const PAGE = width - 52;
@@ -45,65 +49,96 @@ type StatusTone = "active" | "warning" | "attention" | "danger" | "syncing" | "f
 type SystemStatus = {
   label: string;
   tone: StatusTone;
+  coreState: CoreState;
   targetRoute: string | null;
   accessibilityHint: string;
 };
 
-function getSystemStatus({
+function getAssistantStatus({
   apiError,
   aiProviderOffline,
-  hasAttention,
+  pendingApprovals,
+  unreadCount,
+  overdueTasks,
+  highPriorityOpen,
+  openTasks,
   attentionRoute,
   isSyncing,
   focusModeActive,
 }: {
   apiError: boolean;
   aiProviderOffline: boolean;
-  hasAttention: boolean;
+  pendingApprovals: number;
+  unreadCount: number;
+  overdueTasks: number;
+  highPriorityOpen: number;
+  openTasks: number;
   attentionRoute: string;
   isSyncing: boolean;
   focusModeActive: boolean;
 }): SystemStatus {
   if (apiError)
     return {
-      label: "SYSTEM ALERT",
+      label: "Needs your attention",
       tone: "danger",
+      coreState: "critical",
       targetRoute: "/(tabs)/more",
-      accessibilityHint: "System alert active. Tap to view status.",
+      accessibilityHint: "HELIOS needs your attention. Tap to view status.",
     };
   if (aiProviderOffline)
     return {
-      label: "AI PROVIDER OFFLINE",
+      label: "Syncing your information",
       tone: "warning",
+      coreState: "offline",
       targetRoute: "/(tabs)/integrations",
-      accessibilityHint: "AI provider offline. Tap to view integrations.",
+      accessibilityHint: "HELIOS is syncing information. Tap to view integrations.",
     };
-  if (hasAttention)
+  if (pendingApprovals > 0 || overdueTasks > 0 || highPriorityOpen > 0)
     return {
-      label: "ATTENTION REQUIRED",
+      label: "Needs your attention",
       tone: "attention",
+      coreState: "attention",
       targetRoute: attentionRoute,
-      accessibilityHint: "Attention required. Tap to review.",
+      accessibilityHint: "HELIOS has something for you to review.",
     };
   if (isSyncing)
     return {
-      label: "SYNCING SYSTEMS",
+      label: "Working in the background",
       tone: "syncing",
+      coreState: "generating",
       targetRoute: "/(tabs)/integrations",
-      accessibilityHint: "Systems syncing. Tap to view integrations.",
+      accessibilityHint: "HELIOS is working in the background.",
+    };
+  if (unreadCount > 0)
+    return {
+      label: "Generating recommendations",
+      tone: "syncing",
+      coreState: "thinking",
+      targetRoute: "/(tabs)/notifications",
+      accessibilityHint: "HELIOS has new recommendations and updates.",
+    };
+  if (openTasks === 0)
+    return {
+      label: "You're all caught up",
+      tone: "active",
+      coreState: "idle",
+      targetRoute: null,
+      accessibilityHint: "You're all caught up.",
     };
   if (focusModeActive)
     return {
-      label: "FOCUS MODE ACTIVE",
+      label: "Waiting for your next task",
       tone: "focus",
+      coreState: "listening",
       targetRoute: null,
-      accessibilityHint: "Focus mode active.",
+      accessibilityHint: "HELIOS is waiting for your next task.",
     };
   return {
-    label: "ALL SYSTEMS ACTIVE",
+    label: "Ready to help",
     tone: "active",
+    coreState: "idle",
     targetRoute: null,
-    accessibilityHint: "All systems active.",
+    accessibilityHint: "HELIOS is ready to help.",
   };
 }
 
@@ -122,10 +157,16 @@ export default function HomeScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const now = useCurrentDateTime();
   const accessToken = useAuthStore((s) => s.accessToken);
-  const userName = useAuthStore((s) => s.user?.name ?? "Operator");
+  const authUserName = useAuthStore((s) => s.user?.name ?? "Operator");
+  const preferredName = useSettingsStore((s) => s.preferred_name);
+  const profileDisplayName = useProfileStore((s) => s.display_name);
+  // Priority: preferred_name (set by user for AI/greeting) → profile display_name → auth name
+  const userName = preferredName ?? profileDisplayName ?? authUserName;
 
   const goals = useGoalsStore((s) => s.goals);
+  const goalsLoading = useGoalsStore((s) => s.isLoading);
   const goalsError = useGoalsStore((s) => s.error);
   const fetchGoals = useGoalsStore((s) => s.fetchGoals);
   const tasks = useTasksStore((s) => s.tasks);
@@ -136,39 +177,75 @@ export default function HomeScreen() {
   const syncingId = useIntegrationStore((s) => s.syncingId);
   const bgJobsRunning = useBackgroundJobsStore((s) => s.jobs.some((j) => j.status === "running"));
   const aiSendError = useConversationStore((s) => s.sendError);
+  const location = useSettingsStore((s) => s.location);
+  const timeFormat = useSettingsStore((s) => s.time_format);
+  const safeGoals = useMemo(() => goals ?? [], [goals]);
+  const safeTasks = useMemo(() => tasks ?? [], [tasks]);
 
   useEffect(() => {
     if (accessToken) {
       fetchGoals(accessToken);
       fetchTasks(accessToken);
     }
-  }, [accessToken]);
+  }, [accessToken, fetchGoals, fetchTasks]);
 
-  const activeGoals = goals.filter((g) => g.status === "active").length;
-  const doneTodayTasks = tasks.filter((t) => {
+  useFocusEffect(
+    useCallback(() => {
+      if (!accessToken) return;
+      fetchGoals(accessToken);
+      fetchTasks(accessToken);
+    }, [accessToken, fetchGoals, fetchTasks]),
+  );
+
+  const activeGoals = useMemo(
+    () => safeGoals.filter((g) => isActiveGoalStatus(g.status)).length,
+    [safeGoals],
+  );
+  const activeGoalsValue = formatSafeDashboardMetricValue("Active Goals", activeGoals);
+  const activeGoalsSubtitle = goalsError
+    ? "Unable to load"
+    : goalsLoading && goals.length === 0
+      ? "Loading goals"
+      : formatActiveGoalsSubtitle(activeGoals);
+  const goalStatuses = useMemo(
+    () => Array.from(new Set(safeGoals.map((g) => g.status ?? "unknown"))),
+    [safeGoals],
+  );
+  const doneTodayTasks = safeTasks.filter((t) => {
     if (t.status !== "done") return false;
     if (!t.updated_at) return false;
     const updated = new Date(t.updated_at);
-    const now = new Date();
     return (
       updated.getDate() === now.getDate() &&
       updated.getMonth() === now.getMonth() &&
       updated.getFullYear() === now.getFullYear()
     );
   }).length;
-  const openTasks = tasks.filter((t) => t.status !== "done").length;
-  const totalTasks = tasks.length;
-  const completionRate =
+  const openTasks = safeTasks.filter((t) => t.status !== "done").length;
+  const totalTasks = safeTasks.length;
+  const completedTasks = safeTasks.filter((t) => t.status === "done").length;
+  const completionRateValue =
     totalTasks === 0
-      ? "—"
-      : `${Math.round((tasks.filter((t) => t.status === "done").length / totalTasks) * 100)}%`;
+      ? "0%"
+      : formatSafeMetricPercent(Math.round((completedTasks / totalTasks) * 100));
+  const doneTodayTasksValue = formatSafeDashboardMetricValue("Tasks Done", doneTodayTasks);
+  const openTasksValue = formatSafeDashboardMetricValue("Open Tasks", openTasks);
 
-  const today = new Date();
-  const overdueTasks = tasks.filter((t) => {
+  useEffect(() => {
+    if (!__DEV__) return;
+    console.log("[Home metrics] Active Goals", {
+      totalGoalsLoaded: safeGoals.length,
+      activeGoalsCounted: activeGoals,
+      statusesFound: goalStatuses,
+      valuePassedToMetricCard: activeGoalsValue,
+    });
+  }, [activeGoals, activeGoalsValue, goalStatuses, safeGoals.length]);
+
+  const overdueTasks = safeTasks.filter((t) => {
     if (t.status === "done" || !t.due_date) return false;
-    return new Date(t.due_date) < today;
+    return new Date(t.due_date) < now;
   }).length;
-  const highPriorityOpen = tasks.filter(
+  const highPriorityOpen = safeTasks.filter(
     (t) => t.status !== "done" && (t.priority === "critical" || t.priority === "high"),
   ).length;
 
@@ -177,7 +254,7 @@ export default function HomeScreen() {
     (aiSendError.toLowerCase().includes("provider") ||
       aiSendError.toLowerCase().includes("unavailable"));
 
-  // Resolve the highest-priority destination for ATTENTION REQUIRED
+  // Resolve the highest-priority destination when HELIOS needs attention.
   const attentionRoute =
     overdueTasks > 0 || highPriorityOpen > 0
       ? "/(tabs)/tasks"
@@ -185,10 +262,14 @@ export default function HomeScreen() {
         ? "/(tabs)/autonomy"
         : "/(tabs)/notifications";
 
-  const systemStatus = getSystemStatus({
+  const systemStatus = getAssistantStatus({
     apiError: !!(tasksError || goalsError),
     aiProviderOffline,
-    hasAttention: unreadCount > 0 || pendingApprovals > 0 || overdueTasks > 0 || highPriorityOpen > 0,
+    pendingApprovals,
+    unreadCount,
+    overdueTasks,
+    highPriorityOpen,
+    openTasks,
     attentionRoute,
     isSyncing: !!(syncingId || bgJobsRunning),
     focusModeActive: false,
@@ -198,13 +279,12 @@ export default function HomeScreen() {
     ? () => router.push(systemStatus.targetRoute as Parameters<typeof router.push>[0])
     : null;
 
-  const now = today;
-  const hour = now.getHours();
-  const greeting = hour < 12 ? "Good morning," : hour < 17 ? "Good afternoon," : "Good evening,";
-  const dateStr = now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-  const timeStr = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const greeting = getTimeBasedGreeting(now);
+  const dateStr = formatHeroDate(now);
+  const timeLocationStr = formatHeroTimeLocation(now, location, timeFormat);
+  const timeStr = formatHeroTime(now, timeFormat);
 
-  const displayName = userName.split(" ").slice(0, 2).join(" ");
+  const displayName = userName;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -225,15 +305,31 @@ export default function HomeScreen() {
           onNotifPress={() => router.push("/(tabs)/notifications")}
           onGearPress={() => router.push("/(tabs)/profile")}
         />
-        <Hero greeting={greeting} userName={displayName} dateStr={dateStr} systemStatus={systemStatus} onPressStatus={onPressStatus} />
+        <Hero
+          greeting={greeting}
+          userName={displayName}
+          dateStr={dateStr}
+          timeLocationStr={timeLocationStr}
+          systemStatus={systemStatus}
+          onPressStatus={onPressStatus}
+        />
 
         <Section title={"TODAY'S METRICS"} action="View all  ›" onAction={() => router.push("/(tabs)/analytics")} />
 
         <View style={styles.grid}>
-          <Metric icon="target" value={String(activeGoals)} label="Active Goals" sub={activeGoals === 1 ? "On track" : "In progress"} onPress={() => router.push("/(tabs)/goals")} />
-          <Metric icon="checkmark.circle.fill" value={String(doneTodayTasks)} label="Tasks Done" sub="Completed today" onPress={() => router.push("/(tabs)/tasks")} />
-          <Metric icon="chart.bar.fill" value={completionRate} label="Completion Rate" sub="Overall progress" onPress={() => router.push("/(tabs)/analytics")} />
-          <Metric icon="circle" value={String(openTasks)} label="Open Tasks" sub={openTasks === 0 ? "All clear" : "Needs attention"} onPress={() => router.push("/(tabs)/tasks")} />
+          <Metric
+            icon="target"
+            value={activeGoalsValue}
+            label="Active Goals"
+            sub={activeGoalsSubtitle}
+            onPress={() => router.push({
+              pathname: "/(tabs)/goals",
+              params: { focus: activeGoals > 0 ? "active" : "empty" },
+            })}
+          />
+          <Metric icon="checkmark.circle.fill" value={doneTodayTasksValue} label="Tasks Done" sub={tasksError ? "Unable to load" : "Completed today"} onPress={() => router.push("/(tabs)/tasks")} />
+          <Metric icon="chart.bar.fill" value={completionRateValue} label="Completion Rate" sub={tasksError ? "Unable to load" : "Overall progress"} onPress={() => router.push("/(tabs)/analytics")} />
+          <Metric icon="circle" value={openTasksValue} label="Open Tasks" sub={tasksError ? "Unable to load" : openTasks === 0 ? "All clear" : "Needs attention"} onPress={() => router.push("/(tabs)/tasks")} />
         </View>
 
         <Section title="DAILY BRIEF" action="View full briefing  ›" onAction={() => router.push("/(tabs)/assistant")} />
@@ -307,18 +403,30 @@ function Hero({
   greeting,
   userName,
   dateStr,
+  timeLocationStr,
   systemStatus,
   onPressStatus,
 }: {
   greeting: string;
   userName: string;
   dateStr: string;
+  timeLocationStr: string;
   systemStatus: SystemStatus;
   onPressStatus: (() => void) | null;
 }) {
   const { colors } = useTheme();
   const s = useMemo(() => createStyles(colors), [colors]);
   const toneColor = getToneColor(systemStatus.tone, colors);
+  const heroScale = useRef(new Animated.Value(1)).current;
+
+  const animateHero = useCallback((toValue: number) => {
+    Animated.spring(heroScale, {
+      toValue,
+      useNativeDriver: true,
+      speed: 18,
+      bounciness: 5,
+    }).start();
+  }, [heroScale]);
 
   const pillStyle = [
     s.statusPill,
@@ -333,11 +441,19 @@ function Hero({
   );
 
   return (
-    <View style={s.heroCard}>
+    <Animated.View
+      style={[s.heroCard, { transform: [{ scale: heroScale }] }]}
+      onTouchStart={() => animateHero(1.008)}
+      onTouchEnd={() => animateHero(1)}
+      onTouchCancel={() => animateHero(1)}
+    >
       <View style={s.heroLeft}>
         <Text style={s.heroGreeting}>{greeting}</Text>
-        <Text style={s.heroName} numberOfLines={2}>{userName}.</Text>
-        <Text style={s.heroDate}>{dateStr}</Text>
+        <Text style={s.heroName} numberOfLines={2}>{userName}</Text>
+        <View style={s.heroDateBlock}>
+          <Text style={s.heroDate}>{dateStr}</Text>
+          <Text style={s.heroTimeLocation}>{timeLocationStr}</Text>
+        </View>
 
         {onPressStatus ? (
           <TouchableOpacity
@@ -357,116 +473,13 @@ function Hero({
       </View>
 
       <View style={s.heroOrbArea}>
-        <HeliosOrb />
+        <HeliosEnergyCore
+          size={128}
+          state={systemStatus.coreState}
+          showParticles={false}
+          onPress={onPressStatus ?? undefined}
+        />
       </View>
-    </View>
-  );
-}
-
-function HeliosOrb() {
-  const pulse = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, {
-          toValue: 1,
-          duration: 1800,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulse, {
-          toValue: 0,
-          duration: 1800,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ])
-    );
-
-    loop.start();
-    return () => loop.stop();
-  }, [pulse]);
-
-  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.025] });
-  const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] });
-
-  return (
-    <Animated.View style={{ opacity, transform: [{ scale }] }}>
-      <Svg width={118} height={118} viewBox="0 0 118 118">
-        <Defs>
-          <RadialGradient id="orbHalo" cx="50%" cy="50%" r="50%">
-            <Stop offset="0%" stopColor="#A855F7" stopOpacity="0.2" />
-            <Stop offset="45%" stopColor="#8B3DFF" stopOpacity="0.08" />
-            <Stop offset="100%" stopColor="#8B3DFF" stopOpacity="0" />
-          </RadialGradient>
-          <RadialGradient id="orbWash" cx="50%" cy="50%" r="50%">
-            <Stop offset="0%" stopColor="#111B36" stopOpacity="0.46" />
-            <Stop offset="58%" stopColor="#25145E" stopOpacity="0.18" />
-            <Stop offset="100%" stopColor="#020617" stopOpacity="0" />
-          </RadialGradient>
-          <RadialGradient id="orbCore" cx="35%" cy="28%" r="72%">
-            <Stop offset="0%" stopColor="#F5D0FE" stopOpacity="0.96" />
-            <Stop offset="18%" stopColor="#C4B5FD" stopOpacity="0.98" />
-            <Stop offset="42%" stopColor="#8B5CF6" stopOpacity="1" />
-            <Stop offset="72%" stopColor="#6D28D9" stopOpacity="1" />
-            <Stop offset="100%" stopColor="#2E1065" stopOpacity="1" />
-          </RadialGradient>
-          <RadialGradient id="coreHalo" cx="50%" cy="50%" r="50%">
-            <Stop offset="0%" stopColor="#A855F7" stopOpacity="0.34" />
-            <Stop offset="100%" stopColor="#A855F7" stopOpacity="0" />
-          </RadialGradient>
-          <RadialGradient id="coreShade" cx="72%" cy="78%" r="58%">
-            <Stop offset="0%" stopColor="#160A36" stopOpacity="0.62" />
-            <Stop offset="58%" stopColor="#2E1065" stopOpacity="0.22" />
-            <Stop offset="100%" stopColor="#2E1065" stopOpacity="0" />
-          </RadialGradient>
-          <RadialGradient id="coreSpecular" cx="50%" cy="50%" r="50%">
-            <Stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.62" />
-            <Stop offset="46%" stopColor="#F5D0FE" stopOpacity="0.26" />
-            <Stop offset="100%" stopColor="#F5D0FE" stopOpacity="0" />
-          </RadialGradient>
-          <RadialGradient id="particle" cx="50%" cy="50%" r="50%">
-            <Stop offset="0%" stopColor="#F0FDFF" stopOpacity="1" />
-            <Stop offset="52%" stopColor="#22D3EE" stopOpacity="0.62" />
-            <Stop offset="100%" stopColor="#22D3EE" stopOpacity="0" />
-          </RadialGradient>
-          <LinearGradient id="outerArc" x1="90" y1="22" x2="99" y2="82">
-            <Stop offset="0%" stopColor="#22D3EE" stopOpacity="0" />
-            <Stop offset="28%" stopColor="#C084FC" stopOpacity="0.78" />
-            <Stop offset="72%" stopColor="#8B5CF6" stopOpacity="0.48" />
-            <Stop offset="100%" stopColor="#22D3EE" stopOpacity="0" />
-          </LinearGradient>
-        </Defs>
-
-        <Circle cx="59" cy="59" r="57" fill="url(#orbHalo)" />
-        <Circle cx="59" cy="59" r="45" fill="url(#orbWash)" opacity="0.58" />
-        <Circle cx="59" cy="59" r="43" fill="none" stroke="rgba(139, 92, 246, 0.26)" strokeWidth="1" />
-        <Circle cx="59" cy="59" r="31" fill="none" stroke="rgba(139, 92, 246, 0.56)" strokeWidth="1.25" />
-        <Circle cx="59" cy="59" r="20" fill="rgba(139, 92, 246, 0.12)" stroke="rgba(192, 132, 252, 0.18)" strokeWidth="0.65" />
-        <Path d="M 89.5 26.5 A 45 45 0 0 1 92.5 83" fill="none" stroke="url(#outerArc)" strokeWidth="2.8" strokeLinecap="round" />
-        <Path d="M 88 30 A 41 41 0 0 1 88.8 77" fill="none" stroke="rgba(139, 92, 246, 0.26)" strokeWidth="1.2" strokeLinecap="round" />
-        <Circle cx="59" cy="59" r="24" fill="url(#coreHalo)" />
-        <Circle cx="59" cy="59" r="16.8" fill="none" stroke="rgba(216, 180, 254, 0.16)" strokeWidth="2" />
-        <Circle cx="59" cy="59" r="16.2" fill="url(#orbCore)" />
-        <Circle cx="60.8" cy="61.4" r="15.6" fill="url(#coreShade)" />
-        <Circle cx="53.6" cy="52" r="7.3" fill="url(#coreSpecular)" />
-        <Circle cx="51.4" cy="49.2" r="2.4" fill="rgba(255, 255, 255, 0.42)" />
-        <Path d="M 46.8 62.5 A 15.8 15.8 0 0 0 70.8 67.1" fill="none" stroke="rgba(20, 10, 48, 0.28)" strokeWidth="1.4" strokeLinecap="round" />
-        <G opacity="0.78">
-          <Circle cx="25" cy="80" r="1.4" fill="url(#particle)" />
-          <Path d="M25 76.8 L25 83.2 M21.8 80 L28.2 80" stroke="rgba(34, 211, 238, 0.3)" strokeWidth="0.5" strokeLinecap="round" />
-        </G>
-        <G opacity="0.7">
-          <Circle cx="94" cy="54" r="1.25" fill="#22D3EE" />
-          <Path d="M94 51.2 L94 56.8 M91.2 54 L96.8 54" stroke="rgba(34, 211, 238, 0.24)" strokeWidth="0.42" strokeLinecap="round" />
-        </G>
-        <Circle cx="64" cy="24" r="0.9" fill="rgba(196, 181, 253, 0.7)" />
-        <Circle cx="78" cy="91" r="0.75" fill="rgba(139, 92, 246, 0.72)" />
-        <Circle cx="39" cy="36" r="0.65" fill="rgba(34, 211, 238, 0.45)" />
-        <Circle cx="31" cy="65" r="0.6" fill="rgba(139, 92, 246, 0.52)" />
-        <Circle cx="91" cy="34" r="0.55" fill="rgba(139, 92, 246, 0.48)" />
-      </Svg>
     </Animated.View>
   );
 }
@@ -500,13 +513,14 @@ function Metric({
 }) {
   const { colors } = useTheme();
   const s = useMemo(() => createStyles(colors), [colors]);
+  const displayValue = formatSafeDashboardMetricValue(label, value);
 
   return (
     <TouchableOpacity
       style={s.metric}
       onPress={onPress}
       activeOpacity={0.75}
-      accessibilityLabel={`${label}: ${value}. ${sub}. Tap to view.`}
+      accessibilityLabel={`${label}: ${displayValue}. ${sub}. Tap to view.`}
       accessibilityRole="button"
       disabled={!onPress}
     >
@@ -521,7 +535,7 @@ function Metric({
         </View>
 
         <View style={s.metricTextWrap}>
-          <Text style={s.metricValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{value}</Text>
+          <Text style={s.metricValue} numberOfLines={1}>{displayValue}</Text>
           <Text style={s.metricLabel}>{label}</Text>
           <Text style={s.metricSub}>{sub}</Text>
         </View>
@@ -560,7 +574,7 @@ function DailyCommand({ timeStr, userName, onPress }: { timeStr: string; userNam
       </View>
 
       <Text style={s.commandBody}>
-        {"Good to see you, "}{userName}.{"\n"}
+        {"Good to see you\n"}{userName}{"\n"}
         {"Your priority queue is loaded and systems are nominal."}
       </Text>
     </TouchableOpacity>
@@ -646,7 +660,7 @@ function createStyles(colors: ThemeColors) {
 
     heroCard: {
       width: PAGE,
-      height: 232,
+      minHeight: 244,
       borderRadius: 28,
       marginBottom: 34,
       paddingLeft: 17,
@@ -676,20 +690,32 @@ function createStyles(colors: ThemeColors) {
       marginBottom: 10,
     },
     heroDate: {
-      color: colors.textMuted,
+      color: colors.textSecondary,
       fontSize: 14,
-      lineHeight: 22,
+      lineHeight: 18,
+      fontWeight: "700",
+    },
+    heroDateBlock: {
+      gap: 2,
+      marginBottom: 16,
+    },
+    heroTimeLocation: {
+      color: colors.textMuted,
+      fontSize: 12.5,
+      lineHeight: 17,
       fontWeight: "600",
-      marginBottom: 18,
+      letterSpacing: 0.1,
     },
     statusPill: {
-      height: 32,
+      minHeight: 34,
+      maxWidth: 204,
       alignSelf: "flex-start",
-      borderRadius: 16,
-      paddingHorizontal: 13,
+      borderRadius: 17,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
       flexDirection: "row",
       alignItems: "center",
-      gap: 9,
+      gap: 8,
       backgroundColor: `${colors.accentCyan}24`,
       borderWidth: 1,
       borderColor: `${colors.accentCyan}2e`,
@@ -702,16 +728,18 @@ function createStyles(colors: ThemeColors) {
     },
     statusText: {
       color: colors.accentCyan,
-      fontSize: 9.5,
-      fontWeight: "900",
-      letterSpacing: 1.9,
+      fontSize: 12,
+      lineHeight: 15,
+      fontWeight: "800",
+      letterSpacing: 0,
+      flexShrink: 1,
     },
     heroOrbArea: {
       position: "absolute",
-      right: 27,
-      top: 45,
-      width: 118,
-      height: 118,
+      right: 18,
+      top: 24,
+      width: 134,
+      height: 124,
       alignItems: "center",
       justifyContent: "center",
     },

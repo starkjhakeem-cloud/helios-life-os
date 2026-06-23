@@ -21,6 +21,50 @@ def test_signup_login_and_goal_workflow(client):
     assert me_response.status_code == 200
     assert me_response.json()["email"] == signup_payload["email"]
 
+    preferences_response = client.get("/api/v1/settings/preferences", headers=headers)
+    assert preferences_response.status_code == 200
+    assert preferences_response.json()["location"] == "New York"
+
+    location_response = client.patch(
+        "/api/v1/settings/preferences",
+        json={"location": "Brooklyn"},
+        headers=headers,
+    )
+    assert location_response.status_code == 200
+    assert location_response.json()["location"] == "Brooklyn"
+
+    email_response = client.post(
+        "/api/v1/email",
+        json={
+            "sender": "updates@example.com",
+            "subject": "Recoverable message",
+            "received_at": "2026-06-22T18:30:00Z",
+        },
+        headers=headers,
+    )
+    assert email_response.status_code == 201
+    email_id = email_response.json()["id"]
+
+    trash_response = client.patch(
+        f"/api/v1/email/{email_id}",
+        json={"status": "trashed"},
+        headers=headers,
+    )
+    assert trash_response.status_code == 200
+    assert trash_response.json()["status"] == "trashed"
+
+    trashed_list = client.get("/api/v1/email?status=trashed", headers=headers)
+    assert trashed_list.status_code == 200
+    assert [message["id"] for message in trashed_list.json()["messages"]] == [email_id]
+
+    restore_response = client.patch(
+        f"/api/v1/email/{email_id}",
+        json={"status": "read"},
+        headers=headers,
+    )
+    assert restore_response.status_code == 200
+    assert restore_response.json()["status"] == "read"
+
     goal_payload = {
         "title": "Finish user testing",
         "description": "Add reliable tests for the HELIOS backend and mobile app.",

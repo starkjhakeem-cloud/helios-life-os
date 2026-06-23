@@ -18,16 +18,23 @@ from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.main import app
 
+_IS_SQLITE = str(engine.url).startswith("sqlite")
+
 
 @pytest.fixture(scope="session", autouse=True)
 def initialize_database():
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     yield
-    Base.metadata.drop_all(bind=engine)
-    db_path = Path(__file__).resolve().parent / "test_helios.db"
-    if db_path.exists():
-        db_path.unlink()
+    # Teardown: only fully clean up for SQLite (the disposable test file).
+    # When running against Postgres the schema is managed by Alembic migrations;
+    # dropping tables here would leave the database unusable until migrations are
+    # re-applied, which silently breaks the running API server.
+    if _IS_SQLITE:
+        Base.metadata.drop_all(bind=engine)
+        db_path = Path(__file__).resolve().parent / "test_helios.db"
+        if db_path.exists():
+            db_path.unlink()
 
 
 @pytest.fixture(autouse=True)

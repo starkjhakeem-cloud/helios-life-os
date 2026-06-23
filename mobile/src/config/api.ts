@@ -14,6 +14,7 @@ export const API_ENDPOINTS = {
   auth: {
     login:   "/api/v1/auth/login",
     signup:  "/api/v1/auth/signup",
+    refresh: "/api/v1/auth/refresh",
     me:      "/api/v1/auth/me",
     account: "/api/v1/auth/account",
   },
@@ -85,5 +86,10 @@ export const API_ENDPOINTS = {
     rules: "/api/v1/autonomy/rules",
     rule: (id: string) => `/api/v1/autonomy/rules/${id}`,
     auditLog: "/api/v1/autonomy/audit-log",
+  },
+  profile: {
+    base: "/api/v1/profile",
+    userIdCheck: "/api/v1/profile/user-id/check",
+    userId: "/api/v1/profile/user-id",
   },
 } as const;

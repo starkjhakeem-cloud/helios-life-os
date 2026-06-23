@@ -24,6 +24,7 @@ def get_version() -> dict:
     return {
         "version": settings.version,
         "api_version": settings.api_version,
+        "helios_version": "HELIOS 2.6",
         "service": settings.app_name,
     }
 

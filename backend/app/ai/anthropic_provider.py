@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timezone
 
 from app.ai.base import AIProvider
+from app.ai.name_formatting import enforce_name_formatting
 from app.ai.prompts import (
     BRIEFING_SYSTEM,
     ORCHESTRATION_SYSTEM,
@@ -95,6 +96,7 @@ class AnthropicProvider(AIProvider):
         user_msg = build_briefing_user_message(user_name=user_name, user_context=user_context)
         try:
             data = self._call(system=BRIEFING_SYSTEM, user=user_msg)
+            data = enforce_name_formatting(data, user_name)
             return DailyBriefing(
                 greeting=data["greeting"],
                 summary=data["summary"],
@@ -130,6 +132,7 @@ class AnthropicProvider(AIProvider):
         )
         try:
             data = self._call(system=PLAN_SYSTEM, user=user_msg)
+            data = enforce_name_formatting(data, user_name)
             return PlanResponse(
                 plan_title=data["plan_title"],
                 summary=data["summary"],
@@ -160,6 +163,7 @@ class AnthropicProvider(AIProvider):
         )
         try:
             data = self._call(system=system, user=user_msg, max_tokens=1200, history=history)
+            data = enforce_name_formatting(data, user_name)
             recommended_actions: list[RecommendedAction] = []
             raw_actions = data.get("recommended_actions")
             if isinstance(raw_actions, list):
@@ -200,6 +204,7 @@ class AnthropicProvider(AIProvider):
                 user=user_msg,
                 max_tokens=2000,
             )
+            data = enforce_name_formatting(data, user_name)
             assessments = [
                 AgentAssessment(**item)
                 for item in (data.get("agent_assessments") or [])

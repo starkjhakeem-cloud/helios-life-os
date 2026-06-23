@@ -22,9 +22,13 @@ class MockAIProvider(AIProvider):
         has_emails = bool(user_context and "UNREAD MESSAGES" in user_context)
 
         return DailyBriefing(
-            greeting=f"{time_word}, {user_name}. Your priority queue is loaded and systems are nominal.",
+            greeting=(
+                f"{time_word}\n"
+                f"{user_name}\n"
+                "Your priority queue is loaded and systems are nominal."
+            ),
             summary=(
-                f"Operator {user_name}, all systems nominal. Goal and task tracking is active, "
+                "All systems are nominal. Goal and task tracking is active, "
                 "analytics pipeline is live, and the AI planning engine is ready for deployment. "
                 "Focus on closing open tasks and advancing your highest-priority goals today."
             ),
@@ -134,7 +138,7 @@ class MockAIProvider(AIProvider):
                 f"A structured {horizon}-day plan addressing: {prompt} "
                 f"This plan breaks the objective into {len(steps)} sequential phases, "
                 "each building on the previous to ensure consistent forward momentum. "
-                f"Operator {user_name} — review priorities and adjust before execution."
+                "Review priorities and adjust before execution."
             ),
             steps=steps,
             estimated_timeline=f"{horizon} days",
@@ -642,7 +646,7 @@ class MockAIProvider(AIProvider):
             if has_emails else ""
         )
         overview = (
-            f"Today's operational plan for {user_name} — {plan_date}. "
+            f"Today's operational plan\n{user_name}\n{plan_date}\n"
             "Four structured focus blocks protect deep-work time while maintaining "
             "communication and review cycles. "
             f"Key constraint: context switching. "

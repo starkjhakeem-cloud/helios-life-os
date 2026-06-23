@@ -63,6 +63,11 @@ export type SuggestionsResponse = {
   suggestions: SuggestionItem[];
   total: number;
   generated_at: string;
+  /** "ai" | "local" | "hybrid" */
+  source: string;
+  /** true when AI failed and backend used rule-based fallback */
+  degraded: boolean;
+  message: string | null;
 };
 
 export type FocusBlock = {

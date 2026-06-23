@@ -38,7 +38,7 @@ def _to_out(msg: EmailMessage) -> EmailMessageOut:
 
 @router.get("", response_model=EmailMessagesResponse)
 def list_messages(
-    status: str | None = Query(default=None, description="Filter by status: unread | read | archived"),
+    status: str | None = Query(default=None, description="Filter by status: unread | read | archived | trashed"),
     importance: str | None = Query(default=None, description="Filter by importance: low | normal | high | urgent"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

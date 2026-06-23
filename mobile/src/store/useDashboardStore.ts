@@ -9,6 +9,7 @@ import {
   dashboardMetrics,
   dashboardSections,
 } from "../data/dashboardData";
+import { formatSafeDashboardMetricValue } from "../utils/homeFormatting";
 
 type DashboardState = {
   metrics: DashboardMetric[];
@@ -23,6 +24,10 @@ type DashboardState = {
   reset: () => void;
 };
 
+function safeMetricValue(metric: DashboardMetric): DashboardMetric {
+  return { ...metric, value: formatSafeDashboardMetricValue(metric.label, metric.value) };
+}
+
 export const useDashboardStore = create<DashboardState>()((set) => ({
   metrics: dashboardMetrics,
   sections: dashboardSections,
@@ -35,7 +40,7 @@ export const useDashboardStore = create<DashboardState>()((set) => ({
     try {
       const data = await dashboardService.getSummary(token);
       set({
-        metrics: data.metrics.map((m) => ({ ...m, icon: m.icon as SFSymbol })),
+        metrics: data.metrics.map((m) => safeMetricValue({ ...m, icon: m.icon as SFSymbol })),
         sections: data.sections.map((s) => ({ ...s, icon: s.icon as SFSymbol })),
         isLoading: false,
         lastUpdated: new Date(data.last_updated),

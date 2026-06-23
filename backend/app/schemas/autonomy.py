@@ -90,6 +90,12 @@ class SuggestionsResponse(BaseModel):
     suggestions: list[SuggestionItem]
     total: int
     generated_at: str
+    # Provenance: "ai" = real AI provider, "local" = rule-based, "hybrid" = both
+    source: str = "local"
+    # True when AI failed and suggestions came from a local fallback
+    degraded: bool = False
+    # Human-readable reason when degraded is True
+    message: str | None = None
 
 
 # ── Daily plan ────────────────────────────────────────────────────────────────

@@ -7,9 +7,17 @@ never require touching provider implementations.
 
 from datetime import datetime, timezone
 
+NAME_FORMATTING_RULE = """\
+Name formatting is a global HELIOS invariant:
+- Render every operator display name and organization name exactly as supplied.
+- Never shorten, normalize, or concatenate punctuation after a name.
+- Preserve punctuation only when it is already part of the supplied name.
+- Structure generated prose so no period, comma, colon, dash, or other punctuation is added immediately after a supplied name.
+- This applies to greetings, briefings, notifications, summaries, mission text, calendar text, and generated email content."""
+
 # ── Daily Briefing ────────────────────────────────────────────────────────────
 
-BRIEFING_SYSTEM = """\
+BRIEFING_SYSTEM = NAME_FORMATTING_RULE + "\n\n" + """\
 You are HELIOS, an elite AI life-operating system.
 Generate a daily command briefing tailored to the operator's current state.
 
@@ -27,7 +35,7 @@ Rules:
 
 Return ONLY valid JSON — no markdown fences, no extra keys — matching this exact structure:
 {
-  "greeting": "<brief mission-focused greeting using the operator's name — e.g. 'Good morning, {name}. Your priority queue is loaded.'>",
+  "greeting": "<brief mission-focused greeting with the operator name on its own unpunctuated line — e.g. 'Good morning\\n{name}\\nYour priority queue is loaded'>",
   "summary": "<2-3 sentence situational overview. If context data is present, reference the operator's actual goals and open tasks.>",
   "priorities": [
     {"label": "<verb-first action phrase>", "detail": "<one sentence grounded in operator data or best-practice advice>"},
@@ -70,7 +78,7 @@ def build_briefing_user_message(user_name: str, user_context: str | None) -> str
 
 # ── Execution Plan ────────────────────────────────────────────────────────────
 
-PLAN_SYSTEM = """\
+PLAN_SYSTEM = NAME_FORMATTING_RULE + "\n\n" + """\
 You are HELIOS, an elite AI planning engine.
 Generate a structured execution plan for the operator's stated objective.
 
@@ -126,7 +134,7 @@ def build_plan_user_message(
 
 # ── Assistant Chat ────────────────────────────────────────────────────────────
 
-CHAT_SYSTEM = """\
+CHAT_SYSTEM = NAME_FORMATTING_RULE + "\n\n" + """\
 You are HELIOS — an AI life-operating system and competent general-purpose assistant.
 Answer every question the operator asks accurately and directly.
 
@@ -229,7 +237,7 @@ def build_chat_user_message(
 
 # ── Agent Orchestration ────────────────────────────────────────────────────────
 
-ORCHESTRATION_SYSTEM = """\
+ORCHESTRATION_SYSTEM = NAME_FORMATTING_RULE + "\n\n" + """\
 You are HELIOS Command — the central orchestration layer coordinating all specialized HELIOS agents.
 
 An operator has submitted an objective. Your task is to:

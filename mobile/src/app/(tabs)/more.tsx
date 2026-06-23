@@ -12,70 +12,89 @@ type MoreItem = {
   subtitle: string;
   icon: SFSymbol;
   route:
-    | "/(tabs)/analytics"
-    | "/(tabs)/agents"
+    | "/(tabs)/assistant-settings"
     | "/(tabs)/assistant"
-    | "/(tabs)/email"
-    | "/(tabs)/memory"
+    | "/(tabs)/developer-options"
     | "/(tabs)/notifications"
     | "/(tabs)/integrations"
+    | "/(tabs)/memory"
     | "/(tabs)/profile";
 };
 
-const MORE_ITEMS: MoreItem[] = [
+const BASE_MORE_ITEMS: MoreItem[] = [
   {
-    title: "Analytics",
-    subtitle: "Performance trends and completion rates",
-    icon: "chart.bar.xaxis",
-    route: "/(tabs)/analytics",
+    title: "Account",
+    subtitle: "Profile, identity, and account details",
+    icon: "person.crop.circle",
+    route: "/(tabs)/profile",
   },
   {
-    title: "Agents",
-    subtitle: "Specialized intelligence and orchestration",
-    icon: "cpu",
-    route: "/(tabs)/agents",
+    title: "Personalization",
+    subtitle: "Preferences that shape how HELIOS helps",
+    icon: "slider.horizontal.3",
+    route: "/(tabs)/profile",
   },
+  {
+    title: "Assistant Settings",
+    subtitle: "Preferences, permissions, daily brief, memory, and automation",
+    icon: "bubble.left.and.bubble.right",
+    route: "/(tabs)/assistant-settings",
+  },
+  {
+    title: "Notifications",
+    subtitle: "Alerts, reminders, and items that need attention",
+    icon: "bell",
+    route: "/(tabs)/notifications",
+  },
+  {
+    title: "Appearance",
+    subtitle: "Theme and visual preferences",
+    icon: "paintbrush",
+    route: "/(tabs)/profile",
+  },
+  {
+    title: "Privacy & Security",
+    subtitle: "Session, privacy, and account safety",
+    icon: "lock.shield",
+    route: "/(tabs)/profile",
+  },
+  {
+    title: "Connected Services",
+    subtitle: "Apps and services HELIOS can use",
+    icon: "link",
+    route: "/(tabs)/integrations",
+  },
+  {
+    title: "About HELIOS",
+    subtitle: "App details and support information",
+    icon: "info.circle",
+    route: "/(tabs)/profile",
+  },
+];
+
+const DEV_ITEM: MoreItem = {
+  title: "Developer Options",
+  subtitle: "Diagnostics for development builds",
+  icon: "hammer",
+  route: "/(tabs)/developer-options",
+};
+
+const MORE_ITEMS: MoreItem[] = __DEV__
+  ? [...BASE_MORE_ITEMS.slice(0, -1), DEV_ITEM, BASE_MORE_ITEMS[BASE_MORE_ITEMS.length - 1]]
+  : BASE_MORE_ITEMS;
+
+const FEATURE_ITEMS: MoreItem[] = [
   {
     title: "Assistant",
-    subtitle: "Conversation, planning, and recommended actions",
-    icon: "bubble.left.and.bubble.right",
+    subtitle: "Conversation and planning",
+    icon: "sparkles",
     route: "/(tabs)/assistant",
-  },
-  {
-    title: "Email",
-    subtitle: "Inbox context, important messages, and actions",
-    icon: "envelope",
-    route: "/(tabs)/email",
   },
   {
     title: "Memory",
     subtitle: "Long-term context HELIOS can remember",
     icon: "brain.head.profile",
     route: "/(tabs)/memory",
-  },
-  {
-    title: "Queue",
-    subtitle: "Notifications and pending attention items",
-    icon: "list.bullet.clipboard",
-    route: "/(tabs)/notifications",
-  },
-  {
-    title: "Integrations",
-    subtitle: "Connected services and sync status",
-    icon: "link",
-    route: "/(tabs)/integrations",
-  },
-  {
-    title: "Profile",
-    subtitle: "Account, reminders, preferences, and settings",
-    icon: "person.crop.circle",
-    route: "/(tabs)/profile",
-  },
-  {
-    title: "Settings",
-    subtitle: "Theme, planning horizon, and notification controls",
-    icon: "gearshape",
-    route: "/(tabs)/profile",
   },
 ];
 
@@ -107,10 +126,41 @@ export default function MoreScreen() {
         </Text>
       </View>
 
-      <Text style={styles.sectionLabel}>SECONDARY FEATURES</Text>
+      <Text style={styles.sectionLabel}>MORE</Text>
 
       <View style={styles.listCard}>
         {MORE_ITEMS.map((item, index) => (
+          <TouchableOpacity
+            key={`${item.title}-${index}`}
+            style={styles.item}
+            activeOpacity={0.78}
+            onPress={() => router.push(item.route)}
+          >
+            <View style={styles.itemIcon}>
+              <SymbolView
+                name={item.icon}
+                size={20}
+                tintColor={colors.accent}
+                resizeMode="scaleAspectFit"
+              />
+            </View>
+            <View style={styles.itemBody}>
+              <Text style={styles.itemTitle}>{item.title}</Text>
+              <Text style={styles.itemSubtitle}>{item.subtitle}</Text>
+            </View>
+            <SymbolView
+              name="chevron.right"
+              size={14}
+              tintColor={colors.textMuted}
+              resizeMode="scaleAspectFit"
+            />
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <Text style={[styles.sectionLabel, { marginTop: spacing.xl }]}>HELPFUL TOOLS</Text>
+      <View style={styles.listCard}>
+        {FEATURE_ITEMS.map((item, index) => (
           <TouchableOpacity
             key={`${item.title}-${index}`}
             style={styles.item}

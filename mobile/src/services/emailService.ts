@@ -4,7 +4,7 @@ import { API_ENDPOINTS } from "../config/api";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type MessageImportance = "low" | "normal" | "high" | "urgent";
-export type MessageStatus = "unread" | "read" | "archived";
+export type MessageStatus = "unread" | "read" | "archived" | "trashed";
 export type MessageSource = "manual" | "gmail" | "outlook";
 
 export type EmailMessage = {
