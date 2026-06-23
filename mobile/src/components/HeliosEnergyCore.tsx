@@ -1,13 +1,3 @@
-/**
- * HeliosEnergyCore — approved PNG based HELIOS identity mark.
- *
- * collapsable={false} on every wrapper View prevents React Native's view
- * flattening optimizer from merging these into their parent's native layer.
- * The red debug border worked because a visible border forced a real UIView;
- * without it the wrapper collapsed, removing the compositing layer that lets
- * useNativeDriver animations render through heroCard's overflow:hidden.
- */
-
 import React, { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import {
   Alert,
@@ -40,27 +30,34 @@ type Props = {
   onLongPress?: () => void;
 };
 
-type AnimationConfig = {
-  duration: number;
-};
-
 const APPROVED_CORE = require("../../assets/design/branding/helios-energy-core-transparent.png");
 const APPROVED_WAVES = require("../../assets/design/branding/helios-energy-core-waves.png");
 const ARTWORK_ASPECT_RATIO = 434 / 400;
 const GLOW_INSET = 10;
 
-function resolveAnimationConfig(state: CoreState): AnimationConfig {
-  switch (state) {
-    case "thinking":   return { duration: 4000 };
-    case "generating": return { duration: 3500 };
-    case "listening":  return { duration: 5000 };
-    case "speaking":   return { duration: 4200 };
-    case "attention":  return { duration: 4500 };
-    case "critical":   return { duration: 3500 };
-    case "offline":    return { duration: 7000 };
-    case "idle":       return { duration: 5000 };
-  }
-}
+// ms per full 360° rotation
+const SPIN_SPEED: Record<CoreState, number> = {
+  idle:       9000,
+  thinking:   5000,
+  generating: 4000,
+  listening:  7000,
+  speaking:   5500,
+  attention:  6000,
+  critical:   3500,
+  offline:   14000,
+};
+
+// ms per pulse half-cycle
+const PULSE_SPEED: Record<CoreState, number> = {
+  idle:       3000,
+  thinking:   1800,
+  generating: 1500,
+  listening:  2500,
+  speaking:   2000,
+  attention:  2200,
+  critical:   1400,
+  offline:    5000,
+};
 
 function HeliosEnergyCore({
   size = 142,
@@ -69,80 +66,65 @@ function HeliosEnergyCore({
   onPress,
   onLongPress,
 }: Props) {
-  const config = useMemo(() => resolveAnimationConfig(state), [state]);
   const artworkHeight = size / ARTWORK_ASPECT_RATIO;
-  const wrapperWidth = size + GLOW_INSET * 2;
+  const wrapperWidth  = size + GLOW_INSET * 2;
   const wrapperHeight = artworkHeight + GLOW_INSET * 2;
 
-  const scalePulse = useRef(new Animated.Value(0)).current;
-  const opacityPulse = useRef(new Animated.Value(0)).current;
-  const drift = useRef(new Animated.Value(0)).current;
+  const spinDuration  = useMemo(() => SPIN_SPEED[state],  [state]);
+  const pulseDuration = useMemo(() => PULSE_SPEED[state], [state]);
+
+  // spin  — continuous 0→1 linear (maps to 0°→360°, no visual snap at loop end)
+  // pulse — 0→1→0 ease-in-out (scale breathe)
+  const spin  = useRef(new Animated.Value(0)).current;
+  const pulse = useRef(new Animated.Value(0)).current;
   const touch = useRef(new Animated.Value(0)).current;
-  const scaleLoopRef = useRef<Animated.CompositeAnimation | null>(null);
-  const opacityLoopRef = useRef<Animated.CompositeAnimation | null>(null);
-  const driftLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  const spinRef  = useRef<Animated.CompositeAnimation | null>(null);
+  const pulseRef = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
-    scaleLoopRef.current?.stop();
-    opacityLoopRef.current?.stop();
-    driftLoopRef.current?.stop();
-    scalePulse.setValue(0);
-    opacityPulse.setValue(0);
-    drift.setValue(0);
+    spinRef.current?.stop();
+    pulseRef.current?.stop();
+    spin.setValue(0);
+    pulse.setValue(0);
 
-    const make = (value: Animated.Value, dur: number) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(value, {
-            toValue: 1,
-            duration: dur,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(value, {
-            toValue: 0,
-            duration: dur,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-        ]),
-      );
+    spinRef.current = Animated.loop(
+      Animated.timing(spin, {
+        toValue: 1,
+        duration: spinDuration,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
 
-    const driftLoop = Animated.loop(
+    pulseRef.current = Animated.loop(
       Animated.sequence([
-        Animated.timing(drift, {
+        Animated.timing(pulse, {
           toValue: 1,
-          duration: config.duration,
-          easing: Easing.inOut(Easing.sin),
+          duration: pulseDuration,
+          easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
-        Animated.timing(drift, {
+        Animated.timing(pulse, {
           toValue: 0,
-          duration: config.duration,
-          easing: Easing.inOut(Easing.sin),
+          duration: pulseDuration,
+          easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
       ]),
     );
 
-    scaleLoopRef.current = make(scalePulse, config.duration);
-    opacityLoopRef.current = make(opacityPulse, Math.round(config.duration * 1.2));
-    driftLoopRef.current = driftLoop;
-    scaleLoopRef.current.start();
-    opacityLoopRef.current.start();
-    driftLoopRef.current.start();
+    spinRef.current.start();
+    pulseRef.current.start();
 
     return () => {
-      scaleLoopRef.current?.stop();
-      opacityLoopRef.current?.stop();
-      driftLoopRef.current?.stop();
+      spinRef.current?.stop();
+      pulseRef.current?.stop();
     };
-  }, [config.duration, drift, opacityPulse, scalePulse]);
+  }, [spinDuration, pulseDuration, spin, pulse]);
 
   const handlePress = useCallback(() => {
-    if (Platform.OS === "ios") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    }
+    if (Platform.OS === "ios") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     onPress?.();
   }, [onPress]);
 
@@ -155,50 +137,33 @@ function HeliosEnergyCore({
   }, [touch]);
 
   const handleLongPress = useCallback(() => {
-    if (Platform.OS === "ios") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    }
-    if (onLongPress) {
-      onLongPress();
-    } else {
-      Alert.alert("HELIOS", "Voice mode coming soon.");
-    }
+    if (Platform.OS === "ios") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    if (onLongPress) onLongPress();
+    else Alert.alert("HELIOS", "Voice mode coming soon.");
   }, [onLongPress]);
 
-  const waveOpacity = scalePulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.45, 0.75],
+  // Spin: forward rotation for primary wave layer
+  const rotate = spin.interpolate({
+    inputRange:  [0, 1],
+    outputRange: ["0deg", "360deg"],
   });
-  const waveScale = scalePulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1.0, 1.08],
+  // Counter-spin: reverse, slightly slower — creates orbital interference pattern
+  const counterRotate = spin.interpolate({
+    inputRange:  [0, 1],
+    outputRange: ["0deg", "-240deg"],
   });
-  const opacityLayerOpacity = opacityPulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.45, 0.75],
+  // Scale pulse: gentle breathe
+  const pulseScale = pulse.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [1.0, 1.06],
   });
-  const driftOpacity = drift.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.45, 0.75],
-  });
-  const driftRotate = drift.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["-3deg", "3deg"],
-  });
-  const driftScale = drift.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1.0, 1.08],
-  });
-  const driftTranslateX = drift.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-2.5, 2.5],
-  });
-  const driftTranslateY = drift.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1.6, -1.6],
+  // Opacity pulse: brightens on inhale
+  const pulseOpacity = pulse.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [0.45, 0.70],
   });
   const touchScale = touch.interpolate({
-    inputRange: [0, 1],
+    inputRange:  [0, 1],
     outputRange: [1, 1.018],
   });
 
@@ -217,15 +182,18 @@ function HeliosEnergyCore({
     : { accessibilityLabel: "HELIOS energy core" };
 
   return (
-    // collapsable={false} — forces a real native UIView even with no visible
-    // border/background. Without this, RN flattens this wrapper into heroCard's
-    // layer and the useNativeDriver animations lose their compositing context.
+    // collapsable={false} — required on every wrapper. Without it React Native
+    // flattens invisible Views into their parent's native layer, removing the
+    // compositing context that lets useNativeDriver animations render through
+    // heroCard's overflow:hidden. This was why the red debug border worked —
+    // a visible border prevented flattening. collapsable={false} does the same
+    // without any visible style dependency.
     <View
       collapsable={false}
       style={[styles.outerWrapper, { width: wrapperWidth, height: wrapperHeight }]}
     >
       <Container
-        // @ts-ignore — collapsable is valid on View; TS typing is incomplete
+        // @ts-ignore — collapsable is valid on all host components
         collapsable={false}
         style={[styles.container, { width: size, height: artworkHeight }]}
         {...containerProps}
@@ -238,8 +206,7 @@ function HeliosEnergyCore({
           ]}
           pointerEvents="none"
         >
-          {/* Static approved image — bottom, keeps H perfectly still at 0.92
-              opacity so animated wave layers above it remain perceptible.    */}
+          {/* Static base — H stays perfectly still */}
           <Image
             source={APPROVED_CORE}
             style={[styles.image, { opacity: 0.92 }]}
@@ -247,37 +214,30 @@ function HeliosEnergyCore({
             accessibilityIgnoresInvertColors
           />
 
-          {/* Drift layer — translates, rotates, and scales above the static base */}
+          {/* Forward-spinning wave layer + scale pulse */}
           <Animated.Image
             source={APPROVED_WAVES}
             style={[
               styles.image,
               {
-                opacity: driftOpacity,
-                transform: [
-                  { translateX: driftTranslateX },
-                  { translateY: driftTranslateY },
-                  { scale: driftScale },
-                  { rotate: driftRotate },
-                ],
+                opacity: pulseOpacity,
+                transform: [{ rotate }, { scale: pulseScale }],
               },
             ]}
             resizeMode="contain"
             accessibilityIgnoresInvertColors
           />
 
-          {/* Opacity pulse layer — breathes in/out above the static base */}
+          {/* Counter-spinning wave layer — static opacity, creates depth */}
           <Animated.Image
             source={APPROVED_WAVES}
-            style={[styles.image, { opacity: opacityLayerOpacity, transform: [{ scale: 1.04 }] }]}
-            resizeMode="contain"
-            accessibilityIgnoresInvertColors
-          />
-
-          {/* Scale pulse layer — grows and shrinks above the static base */}
-          <Animated.Image
-            source={APPROVED_WAVES}
-            style={[styles.image, { opacity: waveOpacity, transform: [{ scale: waveScale }] }]}
+            style={[
+              styles.image,
+              {
+                opacity: 0.35,
+                transform: [{ rotate: counterRotate }],
+              },
+            ]}
             resizeMode="contain"
             accessibilityIgnoresInvertColors
           />
@@ -295,8 +255,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     overflow: "visible",
-    // Invisible 1-alpha background forces a real backing store on iOS,
-    // complementing collapsable={false} to prevent layer flattening.
     backgroundColor: "rgba(0,0,0,0.001)",
   },
   container: {
