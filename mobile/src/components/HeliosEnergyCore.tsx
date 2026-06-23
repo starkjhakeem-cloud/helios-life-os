@@ -133,13 +133,13 @@ function HeliosEnergyCore({
       Animated.sequence([
         Animated.timing(glow, {
           toValue: 1,
-          duration: 3750,
+          duration: 2200,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
         Animated.timing(glow, {
           toValue: 0,
-          duration: 3750,
+          duration: 2200,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
