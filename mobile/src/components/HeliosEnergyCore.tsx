@@ -2,8 +2,8 @@
  * HeliosEnergyCore — approved PNG based HELIOS identity mark.
  *
  * The visible Energy Core uses the approved transparent PNG as the source of
- * truth. Animation is limited to low-opacity duplicate layers so the main
- * image, H shape, wave shape, and proportions remain unchanged.
+ * truth. Animated wave layers are rendered BELOW the static image so they
+ * extend visibly outside its bounds as a moving glow ring. The H stays still.
  */
 
 import React, { memo, useCallback, useEffect, useMemo, useRef } from "react";
@@ -200,37 +200,39 @@ function HeliosEnergyCore({
     }
   }, [onLongPress]);
 
+  // Wave layers scale to 1.14x so the outer orbital ring tips (~10px) extend
+  // visibly outside the static image bounds as animated glow.
   const scaleLayerOpacity = scalePulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.2, 0.35],
+    outputRange: [0.28, 0.52],
   });
   const scaleLayerScale = scalePulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 1.05],
+    outputRange: [1, 1.14],
   });
   const opacityLayerOpacity = opacityPulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.2, 0.35],
+    outputRange: [0.22, 0.48],
   });
   const driftOpacity = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.16, 0.32],
+    outputRange: [0.22, 0.42],
   });
   const driftRotate = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: ["-3deg", "3deg"],
+    outputRange: ["-4deg", "4deg"],
   });
   const driftScale = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: [1.015, 1.05],
+    outputRange: [1.02, 1.14],
   });
   const driftTranslateX = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: [-2.2, 2.2],
+    outputRange: [-3.5, 3.5],
   });
   const driftTranslateY = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: [1.4, -1.4],
+    outputRange: [2, -2],
   });
   const touchScale = touch.interpolate({
     inputRange: [0, 1],
@@ -254,83 +256,100 @@ function HeliosEnergyCore({
       };
 
   return (
-    <Container
-      style={[styles.container, { width: size, height: artworkHeight }]}
-      {...containerProps}
-    >
-      <Animated.View
-        style={[
-          styles.artworkFrame,
-          {
-            width: size,
-            height: artworkHeight,
-            transform: [{ scale: touchScale }],
-          },
-        ]}
-        pointerEvents="none"
+    // Permanent invisible wrapper — explicit overflow:visible so scaled wave
+    // layers are never clipped by the layout system or heroCard's overflow:hidden.
+    <View style={[styles.outerWrapper, { width: size, height: artworkHeight }]}>
+      <Container
+        style={[styles.container, { width: size, height: artworkHeight }]}
+        {...containerProps}
       >
-        <Image
-          source={APPROVED_CORE}
-          style={styles.image}
-          resizeMode="contain"
-          accessibilityIgnoresInvertColors
-        />
-        <Animated.Image
-          source={APPROVED_WAVES}
+        <Animated.View
           style={[
-            styles.image,
+            styles.artworkFrame,
             {
-              opacity: driftOpacity,
-              transform: [
-                { translateX: driftTranslateX },
-                { translateY: driftTranslateY },
-                { scale: driftScale },
-                { rotate: driftRotate },
-              ],
+              width: size,
+              height: artworkHeight,
+              transform: [{ scale: touchScale }],
             },
           ]}
-          resizeMode="contain"
-          accessibilityIgnoresInvertColors
-        />
-        <Animated.Image
-          source={APPROVED_WAVES}
-          style={[
-            styles.image,
-            {
-              opacity: opacityLayerOpacity,
-              transform: [{ scale: 1.04 }],
-            },
-          ]}
-          resizeMode="contain"
-          accessibilityIgnoresInvertColors
-        />
-        <Animated.Image
-          source={APPROVED_WAVES}
-          style={[
-            styles.image,
-            {
-              opacity: scaleLayerOpacity,
-              transform: [{ scale: scaleLayerScale }],
-            },
-          ]}
-          resizeMode="contain"
-          accessibilityIgnoresInvertColors
-        />
-      </Animated.View>
-    </Container>
+          pointerEvents="none"
+        >
+          {/* Wave layers first = bottom of stack.
+              At 1.14x scale these extend ~10px outside the static image so
+              the outer orbital ring tips are visible as animated glow. */}
+          <Animated.Image
+            source={APPROVED_WAVES}
+            style={[
+              styles.image,
+              {
+                opacity: driftOpacity,
+                transform: [
+                  { translateX: driftTranslateX },
+                  { translateY: driftTranslateY },
+                  { scale: driftScale },
+                  { rotate: driftRotate },
+                ],
+              },
+            ]}
+            resizeMode="contain"
+            accessibilityIgnoresInvertColors
+          />
+          <Animated.Image
+            source={APPROVED_WAVES}
+            style={[
+              styles.image,
+              {
+                opacity: opacityLayerOpacity,
+                transform: [{ scale: 1.10 }],
+              },
+            ]}
+            resizeMode="contain"
+            accessibilityIgnoresInvertColors
+          />
+          <Animated.Image
+            source={APPROVED_WAVES}
+            style={[
+              styles.image,
+              {
+                opacity: scaleLayerOpacity,
+                transform: [{ scale: scaleLayerScale }],
+              },
+            ]}
+            resizeMode="contain"
+            accessibilityIgnoresInvertColors
+          />
+          {/* Static core image last = top of stack. Covers wave layers at the
+              center so the H and grey circle remain perfectly still. */}
+          <Image
+            source={APPROVED_CORE}
+            style={styles.image}
+            resizeMode="contain"
+            accessibilityIgnoresInvertColors
+          />
+        </Animated.View>
+      </Container>
+    </View>
   );
 }
 
 export default memo(HeliosEnergyCore);
 
 const styles = StyleSheet.create({
+  outerWrapper: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "visible",
+  },
   container: {
     alignItems: "center",
     justifyContent: "center",
+    overflow: "visible",
   },
   artworkFrame: {
     alignItems: "center",
     justifyContent: "center",
+    overflow: "visible",
   },
   image: {
     ...StyleSheet.absoluteFillObject,
