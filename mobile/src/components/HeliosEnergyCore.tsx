@@ -290,7 +290,7 @@ function HeliosEnergyCore({
         {
           width: wrapperWidth,
           height: wrapperHeight,
-          borderWidth: debugAnimationFrame ? 2 : StyleSheet.hairlineWidth,
+          borderWidth: 2,
           borderColor: debugAnimationFrame ? "red" : "transparent",
         },
       ]}
