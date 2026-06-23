@@ -64,21 +64,21 @@ const GLOW_INSET = 10;
 function resolveAnimationConfig(state: CoreState): AnimationConfig {
   switch (state) {
     case "thinking":
-      return { scaleDuration: 5600, opacityDuration: 6800, driftDuration: 8200 };
+      return { scaleDuration: 600, opacityDuration: 700, driftDuration: 800 };
     case "generating":
-      return { scaleDuration: 5000, opacityDuration: 6200, driftDuration: 7600 };
+      return { scaleDuration: 600, opacityDuration: 700, driftDuration: 800 };
     case "listening":
-      return { scaleDuration: 6400, opacityDuration: 7600, driftDuration: 9000 };
+      return { scaleDuration: 600, opacityDuration: 700, driftDuration: 800 };
     case "speaking":
-      return { scaleDuration: 5400, opacityDuration: 6600, driftDuration: 8000 };
+      return { scaleDuration: 600, opacityDuration: 700, driftDuration: 800 };
     case "attention":
-      return { scaleDuration: 5600, opacityDuration: 7000, driftDuration: 8400 };
+      return { scaleDuration: 600, opacityDuration: 700, driftDuration: 800 };
     case "critical":
-      return { scaleDuration: 5000, opacityDuration: 6200, driftDuration: 7600 };
+      return { scaleDuration: 600, opacityDuration: 700, driftDuration: 800 };
     case "offline":
-      return { scaleDuration: 9000, opacityDuration: 9000, driftDuration: 9000 };
+      return { scaleDuration: 600, opacityDuration: 700, driftDuration: 800 };
     case "idle":
-      return { scaleDuration: 6800, opacityDuration: 8000, driftDuration: 9000 };
+      return { scaleDuration: 600, opacityDuration: 700, driftDuration: 800 };
   }
 }
 
@@ -222,35 +222,35 @@ function HeliosEnergyCore({
 
   const scaleLayerOpacity = scalePulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.22, 0.42],
+    outputRange: [0, 0.9],
   });
   const scaleLayerScale = scalePulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 1.08],
+    outputRange: [0.7, 1.3],
   });
   const opacityLayerOpacity = opacityPulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.20, 0.40],
+    outputRange: [0, 0.9],
   });
   const driftOpacity = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.18, 0.36],
+    outputRange: [0, 0.9],
   });
   const driftRotate = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: ["-3deg", "3deg"],
+    outputRange: ["-45deg", "45deg"],
   });
   const driftScale = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: [1.015, 1.08],
+    outputRange: [0.7, 1.3],
   });
   const driftTranslateX = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: [-2.5, 2.5],
+    outputRange: [-20, 20],
   });
   const driftTranslateY = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: [1.6, -1.6],
+    outputRange: [-20, 20],
   });
   const touchScale = touch.interpolate({
     inputRange: [0, 1],
