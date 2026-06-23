@@ -162,6 +162,11 @@ function HeliosEnergyCore({
     inputRange:  [0, 1],
     outputRange: [0.45, 0.70],
   });
+  // Glow halo: separate opacity range so the glow breathes independently
+  const glowOpacity = pulse.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [0.28, 0.52],
+  });
   const touchScale = touch.interpolate({
     inputRange:  [0, 1],
     outputRange: [1, 1.018],
@@ -206,6 +211,22 @@ function HeliosEnergyCore({
           ]}
           pointerEvents="none"
         >
+          {/* Glow halo — behind all image layers, breathes with pulse */}
+          <Animated.View
+            style={{
+              position: "absolute",
+              width: artworkHeight * 0.82,
+              height: artworkHeight * 0.82,
+              borderRadius: artworkHeight * 0.41,
+              backgroundColor: "#ffffff",
+              shadowColor: "#ffffff",
+              shadowOffset: { width: 0, height: 0 },
+              shadowOpacity: 0.9,
+              shadowRadius: 16,
+              opacity: glowOpacity,
+            }}
+          />
+
           {/* Static base — H stays perfectly still */}
           <Image
             source={APPROVED_CORE}
