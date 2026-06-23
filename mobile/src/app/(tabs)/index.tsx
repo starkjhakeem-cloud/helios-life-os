@@ -474,7 +474,7 @@ function Hero({
 
       <View style={s.heroOrbArea}>
         <HeliosEnergyCore
-          size={128}
+          size={142}
           state={systemStatus.coreState}
           showParticles={false}
           onPress={onPressStatus ?? undefined}
@@ -736,10 +736,10 @@ function createStyles(colors: ThemeColors) {
     },
     heroOrbArea: {
       position: "absolute",
-      right: 18,
-      top: 24,
-      width: 134,
-      height: 124,
+      right: 7,
+      top: 18,
+      width: 148,
+      height: 132,
       alignItems: "center",
       justifyContent: "center",
     },

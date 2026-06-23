@@ -1,9 +1,9 @@
 /**
- * HeliosEnergyCore — asset-backed HELIOS identity mark.
+ * HeliosEnergyCore — approved PNG based HELIOS identity mark.
  *
- * The approved artwork in mobile/assets/design/branding/helios-energy-core-reference.png
- * is the source of truth. The app renders a transparent derivative so the
- * center H stays fixed and only the derived wave layer animates above it.
+ * The visible Energy Core uses the approved transparent PNG as the source of
+ * truth. Animation is limited to low-opacity duplicate layers so the main
+ * image, H shape, wave shape, and proportions remain unchanged.
  */
 
 import React, { memo, useCallback, useEffect, useMemo, useRef } from "react";
@@ -39,34 +39,32 @@ type Props = {
 };
 
 type AnimationConfig = {
-  waveDriftSpeed: number;
-  counterWaveDriftSpeed: number;
-  pulseSpeed: number;
-  waveOpacity: number;
+  scaleDuration: number;
+  opacityDuration: number;
+  driftDuration: number;
 };
 
-const ARTWORK = require("../../assets/design/branding/helios-energy-core-transparent.png");
-const WAVE_LAYER = require("../../assets/design/branding/helios-energy-core-waves.png");
+const APPROVED_CORE = require("../../assets/design/branding/helios-energy-core-transparent.png");
 const ARTWORK_ASPECT_RATIO = 434 / 400;
 
 function resolveAnimationConfig(state: CoreState): AnimationConfig {
   switch (state) {
     case "thinking":
-      return { waveDriftSpeed: 12000, counterWaveDriftSpeed: 17000, pulseSpeed: 2600, waveOpacity: 0.24 };
+      return { scaleDuration: 6200, opacityDuration: 7600, driftDuration: 9000 };
     case "generating":
-      return { waveDriftSpeed: 9000, counterWaveDriftSpeed: 13000, pulseSpeed: 1800, waveOpacity: 0.30 };
+      return { scaleDuration: 5200, opacityDuration: 6800, driftDuration: 8200 };
     case "listening":
-      return { waveDriftSpeed: 15000, counterWaveDriftSpeed: 21000, pulseSpeed: 3000, waveOpacity: 0.22 };
+      return { scaleDuration: 6800, opacityDuration: 8200, driftDuration: 9200 };
     case "speaking":
-      return { waveDriftSpeed: 11000, counterWaveDriftSpeed: 16000, pulseSpeed: 2200, waveOpacity: 0.26 };
+      return { scaleDuration: 5600, opacityDuration: 7200, driftDuration: 8600 };
     case "attention":
-      return { waveDriftSpeed: 12000, counterWaveDriftSpeed: 17000, pulseSpeed: 2200, waveOpacity: 0.20 };
+      return { scaleDuration: 6000, opacityDuration: 7600, driftDuration: 8800 };
     case "critical":
-      return { waveDriftSpeed: 9000, counterWaveDriftSpeed: 12000, pulseSpeed: 1400, waveOpacity: 0.18 };
+      return { scaleDuration: 5000, opacityDuration: 6200, driftDuration: 7600 };
     case "offline":
-      return { waveDriftSpeed: 24000, counterWaveDriftSpeed: 32000, pulseSpeed: 5200, waveOpacity: 0.08 };
+      return { scaleDuration: 9000, opacityDuration: 9000, driftDuration: 9000 };
     case "idle":
-      return { waveDriftSpeed: 18000, counterWaveDriftSpeed: 26000, pulseSpeed: 4200, waveOpacity: 0.18 };
+      return { scaleDuration: 7600, opacityDuration: 8600, driftDuration: 9000 };
   }
 }
 
@@ -79,89 +77,90 @@ function HeliosEnergyCore({
 }: Props) {
   const config = useMemo(() => resolveAnimationConfig(state), [state]);
   const artworkHeight = size / ARTWORK_ASPECT_RATIO;
-  const waveDrift = useRef(new Animated.Value(0)).current;
-  const counterWaveDrift = useRef(new Animated.Value(0)).current;
-  const pulse = useRef(new Animated.Value(0)).current;
+  const scalePulse = useRef(new Animated.Value(0)).current;
+  const opacityPulse = useRef(new Animated.Value(0)).current;
+  const drift = useRef(new Animated.Value(0)).current;
   const touch = useRef(new Animated.Value(0)).current;
-  const waveDriftLoopRef = useRef<Animated.CompositeAnimation | null>(null);
-  const counterWaveDriftLoopRef = useRef<Animated.CompositeAnimation | null>(null);
-  const pulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+  const scaleLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+  const opacityLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+  const driftLoopRef = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
-    waveDriftLoopRef.current?.stop();
-    counterWaveDriftLoopRef.current?.stop();
-    pulseLoopRef.current?.stop();
-    waveDrift.setValue(0);
-    counterWaveDrift.setValue(0);
+    scaleLoopRef.current?.stop();
+    opacityLoopRef.current?.stop();
+    driftLoopRef.current?.stop();
+    scalePulse.setValue(0);
+    opacityPulse.setValue(0);
+    drift.setValue(0);
 
-    const waveDriftLoop = Animated.loop(
+    const scaleLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(waveDrift, {
+        Animated.timing(scalePulse, {
           toValue: 1,
-          duration: config.waveDriftSpeed,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(waveDrift, {
-          toValue: 0,
-          duration: config.waveDriftSpeed,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    const counterWaveDriftLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(counterWaveDrift, {
-          toValue: 1,
-          duration: config.counterWaveDriftSpeed,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(counterWaveDrift, {
-          toValue: 0,
-          duration: config.counterWaveDriftSpeed,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    const pulseLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, {
-          toValue: 1,
-          duration: config.pulseSpeed,
+          duration: config.scaleDuration,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
-        Animated.timing(pulse, {
+        Animated.timing(scalePulse, {
           toValue: 0,
-          duration: config.pulseSpeed,
+          duration: config.scaleDuration,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
       ]),
     );
+    const opacityLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacityPulse, {
+          toValue: 1,
+          duration: config.opacityDuration,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacityPulse, {
+          toValue: 0,
+          duration: config.opacityDuration,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    const driftLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(drift, {
+          toValue: 1,
+          duration: config.driftDuration,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(drift, {
+          toValue: 0,
+          duration: config.driftDuration,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
 
-    waveDriftLoopRef.current = waveDriftLoop;
-    counterWaveDriftLoopRef.current = counterWaveDriftLoop;
-    pulseLoopRef.current = pulseLoop;
-    waveDriftLoop.start();
-    counterWaveDriftLoop.start();
-    pulseLoop.start();
+    scaleLoopRef.current = scaleLoop;
+    opacityLoopRef.current = opacityLoop;
+    driftLoopRef.current = driftLoop;
+    scaleLoop.start();
+    opacityLoop.start();
+    driftLoop.start();
 
     return () => {
-      waveDriftLoopRef.current?.stop();
-      counterWaveDriftLoopRef.current?.stop();
-      pulseLoopRef.current?.stop();
+      scaleLoopRef.current?.stop();
+      opacityLoopRef.current?.stop();
+      driftLoopRef.current?.stop();
     };
   }, [
-    config.counterWaveDriftSpeed,
-    config.pulseSpeed,
-    config.waveDriftSpeed,
-    counterWaveDrift,
-    pulse,
-    waveDrift,
+    config.driftDuration,
+    config.opacityDuration,
+    config.scaleDuration,
+    drift,
+    opacityPulse,
+    scalePulse,
   ]);
 
   const handlePress = useCallback(() => {
@@ -200,33 +199,37 @@ function HeliosEnergyCore({
     }
   }, [onLongPress]);
 
-  const waveRotate = waveDrift.interpolate({
+  const scaleLayerOpacity = scalePulse.interpolate({
     inputRange: [0, 1],
-    outputRange: ["-3.6deg", "3.6deg"],
+    outputRange: [0.14, 0.3],
   });
-  const counterWaveRotate = counterWaveDrift.interpolate({
+  const scaleLayerScale = scalePulse.interpolate({
     inputRange: [0, 1],
-    outputRange: ["2.6deg", "-2.6deg"],
+    outputRange: [1, 1.06],
   });
-  const waveTranslateX = waveDrift.interpolate({
+  const opacityLayerOpacity = opacityPulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [-1.4, 1.4],
+    outputRange: [0.18, 0.35],
   });
-  const waveTranslateY = waveDrift.interpolate({
+  const driftOpacity = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.8, -0.8],
+    outputRange: [0.08, 0.18],
   });
-  const counterWaveTranslateX = counterWaveDrift.interpolate({
+  const driftRotate = drift.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["-3deg", "3deg"],
+  });
+  const driftScale = drift.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1.02, 1.05],
+  });
+  const driftTranslateX = drift.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-1.8, 1.8],
+  });
+  const driftTranslateY = drift.interpolate({
     inputRange: [0, 1],
     outputRange: [1, -1],
-  });
-  const counterWaveTranslateY = counterWaveDrift.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-0.7, 0.7],
-  });
-  const waveOpacity = pulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [config.waveOpacity * 0.45, config.waveOpacity],
   });
   const touchScale = touch.interpolate({
     inputRange: [0, 1],
@@ -265,43 +268,50 @@ function HeliosEnergyCore({
         ]}
         pointerEvents="none"
       >
+        <Animated.Image
+          source={APPROVED_CORE}
+          style={[
+            styles.image,
+            {
+              opacity: driftOpacity,
+              transform: [
+                { translateX: driftTranslateX },
+                { translateY: driftTranslateY },
+                { scale: driftScale },
+                { rotate: driftRotate },
+              ],
+            },
+          ]}
+          resizeMode="contain"
+          accessibilityIgnoresInvertColors
+        />
+        <Animated.Image
+          source={APPROVED_CORE}
+          style={[
+            styles.image,
+            {
+              opacity: opacityLayerOpacity,
+              transform: [{ scale: 1.04 }],
+            },
+          ]}
+          resizeMode="contain"
+          accessibilityIgnoresInvertColors
+        />
+        <Animated.Image
+          source={APPROVED_CORE}
+          style={[
+            styles.image,
+            {
+              opacity: scaleLayerOpacity,
+              transform: [{ scale: scaleLayerScale }],
+            },
+          ]}
+          resizeMode="contain"
+          accessibilityIgnoresInvertColors
+        />
         <Image
-          source={ARTWORK}
+          source={APPROVED_CORE}
           style={styles.image}
-          resizeMode="contain"
-          accessibilityIgnoresInvertColors
-        />
-        <Animated.Image
-          source={WAVE_LAYER}
-          style={[
-            styles.waveLayer,
-            {
-              opacity: waveOpacity,
-              transform: [
-                { translateX: waveTranslateX },
-                { translateY: waveTranslateY },
-                { scale: 1.018 },
-                { rotate: waveRotate },
-              ],
-            },
-          ]}
-          resizeMode="contain"
-          accessibilityIgnoresInvertColors
-        />
-        <Animated.Image
-          source={WAVE_LAYER}
-          style={[
-            styles.waveLayer,
-            {
-              opacity: config.waveOpacity * 0.45,
-              transform: [
-                { translateX: counterWaveTranslateX },
-                { translateY: counterWaveTranslateY },
-                { scale: 0.996 },
-                { rotate: counterWaveRotate },
-              ],
-            },
-          ]}
           resizeMode="contain"
           accessibilityIgnoresInvertColors
         />
@@ -322,11 +332,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   image: {
-    ...StyleSheet.absoluteFillObject,
-    width: "100%",
-    height: "100%",
-  },
-  waveLayer: {
     ...StyleSheet.absoluteFillObject,
     width: "100%",
     height: "100%",
