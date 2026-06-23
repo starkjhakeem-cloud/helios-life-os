@@ -45,26 +45,27 @@ type AnimationConfig = {
 };
 
 const APPROVED_CORE = require("../../assets/design/branding/helios-energy-core-transparent.png");
+const APPROVED_WAVES = require("../../assets/design/branding/helios-energy-core-waves.png");
 const ARTWORK_ASPECT_RATIO = 434 / 400;
 
 function resolveAnimationConfig(state: CoreState): AnimationConfig {
   switch (state) {
     case "thinking":
-      return { scaleDuration: 6200, opacityDuration: 7600, driftDuration: 9000 };
+      return { scaleDuration: 5600, opacityDuration: 6800, driftDuration: 8200 };
     case "generating":
-      return { scaleDuration: 5200, opacityDuration: 6800, driftDuration: 8200 };
+      return { scaleDuration: 5000, opacityDuration: 6200, driftDuration: 7600 };
     case "listening":
-      return { scaleDuration: 6800, opacityDuration: 8200, driftDuration: 9200 };
+      return { scaleDuration: 6400, opacityDuration: 7600, driftDuration: 9000 };
     case "speaking":
-      return { scaleDuration: 5600, opacityDuration: 7200, driftDuration: 8600 };
+      return { scaleDuration: 5400, opacityDuration: 6600, driftDuration: 8000 };
     case "attention":
-      return { scaleDuration: 6000, opacityDuration: 7600, driftDuration: 8800 };
+      return { scaleDuration: 5600, opacityDuration: 7000, driftDuration: 8400 };
     case "critical":
       return { scaleDuration: 5000, opacityDuration: 6200, driftDuration: 7600 };
     case "offline":
       return { scaleDuration: 9000, opacityDuration: 9000, driftDuration: 9000 };
     case "idle":
-      return { scaleDuration: 7600, opacityDuration: 8600, driftDuration: 9000 };
+      return { scaleDuration: 6800, opacityDuration: 8000, driftDuration: 9000 };
   }
 }
 
@@ -201,19 +202,19 @@ function HeliosEnergyCore({
 
   const scaleLayerOpacity = scalePulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.14, 0.3],
+    outputRange: [0.2, 0.35],
   });
   const scaleLayerScale = scalePulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 1.06],
+    outputRange: [1, 1.05],
   });
   const opacityLayerOpacity = opacityPulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.18, 0.35],
+    outputRange: [0.2, 0.35],
   });
   const driftOpacity = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.08, 0.18],
+    outputRange: [0.16, 0.32],
   });
   const driftRotate = drift.interpolate({
     inputRange: [0, 1],
@@ -221,15 +222,15 @@ function HeliosEnergyCore({
   });
   const driftScale = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: [1.02, 1.05],
+    outputRange: [1.015, 1.05],
   });
   const driftTranslateX = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: [-1.8, 1.8],
+    outputRange: [-2.2, 2.2],
   });
   const driftTranslateY = drift.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, -1],
+    outputRange: [1.4, -1.4],
   });
   const touchScale = touch.interpolate({
     inputRange: [0, 1],
@@ -268,8 +269,14 @@ function HeliosEnergyCore({
         ]}
         pointerEvents="none"
       >
-        <Animated.Image
+        <Image
           source={APPROVED_CORE}
+          style={styles.image}
+          resizeMode="contain"
+          accessibilityIgnoresInvertColors
+        />
+        <Animated.Image
+          source={APPROVED_WAVES}
           style={[
             styles.image,
             {
@@ -286,7 +293,7 @@ function HeliosEnergyCore({
           accessibilityIgnoresInvertColors
         />
         <Animated.Image
-          source={APPROVED_CORE}
+          source={APPROVED_WAVES}
           style={[
             styles.image,
             {
@@ -298,7 +305,7 @@ function HeliosEnergyCore({
           accessibilityIgnoresInvertColors
         />
         <Animated.Image
-          source={APPROVED_CORE}
+          source={APPROVED_WAVES}
           style={[
             styles.image,
             {
@@ -306,12 +313,6 @@ function HeliosEnergyCore({
               transform: [{ scale: scaleLayerScale }],
             },
           ]}
-          resizeMode="contain"
-          accessibilityIgnoresInvertColors
-        />
-        <Image
-          source={APPROVED_CORE}
-          style={styles.image}
           resizeMode="contain"
           accessibilityIgnoresInvertColors
         />
