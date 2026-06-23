@@ -189,13 +189,23 @@ function HeliosEnergyCore({
     outputRange: [0.45, 0.70],
   });
 
-  const glowOpacity = glow.interpolate({
+  // Inner glow: tight focus on the H — contracts slightly at rest, blooms at peak
+  const innerGlowOpacity = glow.interpolate({
     inputRange:  [0, 1],
-    outputRange: [0.30, 0.55],
+    outputRange: [0.42, 0.82],
   });
-  const glowScale = glow.interpolate({
+  const innerGlowScale = glow.interpolate({
     inputRange:  [0, 1],
-    outputRange: [1.0, 1.08],
+    outputRange: [0.90, 1.0],
+  });
+  // Outer bloom: barely visible halo, expands outward as the inner pulse peaks
+  const outerBloomOpacity = glow.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [0.04, 0.18],
+  });
+  const outerBloomScale = glow.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [1.0, 1.14],
   });
 
   const touchScale = touch.interpolate({
@@ -242,29 +252,47 @@ function HeliosEnergyCore({
           ]}
           pointerEvents="none"
         >
-          {/* Radial glow — bottommost layer, breathes on its own 3750ms cadence */}
+          {/* Outer bloom — expands outward as the inner pulse peaks, barely visible */}
           <Animated.View
             style={{
               position: "absolute",
               width: artworkHeight,
               height: artworkHeight,
-              opacity: glowOpacity,
-              transform: [{ scale: glowScale }],
+              opacity: outerBloomOpacity,
+              transform: [{ scale: outerBloomScale }],
             }}
           >
             <Svg width={artworkHeight} height={artworkHeight}>
               <Defs>
-                <RadialGradient id="coreGlow" cx="50%" cy="50%" rx="50%" ry="50%">
-                  <Stop offset="0%" stopColor="#8A5CF6" stopOpacity="0.55" />
+                <RadialGradient id="outerBloom" cx="50%" cy="50%" rx="50%" ry="50%">
+                  <Stop offset="0%"   stopColor="#8A5CF6" stopOpacity="0.40" />
+                  <Stop offset="55%"  stopColor="#8A5CF6" stopOpacity="0.12" />
                   <Stop offset="100%" stopColor="#8A5CF6" stopOpacity="0" />
                 </RadialGradient>
               </Defs>
-              <Circle
-                cx={artworkHeight / 2}
-                cy={artworkHeight / 2}
-                r={artworkHeight / 2}
-                fill="url(#coreGlow)"
-              />
+              <Circle cx={artworkHeight / 2} cy={artworkHeight / 2} r={artworkHeight / 2} fill="url(#outerBloom)" />
+            </Svg>
+          </Animated.View>
+
+          {/* Inner glow — tight focus behind the H, breathes opacity + scale */}
+          <Animated.View
+            style={{
+              position: "absolute",
+              width: artworkHeight,
+              height: artworkHeight,
+              opacity: innerGlowOpacity,
+              transform: [{ scale: innerGlowScale }],
+            }}
+          >
+            <Svg width={artworkHeight} height={artworkHeight}>
+              <Defs>
+                <RadialGradient id="innerGlow" cx="50%" cy="50%" rx="36%" ry="36%">
+                  <Stop offset="0%"   stopColor="#8A5CF6" stopOpacity="0.90" />
+                  <Stop offset="60%"  stopColor="#8A5CF6" stopOpacity="0.35" />
+                  <Stop offset="100%" stopColor="#8A5CF6" stopOpacity="0" />
+                </RadialGradient>
+              </Defs>
+              <Circle cx={artworkHeight / 2} cy={artworkHeight / 2} r={artworkHeight * 0.36} fill="url(#innerGlow)" />
             </Svg>
           </Animated.View>
 
