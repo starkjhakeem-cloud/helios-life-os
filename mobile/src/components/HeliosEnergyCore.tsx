@@ -60,6 +60,31 @@ const PULSE_SPEED: Record<CoreState, number> = {
   offline:    5000,
 };
 
+// Ring glow breath — ms per half-cycle and [min, max] opacity for the blurred ring twin.
+// Glow twins share the ring's own transform so the bloom stays welded to the path.
+const RING_GLOW_SPEED: Record<CoreState, number> = {
+  idle:        4000,  // slow, steady
+  thinking:    2200,  // energetic
+  generating:  1800,  // most active
+  listening:    700,  // fast ripple reacting to sound
+  speaking:    1900,  // breathing rhythm
+  attention:   2600,
+  critical:    1200,  // intense
+  offline:     6000,  // barely alive
+};
+
+// [resting opacity, peak opacity] — peak ≈ 115% of resting for most states
+const RING_GLOW_RANGE: Record<CoreState, [number, number]> = {
+  idle:       [0.58, 0.67],
+  thinking:   [0.72, 0.86],
+  generating: [0.78, 0.95],
+  listening:  [0.62, 0.70],
+  speaking:   [0.65, 0.78],
+  attention:  [0.70, 0.83],
+  critical:   [0.80, 1.00],
+  offline:    [0.36, 0.40],
+};
+
 function HeliosEnergyCore({
   size = 142,
   state = "idle",
@@ -71,8 +96,10 @@ function HeliosEnergyCore({
   const wrapperWidth  = size + GLOW_INSET * 2;
   const wrapperHeight = artworkHeight + GLOW_INSET * 2;
 
-  const spinDuration  = useMemo(() => SPIN_SPEED[state],  [state]);
-  const pulseDuration = useMemo(() => PULSE_SPEED[state], [state]);
+  const spinDuration      = useMemo(() => SPIN_SPEED[state],      [state]);
+  const pulseDuration     = useMemo(() => PULSE_SPEED[state],     [state]);
+  const ringGlowDuration  = useMemo(() => RING_GLOW_SPEED[state], [state]);
+  const ringGlowRange     = useMemo(() => RING_GLOW_RANGE[state], [state]);
 
   // spin  — continuous 0→1 linear (maps to 0°→360°, no visual snap at loop end)
   // pulse — 0→1→0 ease-in-out (scale breathe)
@@ -83,9 +110,13 @@ function HeliosEnergyCore({
   const spinRef  = useRef<Animated.CompositeAnimation | null>(null);
   const pulseRef = useRef<Animated.CompositeAnimation | null>(null);
 
-  // Breathing glow — independent of state, fixed 3750ms cadence
+  // Background radial glow — independent of state
   const glow    = useRef(new Animated.Value(0)).current;
   const glowRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  // Ring glow — drives the blurred "plasma bloom" twins on each wave layer
+  const ringGlow    = useRef(new Animated.Value(0)).current;
+  const ringGlowRef = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
     spinRef.current?.stop();
@@ -127,6 +158,29 @@ function HeliosEnergyCore({
       pulseRef.current?.stop();
     };
   }, [spinDuration, pulseDuration, spin, pulse]);
+
+  useEffect(() => {
+    ringGlowRef.current?.stop();
+    ringGlow.setValue(0);
+    ringGlowRef.current = Animated.loop(
+      Animated.sequence([
+        Animated.timing(ringGlow, {
+          toValue: 1,
+          duration: ringGlowDuration,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(ringGlow, {
+          toValue: 0,
+          duration: ringGlowDuration,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    ringGlowRef.current.start();
+    return () => ringGlowRef.current?.stop();
+  }, [ringGlow, ringGlowDuration]);
 
   useEffect(() => {
     glowRef.current = Animated.loop(
@@ -216,6 +270,12 @@ function HeliosEnergyCore({
     inputRange:  [0, 1],
     outputRange: [0.92, 1.00],
   });
+
+  // Ring glow twin opacity — re-derived when state changes so range updates
+  const ringGlowOpacity = useMemo(
+    () => ringGlow.interpolate({ inputRange: [0, 1], outputRange: ringGlowRange }),
+    [ringGlow, ringGlowRange],
+  );
 
   const touchScale = touch.interpolate({
     inputRange:  [0, 1],
@@ -336,7 +396,21 @@ function HeliosEnergyCore({
             accessibilityIgnoresInvertColors
           />
 
-          {/* Forward-spinning wave layer + scale pulse */}
+          {/* Forward glow twin — blurred copy at same transform, bloom hugs the path */}
+          <Animated.Image
+            source={APPROVED_WAVES}
+            blurRadius={8}
+            style={[
+              styles.image,
+              {
+                opacity: ringGlowOpacity,
+                transform: [{ rotate }, { scale: pulseScale }],
+              },
+            ]}
+            resizeMode="contain"
+            accessibilityIgnoresInvertColors
+          />
+          {/* Forward sharp ring */}
           <Animated.Image
             source={APPROVED_WAVES}
             style={[
@@ -350,7 +424,21 @@ function HeliosEnergyCore({
             accessibilityIgnoresInvertColors
           />
 
-          {/* Counter-spinning wave layer — static opacity, creates depth */}
+          {/* Counter glow twin — blurred copy at same counter-rotation */}
+          <Animated.Image
+            source={APPROVED_WAVES}
+            blurRadius={8}
+            style={[
+              styles.image,
+              {
+                opacity: ringGlowOpacity,
+                transform: [{ rotate: counterRotate }],
+              },
+            ]}
+            resizeMode="contain"
+            accessibilityIgnoresInvertColors
+          />
+          {/* Counter sharp ring */}
           <Animated.Image
             source={APPROVED_WAVES}
             style={[
