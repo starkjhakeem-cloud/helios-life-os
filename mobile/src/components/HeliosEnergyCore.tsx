@@ -275,7 +275,21 @@ function HeliosEnergyCore({
             accessibilityIgnoresInvertColors
           />
 
-          {/* Forward glow twin — blurred copy at same transform, bloom hugs the path */}
+          {/* Forward outer bloom — wide spread */}
+          <Animated.Image
+            source={APPROVED_WAVES}
+            blurRadius={20}
+            style={[
+              styles.image,
+              {
+                opacity: ringGlowOpacity,
+                transform: [{ rotate }, { scale: pulseScale }],
+              },
+            ]}
+            resizeMode="contain"
+            accessibilityIgnoresInvertColors
+          />
+          {/* Forward inner glow — tight halo hugging the path */}
           <Animated.Image
             source={APPROVED_WAVES}
             blurRadius={10}
@@ -303,7 +317,21 @@ function HeliosEnergyCore({
             accessibilityIgnoresInvertColors
           />
 
-          {/* Counter glow twin — blurred copy at same counter-rotation */}
+          {/* Counter outer bloom — wide spread */}
+          <Animated.Image
+            source={APPROVED_WAVES}
+            blurRadius={20}
+            style={[
+              styles.image,
+              {
+                opacity: ringGlowOpacity,
+                transform: [{ rotate: counterRotate }],
+              },
+            ]}
+            resizeMode="contain"
+            accessibilityIgnoresInvertColors
+          />
+          {/* Counter inner glow — tight halo */}
           <Animated.Image
             source={APPROVED_WAVES}
             blurRadius={10}
