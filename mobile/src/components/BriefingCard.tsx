@@ -109,11 +109,11 @@ export default function BriefingCard({
       {/* ── Greeting ── */}
       <Text style={styles.greeting}>{greeting}</Text>
 
-      {/* ── Summary ── */}
+      {/* ── Summary — answers: focus today + progress made ── */}
       <Text style={styles.summary}>{summary}</Text>
 
       {/* ── Priorities ── */}
-      <Text style={styles.sectionLabel}>PRIORITIES</Text>
+      <Text style={styles.sectionLabel}>TODAY'S PRIORITIES</Text>
       {priorities.map((p, i) => (
         <View key={i} style={styles.priorityRow}>
           <View style={styles.priorityDot} />
@@ -124,10 +124,10 @@ export default function BriefingCard({
         </View>
       ))}
 
-      {/* ── Urgent Risks ── */}
+      {/* ── Requires Attention ── */}
       {risks.length > 0 ? (
         <>
-          <Text style={[styles.sectionLabel, styles.riskSectionLabel]}>URGENT RISKS</Text>
+          <Text style={[styles.sectionLabel, styles.riskSectionLabel]}>REQUIRES ATTENTION</Text>
           {risks.map((risk, i) => (
             <View key={i} style={styles.riskRow}>
               <SymbolView
@@ -206,7 +206,7 @@ export default function BriefingCard({
         </View>
       ) : null}
 
-      {/* ── Focus Block ── */}
+      {/* ── Next Step — answers: what should I do next ── */}
       <View style={styles.focusBox}>
         <View style={styles.focusHeader}>
           <SymbolView
@@ -215,7 +215,7 @@ export default function BriefingCard({
             tintColor={colors.accentCyan}
             resizeMode="scaleAspectFit"
           />
-          <Text style={styles.focusLabel}>FOCUS BLOCK</Text>
+          <Text style={styles.focusLabel}>RECOMMENDED NEXT STEP</Text>
         </View>
         <Text style={styles.focusText}>{focus_block}</Text>
       </View>

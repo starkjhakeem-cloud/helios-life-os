@@ -28,6 +28,7 @@ from app.models.conversation import Conversation
 from app.models.email import EmailMessage
 from app.models.goal import Goal
 from app.models.memory import AIMemory
+from app.models.notification import Notification
 from app.models.task import Task
 from app.models.user_preferences import UserPreferences
 from app.models.user_profile import UserProfile
@@ -60,6 +61,9 @@ _SCOPE_SECTIONS: dict[ContextScope, list[str]] = {
         "user_profile",
         "goals",
         "tasks",
+        "today_tasks",
+        "today_progress",
+        "notifications",
         "memories",
         "analytics",
         "calendar",
@@ -91,16 +95,19 @@ _SCOPE_SECTIONS: dict[ContextScope, list[str]] = {
 }
 
 # Fetch caps — each section trims results at the source.
-_GOAL_LIMIT        = 10
-_TASK_FETCH_LIMIT  = 60
-_IN_PROGRESS_CAP   = 10
-_HIGH_PRIORITY_CAP = 5
-_OVERDUE_CAP       = 5
-_MEMORY_LIMIT      = 10
-_CALENDAR_LIMIT    = 5
-_EMAIL_FETCH_LIMIT = 20  # Python re-sorts to top 5 by importance
-_EMAIL_SHOW_LIMIT  = 5
-_CONV_LIMIT        = 3
+_GOAL_LIMIT           = 10
+_TASK_FETCH_LIMIT     = 60
+_IN_PROGRESS_CAP      = 10
+_HIGH_PRIORITY_CAP    = 5
+_OVERDUE_CAP          = 5
+_TODAY_TASK_CAP       = 12
+_TODAY_PROGRESS_CAP   = 10
+_NOTIFICATION_CAP     = 6
+_MEMORY_LIMIT         = 10
+_CALENDAR_LIMIT       = 5
+_EMAIL_FETCH_LIMIT    = 20  # Python re-sorts to top 5 by importance
+_EMAIL_SHOW_LIMIT     = 5
+_CONV_LIMIT           = 3
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -145,15 +152,18 @@ def _call_section(
 ) -> tuple[str | None, str]:
     """Dispatch section name → builder. Returns (text | None, source_label)."""
     match name:
-        case "user_profile":  return _section_user_profile(user_name, user_id, db, display_name=display_name)
-        case "goals":         return _section_goals(user_id, db)
-        case "tasks":         return _section_tasks(user_id, db)
-        case "memories":      return _section_memories(user_id, db)
-        case "analytics":     return _section_analytics(user_id, db)
-        case "calendar":      return _section_calendar(user_id, db)
-        case "email":         return _section_email(user_id, db)
-        case "conversations": return _section_conversations(user_id, db)
-        case _:               return None, name
+        case "user_profile":   return _section_user_profile(user_name, user_id, db, display_name=display_name)
+        case "goals":          return _section_goals(user_id, db)
+        case "tasks":          return _section_tasks(user_id, db)
+        case "today_tasks":    return _section_today_tasks(user_id, db)
+        case "today_progress": return _section_today_progress(user_id, db)
+        case "notifications":  return _section_notifications(user_id, db)
+        case "memories":       return _section_memories(user_id, db)
+        case "analytics":      return _section_analytics(user_id, db)
+        case "calendar":       return _section_calendar(user_id, db)
+        case "email":          return _section_email(user_id, db)
+        case "conversations":  return _section_conversations(user_id, db)
+        case _:                return None, name
 
 
 # ── Section builders ──────────────────────────────────────────────────────────
@@ -289,6 +299,77 @@ def _section_tasks(user_id: str, db: Session) -> tuple[str | None, str]:
         parts.append(f"OPEN TASKS: {len(open_tasks)} total (no critical or in-progress items)")
 
     return "\n\n".join(parts), "tasks"
+
+
+def _section_today_tasks(user_id: str, db: Session) -> tuple[str | None, str]:
+    today = date.today().isoformat()
+    rows = (
+        db.execute(
+            select(Task)
+            .where(
+                Task.user_id == user_id,
+                Task.status.in_(["todo", "in_progress"]),
+                Task.due_date == today,
+            )
+            .order_by(Task.priority.desc(), Task.updated_at.desc())
+            .limit(_TODAY_TASK_CAP)
+        )
+        .scalars()
+        .all()
+    )
+    if not rows:
+        return None, "today_tasks"
+    lines = [f"TASKS DUE TODAY ({len(rows)}):"]
+    for t in rows:
+        status_tag = " [IN PROGRESS]" if t.status == "in_progress" else ""
+        lines.append(f"  - [{t.priority.upper()}]{status_tag} {t.title}")
+        if t.description:
+            lines.append(f"      {t.description[:120]}")
+    return "\n".join(lines), "today_tasks"
+
+
+def _section_today_progress(user_id: str, db: Session) -> tuple[str | None, str]:
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    rows = (
+        db.execute(
+            select(Task)
+            .where(
+                Task.user_id == user_id,
+                Task.status == "done",
+                Task.updated_at >= today_start,
+            )
+            .order_by(Task.updated_at.desc())
+            .limit(_TODAY_PROGRESS_CAP)
+        )
+        .scalars()
+        .all()
+    )
+    if not rows:
+        return None, "today_progress"
+    lines = [f"COMPLETED TODAY ({len(rows)}):"]
+    for t in rows:
+        lines.append(f"  - {t.title}")
+    return "\n".join(lines), "today_progress"
+
+
+def _section_notifications(user_id: str, db: Session) -> tuple[str | None, str]:
+    rows = (
+        db.execute(
+            select(Notification)
+            .where(Notification.user_id == user_id, Notification.is_read == False)  # noqa: E712
+            .order_by(Notification.created_at.desc())
+            .limit(_NOTIFICATION_CAP)
+        )
+        .scalars()
+        .all()
+    )
+    if not rows:
+        return None, "notifications"
+    lines = [f"UNREAD NOTIFICATIONS ({len(rows)}):"]
+    for n in rows:
+        body_excerpt = f" — {n.body[:100]}" if n.body else ""
+        lines.append(f"  - {n.title}{body_excerpt}")
+    return "\n".join(lines), "notifications"
 
 
 def _section_memories(user_id: str, db: Session) -> tuple[str | None, str]:

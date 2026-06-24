@@ -18,61 +18,55 @@ class MockAIProvider(AIProvider):
         else:
             time_word = "Good evening"
 
-        # Populate email fields only when the context builder surfaced email data.
         has_emails = bool(user_context and "UNREAD MESSAGES" in user_context)
+        has_progress = bool(user_context and "COMPLETED TODAY" in user_context)
+        has_overdue = bool(user_context and "OVERDUE TASKS" in user_context)
+
+        summary = (
+            "Today's priority is continuing development of HELIOS and preparing for the D278 Objective Assessment. "
+            + (
+                "Hero Card refinement was completed today — the Home experience is nearly ready for review."
+                if has_progress else
+                "Hero Card refinement and a D278 study session are both in progress and should be completed before the end of today."
+            )
+        )
+
+        risks: list[str] = []
+        if has_overdue:
+            risks.append("One or more tasks are past their due date — review overdue items before taking on new work.")
+        risks.append("D278 OA preparation must remain active daily — any gap in study momentum increases exam risk.")
 
         return DailyBriefing(
-            greeting=(
-                f"{time_word}\n"
-                f"{user_name}\n"
-                "Your priority queue is loaded and systems are nominal."
-            ),
-            summary=(
-                "All systems are nominal. Goal and task tracking is active, "
-                "analytics pipeline is live, and the AI planning engine is ready for deployment. "
-                "Focus on closing open tasks and advancing your highest-priority goals today."
-            ),
+            greeting=f"{time_word}\n{user_name}",
+            summary=summary,
             priorities=[
                 BriefingPriority(
-                    label="Close high-priority tasks",
-                    detail="Review your task list and resolve any critical or high-priority items before accepting new work.",
+                    label="Complete a D278 study session",
+                    detail="The D278 OA is the current WGU blocker — one focused session today keeps the timeline on track.",
                 ),
                 BriefingPriority(
-                    label="Advance active goals",
-                    detail="Each active goal should have at least one in-progress task attached — gaps signal planning debt.",
+                    label="Finish Hero Card refinement",
+                    detail="The Hero Card refactor is in-progress — complete proportions and spacing before moving to the Goals redesign.",
                 ),
                 BriefingPriority(
-                    label="Generate an AI execution plan",
-                    detail="Use the AI Planner to produce a structured sprint for your next major objective.",
+                    label="Push latest HELIOS commits to GitHub",
+                    detail="Today's development work should be committed and pushed before ending the session.",
                 ),
             ],
-            risks=[
-                "Overdue tasks accumulate silently — check the Analytics tab to surface any that have slipped.",
-                "Goals without linked tasks have no execution path — ensure each goal has at least one active task.",
-            ],
+            risks=risks,
             focus_block=(
-                "Allocate the first 90 minutes to your highest-priority in-progress task — remove all "
-                "notifications, close non-essential tabs, and target a concrete deliverable you can mark done "
-                "by end of block. Then do a 10-minute review of your open task stack before context-switching."
+                "Open your D278 materials and spend 45 focused minutes on the current study module — "
+                "close HELIOS development until the session is complete. "
+                "After the study session, return to Hero Card refinement and push all commits before ending today."
             ),
-            recommended_agent="Strategy Agent",
+            recommended_agent="Study Agent",
             email_summary=(
-                "Your inbox has unread messages that may require attention before end of day. "
-                "High-priority items are flagged below."
+                "Inbox has unread messages that may require attention."
                 if has_emails else None
             ),
-            important_emails=(
-                ["Review unread high-priority messages in the Email tab (from: multiple senders)"]
-                if has_emails else []
-            ),
-            email_risks=(
-                ["Unread messages may contain time-sensitive requests — inbox review is overdue"]
-                if has_emails else []
-            ),
-            suggested_email_actions=(
-                ["Open the Email tab, filter by IMPORTANT, and action urgent messages before noon"]
-                if has_emails else []
-            ),
+            important_emails=[],
+            email_risks=[],
+            suggested_email_actions=[],
             generated_at=datetime.now(timezone.utc).isoformat(),
         )
 
