@@ -72,16 +72,16 @@ const RING_GLOW_SPEED: Record<CoreState, number> = {
   offline:     6000,  // barely alive
 };
 
-// [resting opacity, peak opacity] — peak ≈ 115% of resting for most states
+// [resting opacity, peak opacity]
 const RING_GLOW_RANGE: Record<CoreState, [number, number]> = {
-  idle:       [0.58, 0.67],
-  thinking:   [0.72, 0.86],
-  generating: [0.78, 0.95],
-  listening:  [0.62, 0.70],
-  speaking:   [0.65, 0.78],
-  attention:  [0.70, 0.83],
-  critical:   [0.80, 1.00],
-  offline:    [0.36, 0.40],
+  idle:       [0.72, 0.95],
+  thinking:   [0.85, 1.00],
+  generating: [0.90, 1.00],
+  listening:  [0.75, 0.95],
+  speaking:   [0.78, 1.00],
+  attention:  [0.82, 1.00],
+  critical:   [0.92, 1.00],
+  offline:    [0.50, 0.65],
 };
 
 function HeliosEnergyCore({
@@ -278,7 +278,7 @@ function HeliosEnergyCore({
           {/* Forward glow twin — blurred copy at same transform, bloom hugs the path */}
           <Animated.Image
             source={APPROVED_WAVES}
-            blurRadius={8}
+            blurRadius={10}
             style={[
               styles.image,
               {
@@ -306,7 +306,7 @@ function HeliosEnergyCore({
           {/* Counter glow twin — blurred copy at same counter-rotation */}
           <Animated.Image
             source={APPROVED_WAVES}
-            blurRadius={8}
+            blurRadius={10}
             style={[
               styles.image,
               {
