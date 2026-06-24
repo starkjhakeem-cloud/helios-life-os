@@ -312,6 +312,7 @@ export default function HomeScreen() {
           timeLocationStr={timeLocationStr}
           systemStatus={systemStatus}
           onPressStatus={onPressStatus}
+          onPressCTA={() => router.push("/(tabs)/assistant")}
         />
 
         <Section title={"TODAY'S METRICS"} action="View all  ›" onAction={() => router.push("/(tabs)/analytics")} />
@@ -406,6 +407,7 @@ function Hero({
   timeLocationStr,
   systemStatus,
   onPressStatus,
+  onPressCTA,
 }: {
   greeting: string;
   userName: string;
@@ -413,40 +415,24 @@ function Hero({
   timeLocationStr: string;
   systemStatus: SystemStatus;
   onPressStatus: (() => void) | null;
+  onPressCTA: () => void;
 }) {
   const { colors } = useTheme();
   const s = useMemo(() => createStyles(colors), [colors]);
-  const toneColor = getToneColor(systemStatus.tone, colors);
-  const heroScale = useRef(new Animated.Value(1)).current;
+  const ctaScale = useRef(new Animated.Value(1)).current;
 
-  const animateHero = useCallback((toValue: number) => {
-    Animated.spring(heroScale, {
+  const animateCta = useCallback((toValue: number) => {
+    Animated.spring(ctaScale, {
       toValue,
       useNativeDriver: true,
-      speed: 18,
-      bounciness: 5,
+      speed: 22,
+      bounciness: 4,
     }).start();
-  }, [heroScale]);
-
-  const pillStyle = [
-    s.statusPill,
-    { backgroundColor: `${toneColor}24`, borderColor: `${toneColor}2e` },
-  ];
-
-  const pillInner = (
-    <>
-      <View style={[s.statusDot, { backgroundColor: toneColor }]} />
-      <Text style={[s.statusText, { color: toneColor }]}>{systemStatus.label}</Text>
-    </>
-  );
+  }, [ctaScale]);
 
   return (
-    <Animated.View
-      style={[s.heroCard, { transform: [{ scale: heroScale }] }]}
-      onTouchStart={() => animateHero(1.008)}
-      onTouchEnd={() => animateHero(1)}
-      onTouchCancel={() => animateHero(1)}
-    >
+    <View style={s.heroCard}>
+      {/* Left column — greeting, name, date */}
       <View style={s.heroLeft}>
         <Text style={s.heroGreeting}>{greeting}</Text>
         <Text style={s.heroName} numberOfLines={2}>{userName}</Text>
@@ -454,24 +440,9 @@ function Hero({
           <Text style={s.heroDate}>{dateStr}</Text>
           <Text style={s.heroTimeLocation}>{timeLocationStr}</Text>
         </View>
-
-        {onPressStatus ? (
-          <TouchableOpacity
-            style={pillStyle}
-            onPress={onPressStatus}
-            activeOpacity={0.65}
-            accessibilityLabel={systemStatus.accessibilityHint}
-            accessibilityRole="button"
-          >
-            {pillInner}
-          </TouchableOpacity>
-        ) : (
-          <View style={pillStyle}>
-            {pillInner}
-          </View>
-        )}
       </View>
 
+      {/* Energy Core — visual centerpiece, top-right */}
       <View style={s.heroOrbArea}>
         <HeliosEnergyCore
           size={142}
@@ -480,7 +451,34 @@ function Hero({
           onPress={onPressStatus ?? undefined}
         />
       </View>
-    </Animated.View>
+
+      {/* Bottom — assistant message + primary CTA */}
+      <View style={s.heroBottom}>
+        <Text style={s.assistantMessage}>
+          {"Welcome back.\nEverything looks good today."}
+        </Text>
+
+        <Animated.View style={{ transform: [{ scale: ctaScale }] }}>
+          <TouchableOpacity
+            style={s.ctaButton}
+            onPress={onPressCTA}
+            onPressIn={() => animateCta(0.97)}
+            onPressOut={() => animateCta(1)}
+            activeOpacity={1}
+            accessibilityLabel="Continue Building HELIOS"
+            accessibilityRole="button"
+          >
+            <Text style={s.ctaText}>Continue Building HELIOS</Text>
+            <SymbolView
+              name="arrow.right"
+              size={14}
+              tintColor="rgba(255,255,255,0.75)"
+              resizeMode="scaleAspectFit"
+            />
+          </TouchableOpacity>
+        </Animated.View>
+      </View>
+    </View>
   );
 }
 
@@ -660,88 +658,93 @@ function createStyles(colors: ThemeColors) {
 
     heroCard: {
       width: PAGE,
-      minHeight: 244,
+      minHeight: 330,
       borderRadius: 28,
       marginBottom: 34,
-      paddingLeft: 17,
-      paddingTop: 21,
+      paddingLeft: 20,
+      paddingRight: 20,
+      paddingTop: 24,
+      paddingBottom: 20,
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: colors.tabBarBorder,
       overflow: "hidden",
     },
     heroLeft: {
-      width: 208,
+      width: "58%",
       zIndex: 5,
     },
     heroGreeting: {
       color: colors.textMuted,
-      fontSize: 17,
-      lineHeight: 22,
+      fontSize: 15,
+      lineHeight: 20,
       fontWeight: "500",
-      marginBottom: 6,
+      marginBottom: 3,
     },
     heroName: {
       color: colors.textPrimary,
-      fontSize: 31,
-      lineHeight: 38,
+      fontSize: 29,
+      lineHeight: 36,
       fontWeight: "900",
-      letterSpacing: -0.7,
+      letterSpacing: -0.6,
       marginBottom: 10,
     },
     heroDate: {
       color: colors.textSecondary,
-      fontSize: 14,
-      lineHeight: 18,
+      fontSize: 13,
+      lineHeight: 17,
       fontWeight: "700",
     },
     heroDateBlock: {
       gap: 2,
-      marginBottom: 16,
     },
     heroTimeLocation: {
       color: colors.textMuted,
-      fontSize: 12.5,
-      lineHeight: 17,
-      fontWeight: "600",
-      letterSpacing: 0.1,
-    },
-    statusPill: {
-      minHeight: 34,
-      maxWidth: 204,
-      alignSelf: "flex-start",
-      borderRadius: 17,
-      paddingHorizontal: 12,
-      paddingVertical: 7,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-      backgroundColor: `${colors.accentCyan}24`,
-      borderWidth: 1,
-      borderColor: `${colors.accentCyan}2e`,
-    },
-    statusDot: {
-      width: 9,
-      height: 9,
-      borderRadius: 5,
-      backgroundColor: colors.accentCyan,
-    },
-    statusText: {
-      color: colors.accentCyan,
       fontSize: 12,
-      lineHeight: 15,
-      fontWeight: "800",
-      letterSpacing: 0,
-      flexShrink: 1,
+      lineHeight: 16,
+      fontWeight: "500",
+      letterSpacing: 0.1,
     },
     heroOrbArea: {
       position: "absolute",
-      right: 7,
-      top: 18,
-      width: 148,
-      height: 132,
+      right: 0,
+      top: 14,
+      width: 152,
+      height: 140,
       alignItems: "center",
       justifyContent: "center",
+    },
+    heroBottom: {
+      marginTop: 28,
+      gap: 14,
+    },
+    assistantMessage: {
+      color: colors.textMuted,
+      fontSize: 14,
+      lineHeight: 21,
+      fontWeight: "500",
+      letterSpacing: 0.1,
+    },
+    ctaButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 20,
+      paddingVertical: 15,
+      borderRadius: 26,
+      backgroundColor: "rgba(110, 76, 255, 0.12)",
+      borderWidth: 1,
+      borderColor: "rgba(110, 76, 255, 0.28)",
+      shadowColor: "#6E4CFF",
+      shadowOpacity: 0.35,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 6 },
+    },
+    ctaText: {
+      color: colors.textPrimary,
+      fontSize: 15,
+      fontWeight: "700",
+      letterSpacing: -0.1,
     },
 
     section: {
