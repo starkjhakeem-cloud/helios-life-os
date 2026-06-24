@@ -1,6 +1,6 @@
 import React from "react";
-import { Image, type ImageSourcePropType } from "react-native";
 import Svg, { Circle, Line, Rect } from "react-native-svg";
+import { ProtectedHeliosIcon } from "./ProtectedHeliosIcons";
 
 // HELIOS Icon System
 //
@@ -12,80 +12,25 @@ import Svg, { Circle, Line, Rect } from "react-native-svg";
 // Every stroke-only element must have fill="none" set explicitly, or it renders
 // filled black (the SVG spec default).
 
-const PROTECTED_ICON_ASSETS = {
-  home: require("../../assets/design/system/icons/home.png"),
-  assistant: require("../../assets/design/branding/helios-energy-core-transparent.png"),
-} as const satisfies Record<string, ImageSourcePropType>;
-
 const SW = 2.25;
 
 type P = { color: string; size?: number };
 
-function ProtectedAssetIcon({
-  source,
-  color,
-  preserveColor = false,
-  size = 28,
-}: P & { preserveColor?: boolean; source: ImageSourcePropType }) {
-  return (
-    <Image
-      source={source}
-      style={{ width: size, height: size, tintColor: preserveColor ? undefined : color }}
-      resizeMode="contain"
-      accessibilityIgnoresInvertColors
-    />
-  );
-}
-
-function HomeIcon({ color, size = 28 }: P) {
-  return (
-    <ProtectedAssetIcon
-      source={PROTECTED_ICON_ASSETS.home}
-      color={color}
-      preserveColor
-      size={size}
-    />
-  );
+function HomeIcon({ size = 28 }: P) {
+  return <ProtectedHeliosIcon name="home" size={size} />;
 }
 
 function AssistantIcon({ color, size = 28 }: P) {
   // Static fallback — tab bar bypasses this and uses HeliosEnergyCore directly.
-  return (
-    <ProtectedAssetIcon
-      source={PROTECTED_ICON_ASSETS.assistant}
-      color={color}
-      size={size}
-    />
-  );
+  return <ProtectedHeliosIcon name="assistant" tintColor={color} size={size} />;
 }
 
-function GoalsIcon({ color, size = 28 }: P) {
-  // Three concentric rings + filled center dot
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24">
-      <Circle cx={12} cy={12} r={9.5} stroke={color} strokeWidth={SW} fill="none" />
-      <Circle cx={12} cy={12} r={5.5} stroke={color} strokeWidth={SW} fill="none" />
-      <Circle cx={12} cy={12} r={1.5} fill={color} />
-    </Svg>
-  );
+function GoalsIcon({ size = 28 }: P) {
+  return <ProtectedHeliosIcon name="goals" size={size} />;
 }
 
-function TasksIcon({ color, size = 28 }: P) {
-  // Three identical checklist rows: empty circle bullet + horizontal line.
-  // All rows are the same — no checkmark state at nav-icon scale.
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24">
-      {/* Row 1 */}
-      <Circle cx={4} cy={6.5}  r={2.5} stroke={color} strokeWidth={SW} fill="none" />
-      <Line x1={10} y1={6.5}  x2={21} y2={6.5}  stroke={color} strokeWidth={SW} strokeLinecap="round" />
-      {/* Row 2 */}
-      <Circle cx={4} cy={13}   r={2.5} stroke={color} strokeWidth={SW} fill="none" />
-      <Line x1={10} y1={13}   x2={21} y2={13}   stroke={color} strokeWidth={SW} strokeLinecap="round" />
-      {/* Row 3 */}
-      <Circle cx={4} cy={19.5} r={2.5} stroke={color} strokeWidth={SW} fill="none" />
-      <Line x1={10} y1={19.5} x2={21} y2={19.5} stroke={color} strokeWidth={SW} strokeLinecap="round" />
-    </Svg>
-  );
+function TasksIcon({ size = 28 }: P) {
+  return <ProtectedHeliosIcon name="tasks" size={size} />;
 }
 
 function CalendarIcon({ color, size = 28 }: P) {
