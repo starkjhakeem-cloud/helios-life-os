@@ -15,3 +15,5 @@ Current canonical icons:
 - `home.png`
 - `goals.png`
 - `tasks.png`
+- `calendar.png`
+- `more.png`
