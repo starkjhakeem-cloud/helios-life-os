@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Circle, Defs, RadialGradient, Stop, Svg } from "react-native-svg";
 import * as Haptics from "expo-haptics";
 
 export type CoreState =
@@ -110,10 +109,6 @@ function HeliosEnergyCore({
   const spinRef  = useRef<Animated.CompositeAnimation | null>(null);
   const pulseRef = useRef<Animated.CompositeAnimation | null>(null);
 
-  // Background radial glow — independent of state
-  const glow    = useRef(new Animated.Value(0)).current;
-  const glowRef = useRef<Animated.CompositeAnimation | null>(null);
-
   // Ring glow — drives the blurred "plasma bloom" twins on each wave layer
   const ringGlow    = useRef(new Animated.Value(0)).current;
   const ringGlowRef = useRef<Animated.CompositeAnimation | null>(null);
@@ -182,27 +177,6 @@ function HeliosEnergyCore({
     return () => ringGlowRef.current?.stop();
   }, [ringGlow, ringGlowDuration]);
 
-  useEffect(() => {
-    glowRef.current = Animated.loop(
-      Animated.sequence([
-        Animated.timing(glow, {
-          toValue: 1,
-          duration: 3800,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(glow, {
-          toValue: 0,
-          duration: 3800,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    glowRef.current.start();
-    return () => glowRef.current?.stop();
-  }, [glow]);
-
   const handlePress = useCallback(() => {
     if (Platform.OS === "ios") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     onPress?.();
@@ -241,34 +215,6 @@ function HeliosEnergyCore({
   const pulseOpacity = pulse.interpolate({
     inputRange:  [0, 1],
     outputRange: [0.45, 0.70],
-  });
-
-  // Outer ambient — full orbital area, violet→blue, opacity exactly as specified
-  const outerOpacity = glow.interpolate({
-    inputRange:  [0, 1],
-    outputRange: [0.18, 0.32],
-  });
-  const outerScale = glow.interpolate({
-    inputRange:  [0, 1],
-    outputRange: [1.00, 1.08],
-  });
-  // Mid violet — tighter, adds depth and saturation behind the waves
-  const midOpacity = glow.interpolate({
-    inputRange:  [0, 1],
-    outputRange: [0.28, 0.50],
-  });
-  const midScale = glow.interpolate({
-    inputRange:  [0, 1],
-    outputRange: [1.00, 1.04],
-  });
-  // Inner core — focused bright point directly behind the H, contracts then blooms
-  const coreOpacity = glow.interpolate({
-    inputRange:  [0, 1],
-    outputRange: [0.42, 0.70],
-  });
-  const coreScale = glow.interpolate({
-    inputRange:  [0, 1],
-    outputRange: [0.92, 1.00],
   });
 
   // Ring glow twin opacity — re-derived when state changes so range updates
@@ -321,73 +267,6 @@ function HeliosEnergyCore({
           ]}
           pointerEvents="none"
         >
-          {/* Layer 1 — outer ambient: violet→electric-blue, full orbital coverage */}
-          <Animated.View
-            style={{
-              position: "absolute",
-              width: size,
-              height: size,
-              opacity: outerOpacity,
-              transform: [{ scale: outerScale }],
-            }}
-          >
-            <Svg width={size} height={size}>
-              <Defs>
-                <RadialGradient id="glowOuter" cx="50%" cy="50%" rx="50%" ry="50%">
-                  <Stop offset="0%"   stopColor="#6E4CFF" stopOpacity="0.90" />
-                  <Stop offset="30%"  stopColor="#5A3FDB" stopOpacity="0.65" />
-                  <Stop offset="62%"  stopColor="#38BDF8" stopOpacity="0.30" />
-                  <Stop offset="100%" stopColor="#38BDF8" stopOpacity="0" />
-                </RadialGradient>
-              </Defs>
-              <Circle cx={size / 2} cy={size / 2} r={size / 2} fill="url(#glowOuter)" />
-            </Svg>
-          </Animated.View>
-
-          {/* Layer 2 — mid violet: saturates the core, adds depth behind the waves */}
-          <Animated.View
-            style={{
-              position: "absolute",
-              width: size,
-              height: size,
-              opacity: midOpacity,
-              transform: [{ scale: midScale }],
-            }}
-          >
-            <Svg width={size} height={size}>
-              <Defs>
-                <RadialGradient id="glowMid" cx="50%" cy="50%" rx="44%" ry="44%">
-                  <Stop offset="0%"   stopColor="#7C3AED" stopOpacity="1.0" />
-                  <Stop offset="48%"  stopColor="#6D28D9" stopOpacity="0.55" />
-                  <Stop offset="100%" stopColor="#4C1D95" stopOpacity="0" />
-                </RadialGradient>
-              </Defs>
-              <Circle cx={size / 2} cy={size / 2} r={size * 0.44} fill="url(#glowMid)" />
-            </Svg>
-          </Animated.View>
-
-          {/* Layer 3 — inner core: tightest, brightest, contracts then blooms behind H */}
-          <Animated.View
-            style={{
-              position: "absolute",
-              width: size,
-              height: size,
-              opacity: coreOpacity,
-              transform: [{ scale: coreScale }],
-            }}
-          >
-            <Svg width={size} height={size}>
-              <Defs>
-                <RadialGradient id="glowCore" cx="50%" cy="50%" rx="28%" ry="28%">
-                  <Stop offset="0%"   stopColor="#A78BFA" stopOpacity="1.0" />
-                  <Stop offset="50%"  stopColor="#8B5CF6" stopOpacity="0.80" />
-                  <Stop offset="100%" stopColor="#6E4CFF" stopOpacity="0" />
-                </RadialGradient>
-              </Defs>
-              <Circle cx={size / 2} cy={size / 2} r={size * 0.28} fill="url(#glowCore)" />
-            </Svg>
-          </Animated.View>
-
           {/* Static base — H stays perfectly still */}
           <Image
             source={APPROVED_CORE}
