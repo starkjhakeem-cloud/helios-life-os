@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -45,10 +47,25 @@ type Insight = {
 };
 
 type WeekDay = {
+  activity: ActivityKind[];
   count: number;
   date: Date;
+  inMonth: boolean;
   isToday: boolean;
+  isSelected: boolean;
   workload: number;
+};
+
+type DayMode = "future" | "past" | "today";
+type ActivityKind = "event" | "focus" | "low" | "personal" | "task";
+
+type MonthStats = {
+  activeDays: number;
+  eventDays: number;
+  focusDays: number;
+  lowDays: number;
+  personalDays: number;
+  taskDays: number;
 };
 
 const EMPTY_FORM: FormState = {
@@ -84,6 +101,41 @@ function isSameLocalDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear()
     && a.getMonth() === b.getMonth()
     && a.getDate() === b.getDate();
+}
+
+function addDays(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function addMonths(date: Date, months: number): Date {
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + months, 1);
+  return startOfLocalDay(d);
+}
+
+function startOfMonth(date: Date): Date {
+  const d = new Date(date);
+  d.setDate(1);
+  return startOfLocalDay(d);
+}
+
+function getMonthGrid(month: Date): { date: Date; inMonth: boolean }[] {
+  const first = startOfMonth(month);
+  const gridStart = addDays(first, -first.getDay());
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = addDays(gridStart, index);
+    return { date, inMonth: date.getMonth() === first.getMonth() };
+  });
+}
+
+function dayMode(date: Date, today: Date): DayMode {
+  const selected = startOfLocalDay(date).getTime();
+  const current = startOfLocalDay(today).getTime();
+  if (selected < current) return "past";
+  if (selected > current) return "future";
+  return "today";
 }
 
 function minutesBetween(start: Date, end: Date): number {
@@ -130,9 +182,41 @@ function isTaskOpen(task: Task): boolean {
   return !["done", "completed", "archived", "deleted", "cancelled"].includes(task.status.toLowerCase());
 }
 
-function isTaskPlannedToday(task: Task, today: Date): boolean {
+function isTaskPlannedForDate(task: Task, date: Date): boolean {
   if (!isTaskOpen(task) || !task.due_date) return false;
-  return isSameLocalDay(new Date(task.due_date), today);
+  return isSameLocalDay(new Date(task.due_date), date);
+}
+
+function isTaskCompletedOnDate(task: Task, date: Date): boolean {
+  if (!["done", "completed"].includes(task.status.toLowerCase())) return false;
+  return isSameLocalDay(new Date(task.updated_at), date);
+}
+
+function getActivityForDate(date: Date, events: CalendarEvent[], tasks: Task[]): ActivityKind[] {
+  const eventCount = events.filter((event) => isSameLocalDay(new Date(event.start_time), date)).length;
+  const plannedTasks = tasks.filter((task) => isTaskPlannedForDate(task, date)).length;
+  const completedTasks = tasks.filter((task) => isTaskCompletedOnDate(task, date)).length;
+  const activities: ActivityKind[] = [];
+
+  if (eventCount > 0) activities.push("event");
+  if (plannedTasks + completedTasks > 0) activities.push("task");
+  if (eventCount === 0 && plannedTasks + completedTasks === 0) activities.push("low");
+  if (plannedTasks + completedTasks >= 2) activities.push("focus");
+  if (eventCount > 0 && /workout|gym|exercise|family|personal|dinner|lunch/i.test(
+    events.filter((event) => isSameLocalDay(new Date(event.start_time), date)).map((event) => event.title).join(" "),
+  )) {
+    activities.push("personal");
+  }
+
+  return activities.slice(0, 3);
+}
+
+function getActivityColor(kind: ActivityKind, colors: ThemeColors): string {
+  if (kind === "event") return colors.accent;
+  if (kind === "focus") return colors.accentCyan;
+  if (kind === "task") return colors.info;
+  if (kind === "personal") return colors.success;
+  return colors.warning;
 }
 
 function toneColor(tone: Insight["tone"], colors: ThemeColors): string {
@@ -154,6 +238,9 @@ export default function CalendarScreen() {
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [formError, setFormError] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState(() => startOfLocalDay(new Date()));
+  const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(new Date()));
+  const slide = useMemo(() => new Animated.Value(0), []);
 
   const onRefresh = useCallback(() => {
     if (!accessToken) return;
@@ -229,21 +316,56 @@ export default function CalendarScreen() {
     if (accessToken) deleteEvent(accessToken, eventId);
   }
 
-  const today = useMemo(() => new Date(), []);
-  const dayStart = useMemo(() => startOfLocalDay(today), [today]);
-  const dayEnd = useMemo(() => endOfLocalDay(today), [today]);
+  const today = useMemo(() => startOfLocalDay(new Date()), []);
+  const selectedMode = dayMode(selectedDate, today);
+  const dayStart = useMemo(() => startOfLocalDay(selectedDate), [selectedDate]);
+  const dayEnd = useMemo(() => endOfLocalDay(selectedDate), [selectedDate]);
+
+  const animateDayChange = useCallback((direction: number) => {
+    slide.setValue(direction >= 0 ? 18 : -18);
+    Animated.timing(slide, {
+      toValue: 0,
+      duration: 240,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [slide]);
+
+  const selectDate = useCallback((date: Date) => {
+    const next = startOfLocalDay(date);
+    const direction = next.getTime() - selectedDate.getTime();
+    setSelectedDate(next);
+    setVisibleMonth(startOfMonth(next));
+    animateDayChange(direction);
+  }, [animateDayChange, selectedDate]);
+
+  const returnToToday = useCallback(() => selectDate(today), [selectDate, today]);
+
+  const moveMonth = useCallback((delta: number) => {
+    const next = addMonths(visibleMonth, delta);
+    setVisibleMonth(next);
+    animateDayChange(delta);
+  }, [animateDayChange, visibleMonth]);
 
   const todayEvents = useMemo(() => (
     events
-      .filter((event) => isSameLocalDay(new Date(event.start_time), today))
+      .filter((event) => isSameLocalDay(new Date(event.start_time), selectedDate))
       .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-  ), [events, today]);
+  ), [events, selectedDate]);
 
-  const todayTasks = useMemo(() => tasks.filter((task) => isTaskPlannedToday(task, today)), [tasks, today]);
+  const todayTasks = useMemo(() => tasks.filter((task) => isTaskPlannedForDate(task, selectedDate)), [tasks, selectedDate]);
+  const completedTasksForDay = useMemo(() => (
+    tasks.filter((task) =>
+      ["done", "completed"].includes(task.status.toLowerCase())
+      && isSameLocalDay(new Date(task.updated_at), selectedDate),
+    )
+  ), [selectedDate, tasks]);
 
   const freeBlocks = useMemo(() => {
     const blocks: { start: Date; end: Date; minutes: number }[] = [];
-    let cursor = new Date(Math.max(dayStart.getTime(), new Date().getTime()));
+    let cursor = selectedMode === "today"
+      ? new Date(Math.max(dayStart.getTime(), new Date().getTime()))
+      : new Date(dayStart);
 
     todayEvents.forEach((event) => {
       const start = new Date(event.start_time);
@@ -256,7 +378,7 @@ export default function CalendarScreen() {
     const finalGap = minutesBetween(cursor, dayEnd);
     if (finalGap >= 45) blocks.push({ start: cursor, end: dayEnd, minutes: finalGap });
     return blocks;
-  }, [dayEnd, dayStart, todayEvents]);
+  }, [dayEnd, dayStart, selectedMode, todayEvents]);
 
   const totalScheduledMinutes = todayEvents.reduce(
     (sum, event) => sum + minutesBetween(new Date(event.start_time), new Date(event.end_time)),
@@ -272,16 +394,33 @@ export default function CalendarScreen() {
     { start: dayStart, end: dayStart, minutes: 0 },
   );
 
-  const weekDays = useMemo<WeekDay[]>(() => {
-    const start = new Date(dayStart);
-    start.setDate(dayStart.getDate() - ((dayStart.getDay() + 6) % 7));
-    return Array.from({ length: 7 }, (_, index) => {
-      const date = new Date(start);
-      date.setDate(start.getDate() + index);
+  const monthDays = useMemo<WeekDay[]>(() => (
+    getMonthGrid(visibleMonth).map(({ date, inMonth }) => {
+      const activity = getActivityForDate(date, events, tasks);
       const count = events.filter((event) => isSameLocalDay(new Date(event.start_time), date)).length;
-      return { date, count, workload: Math.min(3, Math.max(1, count)), isToday: isSameLocalDay(date, today) };
-    });
-  }, [dayStart, events, today]);
+      return {
+        activity,
+        date,
+        count,
+        inMonth,
+        workload: Math.min(3, Math.max(1, count)),
+        isToday: isSameLocalDay(date, today),
+        isSelected: isSameLocalDay(date, selectedDate),
+      };
+    })
+  ), [events, selectedDate, tasks, today, visibleMonth]);
+
+  const monthStats = useMemo<MonthStats>(() => {
+    const inMonthDays = monthDays.filter((day) => day.inMonth);
+    return {
+      activeDays: inMonthDays.filter((day) => !day.activity.includes("low")).length,
+      eventDays: inMonthDays.filter((day) => day.activity.includes("event")).length,
+      focusDays: inMonthDays.filter((day) => day.activity.includes("focus")).length,
+      lowDays: inMonthDays.filter((day) => day.activity.includes("low")).length,
+      personalDays: inMonthDays.filter((day) => day.activity.includes("personal")).length,
+      taskDays: inMonthDays.filter((day) => day.activity.includes("task")).length,
+    };
+  }, [monthDays]);
 
   const timelineItems = useMemo<TimelineItem[]>(() => {
     const items: TimelineItem[] = [];
@@ -305,16 +444,17 @@ export default function CalendarScreen() {
 
     if (todayEvents.length === 0) {
       if (primaryTask) {
-        const taskTime = new Date(today);
+        const taskTime = new Date(selectedDate);
         taskTime.setHours(11, 0, 0, 0);
         items.push({ type: "task", task: primaryTask, time: taskTime });
       }
-      const remaining = minutesBetween(new Date(), dayEnd);
-      if (remaining > 0) items.push({ type: "free", start: new Date(), end: dayEnd, minutes: remaining });
+      const start = selectedMode === "today" ? new Date() : new Date(dayStart);
+      const minutes = minutesBetween(start, dayEnd);
+      if (minutes > 0) items.push({ type: "free", start, end: dayEnd, minutes });
     }
 
     return items;
-  }, [dayEnd, today, todayEvents, todayTasks]);
+  }, [dayEnd, dayStart, selectedDate, selectedMode, todayEvents, todayTasks]);
 
   const insights: Insight[] = [
     {
@@ -345,6 +485,23 @@ export default function CalendarScreen() {
     },
   ];
 
+  const dayLabel = selectedMode === "today" ? "TODAY" : selectedMode === "past" ? "DAILY MEMORY" : "PLANNING";
+  const timelineLabel = selectedMode === "past" ? "DAY HISTORY" : selectedMode === "future" ? "PLANNED TIMELINE" : "TODAY'S TIMELINE";
+  const suggestionTitle = selectedMode === "past"
+    ? "HELIOS remembers this day as a timeline snapshot."
+    : longestFreeBlock.minutes >= 90
+      ? `You have ${formatLongDuration(longestFreeBlock.minutes)} available ${selectedMode === "today" ? "today" : "that day"}.`
+      : "Your schedule has room for a focused reset.";
+  const suggestionText = selectedMode === "past"
+    ? `${todayEvents.length} events and ${todayTasks.length} tasks are preserved for this day.`
+    : `Recommended: ${todayTasks[0]?.title ?? "Continue HELIOS Development"}`;
+  const memoryFacts = [
+    `${todayEvents.length} calendar ${todayEvents.length === 1 ? "event" : "events"}`,
+    `${todayTasks.length} scheduled ${todayTasks.length === 1 ? "task" : "tasks"}`,
+    `${completedTasksForDay.length} completed ${completedTasksForDay.length === 1 ? "task" : "tasks"}`,
+    `${focusBlocks.length} focus ${focusBlocks.length === 1 ? "window" : "windows"}`,
+  ];
+
   return (
     <>
       <ScrollView
@@ -358,16 +515,25 @@ export default function CalendarScreen() {
           <RefreshControl refreshing={isLoading} onRefresh={onRefresh} tintColor={colors.accentCyan} />
         }
       >
+        <Animated.View style={{ transform: [{ translateX: slide }] }}>
         <View style={styles.heroCard}>
           <View style={styles.heroTopRow}>
-            <Text style={styles.heroLabel}>TODAY</Text>
+            <Text style={styles.heroLabel}>{dayLabel}</Text>
             {(isLoading || isMutating) ? <ActivityIndicator size="small" color={colors.accentCyan} /> : null}
           </View>
           <Text style={styles.heroDate}>
-            {today.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+            {selectedDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
           </Text>
-          <Text style={styles.heroGreeting}>{getGreeting(today)}</Text>
-          <Text style={styles.summaryTitle}>{"Today's Summary"}</Text>
+          <Text style={styles.heroGreeting}>
+            {selectedMode === "past"
+              ? "A preserved snapshot of what happened that day."
+              : selectedMode === "future"
+                ? "A planning view for what HELIOS can help prepare."
+                : getGreeting(new Date())}
+          </Text>
+          <Text style={styles.summaryTitle}>
+            {selectedMode === "past" ? "Day Summary" : selectedMode === "future" ? "Planned Summary" : "Today's Summary"}
+          </Text>
           <View style={styles.summaryGrid}>
             <SummaryDot label={`${todayEvents.length} scheduled ${todayEvents.length === 1 ? "event" : "events"}`} colors={colors} />
             <SummaryDot label={`${focusBlocks.length} focus ${focusBlocks.length === 1 ? "block" : "blocks"}`} colors={colors} />
@@ -384,11 +550,22 @@ export default function CalendarScreen() {
             ]}
           />
         </View>
+        </Animated.View>
 
-        <WeekStrip days={weekDays} colors={colors} />
+        <LifeTimelineMonth
+          colors={colors}
+          days={monthDays}
+          month={visibleMonth}
+          monthStats={monthStats}
+          onNextMonth={() => moveMonth(1)}
+          onPreviousMonth={() => moveMonth(-1)}
+          onSelectDate={selectDate}
+          onToday={returnToToday}
+          styles={styles}
+        />
 
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionLabel}>{"TODAY'S TIMELINE"}</Text>
+          <Text style={styles.sectionLabel}>{timelineLabel}</Text>
           <TouchableOpacity style={styles.addButton} onPress={openCreate}>
             <Text style={styles.addButtonText}>+ ADD</Text>
           </TouchableOpacity>
@@ -397,7 +574,7 @@ export default function CalendarScreen() {
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         {todayEvents.length === 0 && !isLoading ? (
-          <OpenDayState onCreate={openCreate} colors={colors} styles={styles} />
+          <OpenDayState mode={selectedMode} onCreate={openCreate} colors={colors} styles={styles} />
         ) : null}
 
         {timelineItems.map((item, index) => (
@@ -411,25 +588,50 @@ export default function CalendarScreen() {
           />
         ))}
 
+        <View style={styles.memoryCard}>
+          <View style={styles.suggestionTop}>
+            <Text style={styles.suggestionLabel}>DAILY MEMORY</Text>
+            <SymbolView name="clock.arrow.circlepath" size={15} tintColor={colors.accentCyan} resizeMode="scaleAspectFit" />
+          </View>
+          <Text style={styles.memoryTitle}>
+            {selectedMode === "past"
+              ? "Historical snapshot"
+              : selectedMode === "future"
+                ? "Planning snapshot"
+                : "Live snapshot"}
+          </Text>
+          <Text style={styles.memoryText}>
+            {selectedMode === "past"
+              ? "HELIOS is showing stored calendar and task records for this date."
+              : selectedMode === "future"
+                ? "HELIOS is using scheduled records to prepare this day."
+                : "HELIOS is tracking today as it unfolds."}
+          </Text>
+          <View style={styles.memoryFacts}>
+            {memoryFacts.map((fact) => (
+              <View key={fact} style={styles.memoryFact}>
+                <View style={styles.memoryDot} />
+                <Text style={styles.memoryFactText}>{fact}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
         <View style={styles.suggestionCard}>
           <View style={styles.suggestionTop}>
             <Text style={styles.suggestionLabel}>HELIOS SUGGESTION</Text>
             <SymbolView name="sparkles" size={15} tintColor={colors.accent} resizeMode="scaleAspectFit" />
           </View>
-          <Text style={styles.suggestionTitle}>
-            {longestFreeBlock.minutes >= 90
-              ? `You have ${formatLongDuration(longestFreeBlock.minutes)} available today.`
-              : "Your schedule has room for a focused reset."}
-          </Text>
-          <Text style={styles.suggestionText}>
-            Recommended: {todayTasks[0]?.title ?? "Continue HELIOS Development"}
-          </Text>
-          <View style={styles.suggestionActions}>
-            <TouchableOpacity style={styles.scheduleButton} onPress={openCreate}>
-              <Text style={styles.scheduleButtonText}>Schedule It</Text>
-            </TouchableOpacity>
-            <Text style={styles.dismissText}>Dismiss</Text>
-          </View>
+          <Text style={styles.suggestionTitle}>{suggestionTitle}</Text>
+          <Text style={styles.suggestionText}>{suggestionText}</Text>
+          {selectedMode !== "past" ? (
+            <View style={styles.suggestionActions}>
+              <TouchableOpacity style={styles.scheduleButton} onPress={openCreate}>
+                <Text style={styles.scheduleButtonText}>Schedule It</Text>
+              </TouchableOpacity>
+              <Text style={styles.dismissText}>Dismiss</Text>
+            </View>
+          ) : null}
         </View>
 
         <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>{"TODAY'S INSIGHTS"}</Text>
@@ -545,67 +747,232 @@ function AllocationBar({
   );
 }
 
-function WeekStrip({ days, colors }: { days: WeekDay[]; colors: ThemeColors }) {
+function LifeTimelineMonth({
+  colors,
+  days,
+  month,
+  monthStats,
+  onNextMonth,
+  onPreviousMonth,
+  onSelectDate,
+  onToday,
+  styles,
+}: {
+  colors: ThemeColors;
+  days: WeekDay[];
+  month: Date;
+  monthStats: MonthStats;
+  onNextMonth: () => void;
+  onPreviousMonth: () => void;
+  onSelectDate: (date: Date) => void;
+  onToday: () => void;
+  styles: ReturnType<typeof createStyles>;
+}) {
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingRight: spacing.lg }}>
-      {days.map((day) => (
-        <View
-          key={day.date.toISOString()}
-          style={{
-            width: 62,
-            borderRadius: radius.lg,
-            borderWidth: 1,
-            borderColor: day.isToday ? colors.accent : colors.border,
-            backgroundColor: day.isToday ? "rgba(168,85,247,0.14)" : colors.surface,
-            padding: spacing.sm,
-            alignItems: "center",
-            gap: 7,
-          }}
-        >
-          <Text style={{ ...typography.label, color: day.isToday ? colors.accent : colors.textMuted }}>
-            {day.date.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase()}
-          </Text>
-          <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: "800" }}>{day.date.getDate()}</Text>
-          <View style={{ flexDirection: "row", gap: 3 }}>
-            {Array.from({ length: day.workload }).map((_, index) => (
-              <View
-                key={index}
-                style={{
-                  width: 4,
-                  height: 4,
-                  borderRadius: 2,
-                  backgroundColor: day.count > 0 ? colors.accentCyan : colors.border,
-                }}
-              />
-            ))}
-          </View>
+    <View style={styles.lifeCard}>
+      <Text style={styles.lifeLabel}>LIFE TIMELINE</Text>
+      <View style={styles.monthHeader}>
+        <Text style={styles.monthTitle}>
+          {month.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+        </Text>
+        <View style={styles.monthControls}>
+          <TouchableOpacity style={styles.monthButton} onPress={onPreviousMonth} accessibilityLabel="Previous month">
+            <SymbolView name="chevron.left" size={18} tintColor={colors.textSecondary} resizeMode="scaleAspectFit" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.monthTodayButton} onPress={onToday}>
+            <Text style={styles.monthTodayText}>Today</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.monthButton} onPress={onNextMonth} accessibilityLabel="Next month">
+            <SymbolView name="chevron.right" size={18} tintColor={colors.textSecondary} resizeMode="scaleAspectFit" />
+          </TouchableOpacity>
         </View>
-      ))}
-    </ScrollView>
+        <View style={styles.modeToggle}>
+          <View style={styles.modeSelected}>
+            <Text style={styles.modeSelectedText}>Month</Text>
+          </View>
+          <Text style={styles.modeText}>Week</Text>
+        </View>
+      </View>
+
+      <View style={styles.monthGrid}>
+        {["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].map((label) => (
+          <View key={label} style={styles.weekdayCell}>
+            <Text style={styles.weekdayText}>{label}</Text>
+          </View>
+        ))}
+        {days.map((day) => (
+          <TouchableOpacity
+            key={day.date.toISOString()}
+            activeOpacity={0.84}
+            onPress={() => onSelectDate(day.date)}
+            style={[
+              styles.dayCell,
+              day.isSelected && styles.dayCellSelected,
+              day.isToday && !day.isSelected && styles.dayCellToday,
+            ]}
+          >
+            <Text
+              style={[
+                styles.dayNumber,
+                !day.inMonth && styles.dayNumberMuted,
+                day.isSelected && styles.dayNumberSelected,
+              ]}
+            >
+              {day.date.getDate()}
+            </Text>
+            <View style={styles.activityDots}>
+              {day.activity.map((kind) => (
+                <View
+                  key={kind}
+                  style={[styles.activityDot, { backgroundColor: getActivityColor(kind, colors) }]}
+                />
+              ))}
+            </View>
+            {day.isSelected ? <View style={styles.selectedUnderline} /> : null}
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <MonthSummary colors={colors} monthStats={monthStats} styles={styles} />
+      <ActivityLegend colors={colors} styles={styles} />
+      <Text style={styles.timelineHint}>Tap any day to view full details and timeline.</Text>
+    </View>
+  );
+}
+
+function MonthSummary({
+  colors,
+  monthStats,
+  styles,
+}: {
+  colors: ThemeColors;
+  monthStats: MonthStats;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  const maxDays = 31;
+  const progress = Math.min(1, monthStats.activeDays / maxDays);
+  return (
+    <View style={styles.monthSummaryCard}>
+      <View style={styles.activityRing}>
+        <View style={[styles.activityRingProgress, { transform: [{ rotate: `${Math.round(progress * 250)}deg` }] }]} />
+        <View style={styles.activityRingInner}>
+          <Text style={styles.activityRingNumber}>{monthStats.activeDays}</Text>
+          <Text style={styles.activityRingLabel}>Active Days</Text>
+        </View>
+      </View>
+      <View style={styles.monthSummaryContent}>
+        <Text style={styles.monthSummaryTitle}>
+          {monthStats.activeDays >= 15 ? "You've had a productive month." : "Your month is still taking shape."}
+        </Text>
+        <Text style={styles.monthSummaryText}>Keep building momentum.</Text>
+        <View style={styles.monthStatsRow}>
+          <MonthStat color={colors.accentCyan} label="Focus Days" value={monthStats.focusDays} styles={styles} />
+          <MonthStat color={colors.accent} label="Event Days" value={monthStats.eventDays} styles={styles} />
+          <MonthStat color={colors.info} label="Task Days" value={monthStats.taskDays} styles={styles} />
+          <MonthStat color={colors.success} label="Personal Days" value={monthStats.personalDays} styles={styles} />
+          <MonthStat color={colors.warning} label="Low Activity" value={monthStats.lowDays} styles={styles} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function MonthStat({
+  color,
+  label,
+  styles,
+  value,
+}: {
+  color: string;
+  label: string;
+  styles: ReturnType<typeof createStyles>;
+  value: number;
+}) {
+  return (
+    <View style={styles.monthStat}>
+      <Text style={styles.monthStatValue}>{value}</Text>
+      <View style={styles.monthStatLabelRow}>
+        <View style={[styles.activityDot, { backgroundColor: color }]} />
+        <Text style={styles.monthStatLabel}>{label}</Text>
+      </View>
+    </View>
+  );
+}
+
+function ActivityLegend({ colors, styles }: { colors: ThemeColors; styles: ReturnType<typeof createStyles> }) {
+  return (
+    <View style={styles.legendCard}>
+      <LegendItem color={colors.accent} icon="calendar" title="Events" subtitle="Days with meetings or scheduled events" styles={styles} />
+      <LegendItem color={colors.success} icon="person" title="Personal" subtitle="Days with personal activities or habits" styles={styles} />
+      <LegendItem color={colors.accentCyan} icon="target" title="Focus" subtitle="Days with focus blocks or deep work sessions" styles={styles} />
+      <LegendItem color={colors.warning} icon="waveform.path.ecg" title="Low Activity" subtitle="Days with minimal recorded activity" styles={styles} />
+      <LegendItem color={colors.info} icon="checkmark.circle" title="Tasks" subtitle="Days with completed or scheduled tasks" styles={styles} />
+    </View>
+  );
+}
+
+function LegendItem({
+  color,
+  icon,
+  styles,
+  subtitle,
+  title,
+}: {
+  color: string;
+  icon: string;
+  styles: ReturnType<typeof createStyles>;
+  subtitle: string;
+  title: string;
+}) {
+  return (
+    <View style={styles.legendItem}>
+      <View style={[styles.legendIcon, { backgroundColor: `${color}22` }]}>
+        <SymbolView name={icon as never} size={18} tintColor={color} resizeMode="scaleAspectFit" />
+      </View>
+      <View style={styles.legendCopy}>
+        <Text style={[styles.legendTitle, { color }]}>{title}</Text>
+        <Text style={styles.legendSubtitle}>{subtitle}</Text>
+      </View>
+    </View>
   );
 }
 
 function OpenDayState({
   colors,
+  mode,
   onCreate,
   styles,
 }: {
   colors: ThemeColors;
+  mode: DayMode;
   onCreate: () => void;
   styles: ReturnType<typeof createStyles>;
 }) {
+  const title = mode === "past"
+    ? "No recorded activity for this day yet."
+    : mode === "future"
+      ? "This day is open for planning."
+      : "Your schedule is completely open today.";
+  const body = mode === "past"
+    ? "When HELIOS has stored activity for a day, it will appear here as a permanent memory."
+    : "This is a great opportunity to focus on meaningful work.";
+
   return (
     <View style={styles.emptyState}>
-      <Text style={styles.emptyTitle}>Your schedule is completely open today.</Text>
-      <Text style={styles.emptyText}>This is a great opportunity to focus on meaningful work.</Text>
-      <View style={styles.emptySuggestions}>
-        {["Continue D278", "Resume HELIOS Development", "Exercise"].map((item) => (
-          <Text key={item} style={styles.emptySuggestion}>• {item}</Text>
-        ))}
-      </View>
-      <TouchableOpacity style={styles.emptyAddButton} onPress={onCreate}>
-        <Text style={styles.emptyAddText}>Build My Day</Text>
-      </TouchableOpacity>
+      <Text style={styles.emptyTitle}>{title}</Text>
+      <Text style={styles.emptyText}>{body}</Text>
+      {mode !== "past" ? (
+        <>
+          <View style={styles.emptySuggestions}>
+            {["Continue D278", "Resume HELIOS Development", "Exercise"].map((item) => (
+              <Text key={item} style={styles.emptySuggestion}>• {item}</Text>
+            ))}
+          </View>
+          <TouchableOpacity style={styles.emptyAddButton} onPress={onCreate}>
+            <Text style={styles.emptyAddText}>{mode === "future" ? "Plan This Day" : "Build My Day"}</Text>
+          </TouchableOpacity>
+        </>
+      ) : null}
       <SymbolView name="sparkles" size={18} tintColor={colors.accent} resizeMode="scaleAspectFit" />
     </View>
   );
@@ -774,10 +1141,305 @@ function createStyles(colors: ThemeColors) {
       flexWrap: "wrap",
       gap: spacing.sm,
     },
+    lifeCard: {
+      backgroundColor: colors.card,
+      borderRadius: radius.xl,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: spacing.lg,
+      gap: spacing.lg,
+    },
+    lifeLabel: {
+      ...typography.label,
+      color: colors.accent,
+      letterSpacing: 5,
+    },
+    monthHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: spacing.sm,
+      flexWrap: "wrap",
+    },
+    monthTitle: {
+      color: colors.textPrimary,
+      fontSize: 24,
+      fontWeight: "900",
+      minWidth: 150,
+    },
+    monthControls: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.sm,
+    },
+    monthButton: {
+      width: 44,
+      height: 44,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(10,20,39,0.72)",
+    },
+    monthTodayButton: {
+      height: 44,
+      paddingHorizontal: spacing.lg,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(10,20,39,0.72)",
+    },
+    monthTodayText: {
+      color: colors.textSecondary,
+      fontSize: 15,
+      fontWeight: "800",
+    },
+    modeToggle: {
+      height: 44,
+      flexDirection: "row",
+      alignItems: "center",
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: "rgba(10,20,39,0.72)",
+      overflow: "hidden",
+    },
+    modeSelected: {
+      height: "100%",
+      paddingHorizontal: spacing.lg,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.accent,
+      backgroundColor: "rgba(168,85,247,0.16)",
+    },
+    modeSelectedText: {
+      color: colors.accent,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    modeText: {
+      color: colors.textMuted,
+      fontSize: 15,
+      fontWeight: "800",
+      paddingHorizontal: spacing.lg,
+    },
+    monthGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: radius.lg,
+      overflow: "hidden",
+      backgroundColor: "rgba(3,11,28,0.58)",
+    },
+    weekdayCell: {
+      width: `${100 / 7}%`,
+      minHeight: 48,
+      alignItems: "center",
+      justifyContent: "center",
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+      backgroundColor: "rgba(8,18,36,0.64)",
+    },
+    weekdayText: {
+      ...typography.label,
+      color: colors.textMuted,
+      letterSpacing: 2.6,
+    },
+    dayCell: {
+      width: `${100 / 7}%`,
+      aspectRatio: 0.9,
+      borderRightWidth: StyleSheet.hairlineWidth,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.borderDark,
+      paddingTop: spacing.lg,
+      alignItems: "center",
+      gap: spacing.sm,
+      backgroundColor: "rgba(4,13,30,0.42)",
+    },
+    dayCellSelected: {
+      borderWidth: 2,
+      borderColor: colors.accent,
+      backgroundColor: "rgba(168,85,247,0.16)",
+      shadowColor: colors.accent,
+      shadowOpacity: 0.55,
+      shadowRadius: 14,
+      shadowOffset: { width: 0, height: 0 },
+    },
+    dayCellToday: {
+      borderColor: "rgba(168,85,247,0.55)",
+      backgroundColor: "rgba(168,85,247,0.08)",
+    },
+    dayNumber: {
+      color: colors.textPrimary,
+      fontSize: 22,
+      fontWeight: "900",
+    },
+    dayNumberMuted: {
+      color: "rgba(132,144,171,0.48)",
+    },
+    dayNumberSelected: {
+      color: colors.textPrimary,
+    },
+    activityDots: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 7,
+      minHeight: 8,
+    },
+    activityDot: {
+      width: 7,
+      height: 7,
+      borderRadius: 4,
+    },
+    selectedUnderline: {
+      width: 20,
+      height: 3,
+      borderRadius: 2,
+      backgroundColor: colors.accent,
+      marginTop: spacing.xs,
+    },
+    monthSummaryCard: {
+      backgroundColor: "rgba(10,20,39,0.72)",
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: spacing.lg,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.lg,
+    },
+    activityRing: {
+      width: 104,
+      height: 104,
+      borderRadius: 52,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 6,
+      borderColor: "rgba(168,85,247,0.35)",
+    },
+    activityRingProgress: {
+      position: "absolute",
+      width: 104,
+      height: 104,
+      borderRadius: 52,
+      borderWidth: 6,
+      borderTopColor: colors.accentCyan,
+      borderRightColor: colors.success,
+      borderBottomColor: colors.accent,
+      borderLeftColor: colors.warning,
+    },
+    activityRingInner: {
+      width: 78,
+      height: 78,
+      borderRadius: 39,
+      backgroundColor: colors.card,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    activityRingNumber: {
+      color: colors.textPrimary,
+      fontSize: 28,
+      fontWeight: "900",
+    },
+    activityRingLabel: {
+      color: colors.textMuted,
+      fontSize: 11,
+      fontWeight: "700",
+    },
+    monthSummaryContent: {
+      flex: 1,
+      gap: spacing.sm,
+    },
+    monthSummaryTitle: {
+      color: colors.textPrimary,
+      fontSize: 18,
+      fontWeight: "900",
+    },
+    monthSummaryText: {
+      ...typography.body,
+      color: colors.textMuted,
+    },
+    monthStatsRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: spacing.md,
+      marginTop: spacing.xs,
+    },
+    monthStat: {
+      minWidth: 88,
+      gap: spacing.xs,
+    },
+    monthStatValue: {
+      color: colors.textPrimary,
+      fontSize: 18,
+      fontWeight: "900",
+    },
+    monthStatLabelRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.xs,
+    },
+    monthStatLabel: {
+      ...typography.caption,
+      color: colors.textMuted,
+    },
+    legendCard: {
+      backgroundColor: "rgba(10,20,39,0.72)",
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: spacing.lg,
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: spacing.lg,
+    },
+    legendItem: {
+      width: "46%",
+      flexDirection: "row",
+      gap: spacing.md,
+      alignItems: "center",
+    },
+    legendIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    legendCopy: {
+      flex: 1,
+      gap: 2,
+    },
+    legendTitle: {
+      fontSize: 16,
+      fontWeight: "900",
+    },
+    legendSubtitle: {
+      ...typography.caption,
+      color: colors.textMuted,
+    },
+    timelineHint: {
+      ...typography.body,
+      color: colors.textMuted,
+      textAlign: "center",
+    },
     sectionHeaderRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
+    },
+    timelineNavHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: -spacing.sm,
     },
     sectionLabel: {
       ...typography.label,
@@ -796,6 +1458,18 @@ function createStyles(colors: ThemeColors) {
     addButtonText: {
       ...typography.label,
       color: colors.textPrimary,
+    },
+    todayButton: {
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.accent,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs,
+      backgroundColor: "rgba(168,85,247,0.12)",
+    },
+    todayButtonText: {
+      ...typography.label,
+      color: colors.accent,
     },
     errorText: {
       ...typography.caption,
@@ -925,6 +1599,46 @@ function createStyles(colors: ThemeColors) {
       borderColor: "rgba(168,85,247,0.28)",
       padding: spacing.lg,
       gap: spacing.sm,
+    },
+    memoryCard: {
+      backgroundColor: "rgba(34,211,238,0.08)",
+      borderRadius: radius.xl,
+      borderWidth: 1,
+      borderColor: "rgba(34,211,238,0.22)",
+      padding: spacing.lg,
+      gap: spacing.sm,
+    },
+    memoryTitle: {
+      ...typography.title,
+      color: colors.textPrimary,
+      fontSize: 18,
+    },
+    memoryText: {
+      ...typography.body,
+      color: colors.textSecondary,
+    },
+    memoryFacts: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: spacing.sm,
+      marginTop: spacing.xs,
+    },
+    memoryFact: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.xs,
+      width: "47%",
+    },
+    memoryDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: colors.accentCyan,
+    },
+    memoryFactText: {
+      ...typography.caption,
+      color: colors.textSecondary,
+      flex: 1,
     },
     suggestionTop: {
       flexDirection: "row",
