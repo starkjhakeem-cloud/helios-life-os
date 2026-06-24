@@ -312,7 +312,6 @@ export default function HomeScreen() {
           timeLocationStr={timeLocationStr}
           systemStatus={systemStatus}
           onPressStatus={onPressStatus}
-          onPressCTA={() => router.push("/(tabs)/assistant")}
         />
 
         <Section title={"TODAY'S METRICS"} action="View all  ›" onAction={() => router.push("/(tabs)/analytics")} />
@@ -407,7 +406,6 @@ function Hero({
   timeLocationStr,
   systemStatus,
   onPressStatus,
-  onPressCTA,
 }: {
   greeting: string;
   userName: string;
@@ -415,20 +413,9 @@ function Hero({
   timeLocationStr: string;
   systemStatus: SystemStatus;
   onPressStatus: (() => void) | null;
-  onPressCTA: () => void;
 }) {
   const { colors } = useTheme();
   const s = useMemo(() => createStyles(colors), [colors]);
-  const ctaScale = useRef(new Animated.Value(1)).current;
-
-  const animateCta = useCallback((toValue: number) => {
-    Animated.spring(ctaScale, {
-      toValue,
-      useNativeDriver: true,
-      speed: 22,
-      bounciness: 4,
-    }).start();
-  }, [ctaScale]);
 
   return (
     <View style={s.heroCard}>
@@ -452,31 +439,11 @@ function Hero({
         />
       </View>
 
-      {/* Bottom — assistant message + primary CTA */}
+      {/* Bottom — assistant message */}
       <View style={s.heroBottom}>
         <Text style={s.assistantMessage}>
           {"Welcome back.\nEverything looks good today."}
         </Text>
-
-        <Animated.View style={{ transform: [{ scale: ctaScale }] }}>
-          <TouchableOpacity
-            style={s.ctaButton}
-            onPress={onPressCTA}
-            onPressIn={() => animateCta(0.97)}
-            onPressOut={() => animateCta(1)}
-            activeOpacity={1}
-            accessibilityLabel="Continue Building HELIOS"
-            accessibilityRole="button"
-          >
-            <Text style={s.ctaText}>Continue Building HELIOS</Text>
-            <SymbolView
-              name="arrow.right"
-              size={14}
-              tintColor="rgba(255,255,255,0.75)"
-              resizeMode="scaleAspectFit"
-            />
-          </TouchableOpacity>
-        </Animated.View>
       </View>
     </View>
   );
@@ -716,7 +683,6 @@ function createStyles(colors: ThemeColors) {
     },
     heroBottom: {
       marginTop: 28,
-      gap: 14,
     },
     assistantMessage: {
       color: colors.textMuted,
@@ -724,27 +690,6 @@ function createStyles(colors: ThemeColors) {
       lineHeight: 21,
       fontWeight: "500",
       letterSpacing: 0.1,
-    },
-    ctaButton: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      paddingHorizontal: 20,
-      paddingVertical: 15,
-      borderRadius: 26,
-      backgroundColor: "rgba(110, 76, 255, 0.12)",
-      borderWidth: 1,
-      borderColor: "rgba(110, 76, 255, 0.28)",
-      shadowColor: "#6E4CFF",
-      shadowOpacity: 0.35,
-      shadowRadius: 16,
-      shadowOffset: { width: 0, height: 6 },
-    },
-    ctaText: {
-      color: colors.textPrimary,
-      fontSize: 15,
-      fontWeight: "700",
-      letterSpacing: -0.1,
     },
 
     section: {
