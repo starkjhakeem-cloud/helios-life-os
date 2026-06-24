@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
+  Easing,
+  PanResponder,
   ScrollView,
   StyleSheet,
   Text,
@@ -29,22 +31,25 @@ import {
 import { useTheme } from "../../theme/ThemeContext";
 import type { ThemeColors } from "../../theme/theme";
 import {
-  formatActiveGoalsSubtitle,
-  formatSafeDashboardMetricValue,
-  formatSafeMetricPercent,
   formatHeroDate,
   formatHeroTime,
   formatHeroTimeLocation,
   getTimeBasedGreeting,
-  isActiveGoalStatus,
 } from "../../utils/homeFormatting";
 import { useCurrentDateTime } from "../../hooks/useCurrentDateTime";
 import {
   buildIntelligenceContext,
+  categorizeTask,
   generateDailyBrief,
   generateHeroMessage,
+  prioritizeTasks,
+  resolveContext,
 } from "../../lib/helios-intelligence";
-import type { DailyBrief } from "../../lib/helios-intelligence";
+import type {
+  DailyBrief,
+  HeliosIntelligenceContext,
+  HeliosTask,
+} from "../../lib/helios-intelligence";
 
 const { width } = Dimensions.get("window");
 const PAGE = width - 52;
@@ -172,7 +177,6 @@ export default function HomeScreen() {
   const userName = preferredName ?? profileDisplayName ?? authUserName;
 
   const goals = useGoalsStore((s) => s.goals);
-  const goalsLoading = useGoalsStore((s) => s.isLoading);
   const goalsError = useGoalsStore((s) => s.error);
   const fetchGoals = useGoalsStore((s) => s.fetchGoals);
   const tasks = useTasksStore((s) => s.tasks);
@@ -203,49 +207,7 @@ export default function HomeScreen() {
     }, [accessToken, fetchGoals, fetchTasks]),
   );
 
-  const activeGoals = useMemo(
-    () => safeGoals.filter((g) => isActiveGoalStatus(g.status)).length,
-    [safeGoals],
-  );
-  const activeGoalsValue = formatSafeDashboardMetricValue("Active Goals", activeGoals);
-  const activeGoalsSubtitle = goalsError
-    ? "Unable to load"
-    : goalsLoading && goals.length === 0
-      ? "Loading goals"
-      : formatActiveGoalsSubtitle(activeGoals);
-  const goalStatuses = useMemo(
-    () => Array.from(new Set(safeGoals.map((g) => g.status ?? "unknown"))),
-    [safeGoals],
-  );
-  const doneTodayTasks = safeTasks.filter((t) => {
-    if (t.status !== "done") return false;
-    if (!t.updated_at) return false;
-    const updated = new Date(t.updated_at);
-    return (
-      updated.getDate() === now.getDate() &&
-      updated.getMonth() === now.getMonth() &&
-      updated.getFullYear() === now.getFullYear()
-    );
-  }).length;
   const openTasks = safeTasks.filter((t) => t.status !== "done").length;
-  const totalTasks = safeTasks.length;
-  const completedTasks = safeTasks.filter((t) => t.status === "done").length;
-  const completionRateValue =
-    totalTasks === 0
-      ? "0%"
-      : formatSafeMetricPercent(Math.round((completedTasks / totalTasks) * 100));
-  const doneTodayTasksValue = formatSafeDashboardMetricValue("Tasks Done", doneTodayTasks);
-  const openTasksValue = formatSafeDashboardMetricValue("Open Tasks", openTasks);
-
-  useEffect(() => {
-    if (!__DEV__) return;
-    console.log("[Home metrics] Active Goals", {
-      totalGoalsLoaded: safeGoals.length,
-      activeGoalsCounted: activeGoals,
-      statusesFound: goalStatuses,
-      valuePassedToMetricCard: activeGoalsValue,
-    });
-  }, [activeGoals, activeGoalsValue, goalStatuses, safeGoals.length]);
 
   const overdueTasks = safeTasks.filter((t) => {
     if (t.status === "done" || !t.due_date) return false;
@@ -265,7 +227,7 @@ export default function HomeScreen() {
     overdueTasks > 0 || highPriorityOpen > 0
       ? "/(tabs)/tasks"
       : pendingApprovals > 0
-        ? "/(tabs)/autonomy"
+        ? "/(tabs)/assistant"
         : "/(tabs)/notifications";
 
   const systemStatus = getAssistantStatus({
@@ -319,8 +281,9 @@ export default function HomeScreen() {
     [safeGoals, safeTasks, notifications, displayName, location, timeFormat, now.getMinutes()],
   );
 
-  const dailyBrief = useMemo(() => generateDailyBrief(intelligenceCtx), [intelligenceCtx]);
-  const heroMsg    = useMemo(() => generateHeroMessage(intelligenceCtx), [intelligenceCtx]);
+  const dailyBrief    = useMemo(() => generateDailyBrief(intelligenceCtx), [intelligenceCtx]);
+  const heroMsg       = useMemo(() => generateHeroMessage(intelligenceCtx), [intelligenceCtx]);
+  const missionItems  = useMemo(() => buildMissionItems(intelligenceCtx), [intelligenceCtx]);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -351,23 +314,13 @@ export default function HomeScreen() {
           assistantMessage={`${heroMsg.primary}\n${heroMsg.secondary}`}
         />
 
-        <Section title={"TODAY'S METRICS"} action="View all  ›" onAction={() => router.push("/(tabs)/analytics")} />
-
-        <View style={styles.grid}>
-          <Metric
-            icon="target"
-            value={activeGoalsValue}
-            label="Active Goals"
-            sub={activeGoalsSubtitle}
-            onPress={() => router.push({
-              pathname: "/(tabs)/goals",
-              params: { focus: activeGoals > 0 ? "active" : "empty" },
-            })}
-          />
-          <Metric icon="checkmark.circle.fill" value={doneTodayTasksValue} label="Tasks Done" sub={tasksError ? "Unable to load" : "Completed today"} onPress={() => router.push("/(tabs)/tasks")} />
-          <Metric icon="chart.bar.fill" value={completionRateValue} label="Completion Rate" sub={tasksError ? "Unable to load" : "Overall progress"} onPress={() => router.push("/(tabs)/analytics")} />
-          <Metric icon="circle" value={openTasksValue} label="Open Tasks" sub={tasksError ? "Unable to load" : openTasks === 0 ? "All clear" : "Needs attention"} onPress={() => router.push("/(tabs)/tasks")} />
-        </View>
+        <Section title="TODAY'S FLOW" action="View Queue  ›" onAction={() => router.push("/(tabs)/tasks")} />
+        <TodayFlowStack
+          items={missionItems}
+          now={now}
+          onNavigate={(route) => router.push(route as Parameters<typeof router.push>[0])}
+          colors={colors}
+        />
 
         <Section title="DAILY BRIEF" action="View full briefing  ›" onAction={() => router.push("/(tabs)/assistant")} />
         <DailyCommand brief={dailyBrief} onPress={() => router.push("/(tabs)/assistant")} />
@@ -500,49 +453,277 @@ function Section({ title, action, onAction }: { title: string; action: string; o
   );
 }
 
-function Metric({
-  icon,
-  value,
-  label,
-  sub,
-  onPress,
-}: {
+// ── Today's Flow (Smart Stack) ────────────────────────────────────────────────
+
+interface MissionItem {
+  id: string;
+  category: string;
   icon: SFSymbol;
-  value: string;
-  label: string;
-  sub: string;
-  onPress?: () => void;
+  accent: string;
+  title: string;
+  reason: string;
+  actionLabel: string;
+  route: string;
+}
+
+const CATEGORY_META: Record<string, { label: string; icon: SFSymbol; accent: string }> = {
+  wgu:       { label: "STUDY",     icon: "book.fill",          accent: "#7c3aed" },
+  helios:    { label: "BUILD",     icon: "hammer.fill",         accent: "#3b82f6" },
+  portfolio: { label: "PORTFOLIO", icon: "briefcase.fill",      accent: "#8b5cf6" },
+  creative:  { label: "CREATE",    icon: "pencil.and.outline",  accent: "#ec4899" },
+  health:    { label: "HEALTH",    icon: "figure.run",          accent: "#14b8a6" },
+  general:   { label: "FOCUS",     icon: "circle.dotted",       accent: "#6366f1" },
+};
+
+function buildMissionTitle(task: HeliosTask, category: string): string {
+  const inProgress = task.status === "in_progress";
+  if (category === "wgu")    return `${inProgress ? "Continue" : "Start"} D278 Study Session`;
+  if (category === "helios") return `${inProgress ? "Resume" : "Start"} HELIOS Development`;
+  return inProgress ? `Continue ${task.title}` : task.title;
+}
+
+function buildMissionReason(task: HeliosTask, category: string, ctx: HeliosIntelligenceContext): string {
+  const today = ctx.currentTime.toISOString().split("T")[0];
+  if (task.dueDate && task.dueDate.slice(0, 10) < today)   return "This is past its due date — resolve it to stay on track.";
+  if (task.dueDate && task.dueDate.slice(0, 10) === today)  return "This is due today.";
+  if (task.status === "in_progress") {
+    if (category === "wgu")      return "You're closest to completing this milestone.";
+    if (category === "helios")   return "Continue refining the HELIOS experience.";
+    if (category === "creative") return "Pick up where you left off.";
+    return "You already started this — momentum is everything.";
+  }
+  if (category === "wgu")       return "Consistent daily progress is what passes the OA.";
+  if (category === "helios")    return "Next step in building your AI operating system.";
+  if (category === "portfolio") return "Building your portfolio strengthens your career trajectory.";
+  if (category === "creative")  return "Creative consistency builds the portfolio.";
+  if (category === "health")    return "Taking care of your health enables everything else.";
+  if (task.priority === "critical" || task.priority === "high") return "This is your highest-priority open task.";
+  return "Completing this moves you closer to your goal.";
+}
+
+function buildActionLabel(task: HeliosTask, category: string): string {
+  const inProgress = task.status === "in_progress";
+  if (category === "wgu")    return inProgress ? "Continue Study" : "Start Study";
+  if (category === "helios") return inProgress ? "Resume" : "Open";
+  return inProgress ? "Continue" : "Open";
+}
+
+function buildMissionItems(ctx: HeliosIntelligenceContext): MissionItem[] {
+  const resolved = resolveContext(ctx);
+  const ranked   = prioritizeTasks(resolved.tasks, resolved.goals, resolved.calendarEvents);
+  const open     = ranked.filter((t) => t.status !== "done");
+  return open.slice(0, 5).map((task) => {
+    const cat  = categorizeTask(task);
+    const meta = CATEGORY_META[cat] ?? CATEGORY_META.general;
+    return {
+      id:          task.id,
+      category:    meta.label,
+      icon:        meta.icon,
+      accent:      meta.accent,
+      title:       buildMissionTitle(task, cat),
+      reason:      buildMissionReason(task, cat, resolved),
+      actionLabel: buildActionLabel(task, cat),
+      route:       "/(tabs)/tasks",
+    };
+  });
+}
+
+function getCaughtUpItem(hour: number): MissionItem {
+  const isAM  = hour < 10;
+  const isMid = hour >= 10 && hour < 14;
+  const isPM  = hour >= 14 && hour < 18;
+  return {
+    id:          "caught-up",
+    category:    "AI SUGGESTION",
+    icon:        isAM ? "sunrise.fill" : isMid ? "figure.walk" : isPM ? "book.fill" : "moon.stars.fill",
+    accent:      "#22d3ee",
+    title:       isAM ? "Set your intention" : isMid ? "Take a short break" : isPM ? "Learn something new" : "Reflect on today",
+    reason:      isAM ? "What's the one thing you want to accomplish today?" : isMid ? "A brief walk could sharpen your focus." : isPM ? "Explore Apple's latest Human Interface Guidelines." : "Capture what you accomplished and what to tackle tomorrow.",
+    actionLabel: "Ask HELIOS",
+    route:       "/(tabs)/assistant",
+  };
+}
+
+const FLOW_CARD_HEIGHT = 200;
+const FLOW_CARD_WIDTH  = Dimensions.get("window").width;
+const AUTO_ROTATE_MS   = 17000;
+const SWIPE_THRESHOLD  = 40;
+const ANIM_DURATION    = 320;
+
+function FlowCard({
+  item,
+  onAction,
+  colors,
+}: {
+  item: MissionItem;
+  onAction: () => void;
+  colors: ThemeColors;
 }) {
-  const { colors } = useTheme();
   const s = useMemo(() => createStyles(colors), [colors]);
-  const displayValue = formatSafeDashboardMetricValue(label, value);
+  return (
+    <View style={s.flowCard}>
+      <View style={[s.flowAccentLine, { backgroundColor: item.accent }]} />
+
+      <View style={s.flowCardTop}>
+        <View style={s.flowCategoryRow}>
+          <SymbolView name={item.icon} size={12} tintColor={item.accent} resizeMode="scaleAspectFit" />
+          <Text style={[s.flowCategory, { color: item.accent }]}>{item.category}</Text>
+        </View>
+        <Text style={s.flowTitle} numberOfLines={2}>{item.title}</Text>
+        <Text style={s.flowReason} numberOfLines={2}>{item.reason}</Text>
+      </View>
+
+      <TouchableOpacity
+        style={[s.flowActionBtn, { backgroundColor: `${item.accent}1a`, borderColor: `${item.accent}40` }]}
+        onPress={onAction}
+        activeOpacity={0.75}
+      >
+        <Text style={[s.flowActionText, { color: item.accent }]}>{item.actionLabel}</Text>
+        <SymbolView name="arrow.right" size={11} tintColor={item.accent} resizeMode="scaleAspectFit" />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function TodayFlowStack({
+  items: rawItems,
+  now,
+  onNavigate,
+  colors,
+}: {
+  items: MissionItem[];
+  now: Date;
+  onNavigate: (route: string) => void;
+  colors: ThemeColors;
+}) {
+  const s     = useMemo(() => createStyles(colors), [colors]);
+  const items = rawItems.length > 0 ? rawItems : [getCaughtUpItem(now.getHours())];
+  const count = items.length;
+
+  const [displayIdx, setDisplayIdx] = useState(0);
+  const [pendingIdx, setPendingIdx] = useState<number | null>(null);
+
+  const activeIdxRef   = useRef(0);
+  const countRef       = useRef(count);
+  const isAnimatingRef = useRef(false);
+  const interactingRef = useRef(false);
+  const timerRef       = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const currentX = useRef(new Animated.Value(0)).current;
+  const nextX    = useRef(new Animated.Value(FLOW_CARD_WIDTH)).current;
+
+  useEffect(() => { countRef.current = count; }, [count]);
+
+  const navigate = useCallback((direction: "left" | "right") => {
+    if (isAnimatingRef.current || countRef.current <= 1) return;
+    isAnimatingRef.current = true;
+
+    const cur   = activeIdxRef.current;
+    const next  = direction === "left"
+      ? (cur + 1) % countRef.current
+      : (cur - 1 + countRef.current) % countRef.current;
+    const exitTo    = direction === "left" ? -FLOW_CARD_WIDTH :  FLOW_CARD_WIDTH;
+    const enterFrom = direction === "left" ?  FLOW_CARD_WIDTH : -FLOW_CARD_WIDTH;
+
+    nextX.setValue(enterFrom);
+    setPendingIdx(next);
+
+    Animated.parallel([
+      Animated.timing(currentX, { toValue: exitTo, duration: ANIM_DURATION, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      Animated.timing(nextX,    { toValue: 0,      duration: ANIM_DURATION, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+    ]).start(({ finished }) => {
+      if (finished) {
+        activeIdxRef.current = next;
+        setDisplayIdx(next);
+        setPendingIdx(null);
+        currentX.setValue(0);
+      }
+      isAnimatingRef.current = false;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+  }, []);
+
+  const startTimer = useCallback(() => {
+    clearTimer();
+    if (countRef.current <= 1) return;
+    timerRef.current = setInterval(() => {
+      if (!interactingRef.current) navigate("left");
+    }, AUTO_ROTATE_MS);
+  }, [clearTimer, navigate]);
+
+  useEffect(() => {
+    startTimer();
+    return clearTimer;
+  }, [count, startTimer, clearTimer]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, { dx }) => Math.abs(dx) > 8,
+      onPanResponderGrant: () => {
+        interactingRef.current = true;
+        if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+      },
+      onPanResponderRelease: (_, { dx }) => {
+        if (dx < -SWIPE_THRESHOLD)     navigate("left");
+        else if (dx > SWIPE_THRESHOLD) navigate("right");
+        setTimeout(() => { interactingRef.current = false; startTimer(); }, 3000);
+      },
+      onPanResponderTerminate: () => {
+        interactingRef.current = false;
+        startTimer();
+      },
+    }),
+  ).current;
+
+  const safeDisplay = Math.min(displayIdx, items.length - 1);
+  const safePending = pendingIdx !== null && pendingIdx < items.length ? pendingIdx : null;
 
   return (
-    <TouchableOpacity
-      style={s.metric}
-      onPress={onPress}
-      activeOpacity={0.75}
-      accessibilityLabel={`${label}: ${displayValue}. ${sub}. Tap to view.`}
-      accessibilityRole="button"
-      disabled={!onPress}
-    >
-      <View style={s.metricTop}>
-        <View style={s.metricIcon}>
-          <SymbolView
-            name={icon}
-            size={24}
-            tintColor={colors.tabBarActive}
-            resizeMode="scaleAspectFit"
-          />
+    <View style={s.flowWrap}>
+      {count > 1 && (
+        <View style={s.flowDots}>
+          {items.map((_, i) => (
+            <View key={i} style={[s.flowDot, i === safeDisplay && s.flowDotActive]} />
+          ))}
         </View>
+      )}
 
-        <View style={s.metricTextWrap}>
-          <Text style={s.metricValue} numberOfLines={1}>{displayValue}</Text>
-          <Text style={s.metricLabel}>{label}</Text>
-          <Text style={s.metricSub}>{sub}</Text>
-        </View>
+      {/* @ts-ignore collapsable prevents view flattening so overflow clip works with native driver */}
+      <View collapsable={false} style={s.flowContainer} {...panResponder.panHandlers}>
+        {/* @ts-ignore */}
+        <Animated.View
+          collapsable={false}
+          style={[StyleSheet.absoluteFill, { transform: [{ translateX: currentX }] }]}
+        >
+          {items[safeDisplay] && (
+            <FlowCard
+              item={items[safeDisplay]}
+              onAction={() => onNavigate(items[safeDisplay].route)}
+              colors={colors}
+            />
+          )}
+        </Animated.View>
+
+        {safePending !== null && (
+          // @ts-ignore
+          <Animated.View
+            collapsable={false}
+            style={[StyleSheet.absoluteFill, { transform: [{ translateX: nextX }] }]}
+          >
+            <FlowCard
+              item={items[safePending]}
+              onAction={() => onNavigate(items[safePending].route)}
+              colors={colors}
+            />
+          </Animated.View>
+        )}
       </View>
-    </TouchableOpacity>
+    </View>
   );
 }
 
@@ -580,9 +761,6 @@ function DailyCommand({ brief, onPress }: { brief: DailyBrief; onPress?: () => v
         <Text style={s.commandTime}>{time}</Text>
       </View>
 
-      {/* Greeting */}
-      <Text style={s.commandGreeting}>{brief.greeting}</Text>
-
       {/* Focus — the main briefing sentence */}
       <Text style={s.commandBody}>{brief.focus}</Text>
 
@@ -616,13 +794,6 @@ function Background() {
 const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 26,
-  },
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    rowGap: 14,
-    marginBottom: 38,
   },
 });
 
@@ -767,57 +938,97 @@ function createStyles(colors: ThemeColors) {
       fontWeight: "800",
     },
 
-    metric: {
-      width: "48%",
-      minHeight: 110,
-      borderRadius: 20,
-      padding: 13,
+    // ── Today's Flow ─────────────────────────────────────────────────────────
+    flowWrap: {
+      gap: 10,
+      marginBottom: 30,
+    },
+    flowDots: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingLeft: 2,
+    },
+    flowDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: `${colors.textMuted}40`,
+    },
+    flowDotActive: {
+      width: 20,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: colors.accent,
+    },
+    flowContainer: {
+      height: FLOW_CARD_HEIGHT,
+      borderRadius: 22,
+      overflow: "hidden",
+    },
+    flowCard: {
+      flex: 1,
       backgroundColor: colors.card,
+      borderRadius: 22,
       borderWidth: 1,
       borderColor: colors.tabBarBorder,
-      justifyContent: "center",
+      paddingHorizontal: 20,
+      paddingTop: 22,
+      paddingBottom: 18,
+      overflow: "hidden",
+      justifyContent: "space-between",
       shadowColor: "#000",
       shadowOpacity: 0.14,
-      shadowRadius: 12,
-      shadowOffset: { width: 0, height: 10 },
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 8 },
     },
-    metricIcon: {
-      width: 40,
-      height: 40,
-      borderRadius: 12,
-      backgroundColor: `${colors.tabBarActive}29`,
-      alignItems: "center",
-      justifyContent: "center",
+    flowAccentLine: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 2.5,
     },
-    metricTop: {
+    flowCardTop: {
+      gap: 5,
+    },
+    flowCategoryRow: {
       flexDirection: "row",
-      alignItems: "flex-start",
-      gap: 14,
+      alignItems: "center",
+      gap: 6,
     },
-    metricTextWrap: {
-      flex: 1,
-      marginTop: -1,
-    },
-    metricValue: {
-      color: colors.textPrimary,
-      fontSize: 31,
-      lineHeight: 34,
+    flowCategory: {
+      fontSize: 10,
       fontWeight: "900",
-      letterSpacing: 0,
+      letterSpacing: 2.2,
     },
-    metricLabel: {
-      color: colors.textSecondary,
-      fontSize: 12.5,
-      lineHeight: 16,
-      fontWeight: "700",
-      marginTop: 4,
+    flowTitle: {
+      fontSize: 20,
+      fontWeight: "900",
+      color: colors.textPrimary,
+      lineHeight: 25,
+      letterSpacing: -0.3,
     },
-    metricSub: {
-      color: colors.textMuted,
-      fontSize: 11,
-      lineHeight: 14,
+    flowReason: {
+      fontSize: 13,
       fontWeight: "500",
-      marginTop: 5,
+      color: colors.textMuted,
+      lineHeight: 18,
+    },
+    flowActionBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      alignSelf: "flex-start",
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 20,
+      borderWidth: 1,
+    },
+    flowActionText: {
+      fontSize: 13,
+      fontWeight: "700",
+      letterSpacing: 0.2,
     },
 
     command: {
@@ -868,13 +1079,6 @@ function createStyles(colors: ThemeColors) {
       fontSize: 12.5,
       fontWeight: "800",
       letterSpacing: 1.8,
-    },
-    commandGreeting: {
-      color: colors.textMuted,
-      fontSize: 13,
-      lineHeight: 18,
-      fontWeight: "600",
-      marginBottom: 7,
     },
     commandBody: {
       color: colors.textPrimary,
