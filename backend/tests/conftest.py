@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.models.conversation
+import app.models.daily_snapshot
 import app.models.goal
 import app.models.reminder
 import app.models.task
