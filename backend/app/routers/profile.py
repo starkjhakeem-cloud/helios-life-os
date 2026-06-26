@@ -240,14 +240,14 @@ def check_user_id(
             value=candidate,
             available=False,
             reason="too_short",
-            message="Username must be at least 3 characters.",
+            message="User ID must be at least 3 characters.",
         )
     if len(candidate) > 24:
         return UserIdCheckResponse(
             value=candidate,
             available=False,
             reason="too_long",
-            message="Username must be 24 characters or fewer.",
+            message="User ID must be 24 characters or fewer.",
         )
     if not _USER_ID_RE.match(candidate):
         return UserIdCheckResponse(
@@ -255,7 +255,7 @@ def check_user_id(
             available=False,
             reason="invalid_format",
             message=(
-                "Username may only contain lowercase letters (a–z), "
+                "User ID may only contain lowercase letters (a–z), "
                 "numbers (0–9), underscores (_), and periods (.)."
             ),
         )
@@ -264,7 +264,7 @@ def check_user_id(
             value=candidate,
             available=False,
             reason="reserved",
-            message="This username is reserved and cannot be used.",
+            message="This User ID is reserved and cannot be used.",
         )
 
     # ── Uniqueness check — requires database ──────────────────────────────────
@@ -302,14 +302,14 @@ def check_user_id(
             value=candidate,
             available=False,
             reason="taken",
-            message="This username is already taken.",
+            message="This User ID is already taken.",
         )
 
     return UserIdCheckResponse(
         value=candidate,
         available=True,
         reason="available",
-        message="Username is available.",
+        message="User ID is available.",
     )
 
 
@@ -359,7 +359,7 @@ def update_user_id(
         if taken_by:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="This username is already taken. Please choose a different one.",
+                detail="This User ID is already taken. Please choose a different one.",
             )
 
         # Apply the update.
@@ -395,7 +395,7 @@ def update_user_id(
         # Most likely cause: race condition — another request took the same handle.
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This username is already taken. Please choose a different one.",
+            detail="This User ID is already taken. Please choose a different one.",
         )
     except (OperationalError, ProgrammingError) as exc:
         db.rollback()

@@ -289,22 +289,22 @@ type UserIdCheckResult = {
 
 /** Map a check `reason` code to a human-readable sentence. */
 function formatCheckMessage(result: UserIdCheckResult): string {
-  if (result.available) return result.message || "Username is available.";
+  if (result.available) return result.message || "User ID is available.";
   switch (result.reason) {
     case "too_short":
-      return "Username too short — needs at least 3 characters.";
+      return "User ID too short — needs at least 3 characters.";
     case "too_long":
-      return "Username too long — 24 characters maximum.";
+      return "User ID too long — 24 characters maximum.";
     case "invalid_format":
       return "Invalid format. Use a–z, 0–9, underscores, or periods.";
     case "reserved":
-      return "This username is reserved and cannot be used.";
+      return "This User ID is reserved and cannot be used.";
     case "taken":
-      return "Username already taken. Please choose a different one.";
+      return "User ID already taken. Please choose a different one.";
     case "available":
-      return "Username is available.";
+      return "User ID is available.";
     default:
-      return result.message || "Unable to check this username right now.";
+      return result.message || "Unable to check this User ID right now.";
   }
 }
 
@@ -314,8 +314,8 @@ function formatApiError(err: unknown): string {
   const e = err as { status?: number; message?: string };
   const message = e.message && !/^HTTP\s+\d+$/.test(e.message) ? e.message : null;
   if (e.status === 503) return message ?? "Unable to reach HELIOS services. Check your connection.";
-  if (e.status === 409) return message ?? "Username already taken.";
-  if (e.status === 422) return message ?? "Invalid username format.";
+  if (e.status === 409) return message ?? "User ID already taken.";
+  if (e.status === 422) return message ?? "Invalid User ID format.";
   if (e.status === 401) return "Session expired. Please sign in again.";
   if (e.message?.toLowerCase().includes("network"))
     return "Network unavailable. Check your connection.";
@@ -355,8 +355,8 @@ function UserIdModal({ visible, onClose, currentId, canChange, accessToken }: Us
   }
 
   function validate(value: string): string | null {
-    if (value.length < 3) return "Username too short — needs at least 3 characters.";
-    if (value.length > 24) return "Username too long — 24 characters maximum.";
+    if (value.length < 3) return "User ID too short — needs at least 3 characters.";
+    if (value.length > 24) return "User ID too long — 24 characters maximum.";
     if (!USER_ID_RE.test(value)) return "Use only lowercase letters (a–z), numbers, underscores, or periods.";
     return null;
   }
@@ -371,7 +371,7 @@ function UserIdModal({ visible, onClose, currentId, canChange, accessToken }: Us
     }
     if (currentId && val === currentId) {
       setFormError(null);
-      setCheckResult({ available: true, reason: "available", message: "This is already your username." });
+      setCheckResult({ available: true, reason: "available", message: "This is already your User ID." });
       return;
     }
 
@@ -395,7 +395,7 @@ function UserIdModal({ visible, onClose, currentId, canChange, accessToken }: Us
       return;
     }
     if (currentId && val === currentId) {
-      setFormError("Enter a different username before saving.");
+      setFormError("Enter a different User ID before saving.");
       return;
     }
     if (checkResult && !checkResult.available) {
@@ -416,9 +416,9 @@ function UserIdModal({ visible, onClose, currentId, canChange, accessToken }: Us
   const isInitialSet = currentId === null;
   const statusLine = canChange
     ? isInitialSet
-      ? "Choose your @handle. You may change it once after setup."
-      : "You have 1 username change remaining. Use it carefully."
-    : "Your username has been changed once and is now locked.";
+      ? "Optional account handle for future sharing and support."
+      : "You have 1 User ID change remaining."
+    : "Your User ID is locked.";
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={resetAndClose}>
@@ -428,7 +428,7 @@ function UserIdModal({ visible, onClose, currentId, canChange, accessToken }: Us
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalWrapper}>
         <View style={styles.sheet}>
           <View style={styles.sheetHandle} />
-          <Text style={styles.sheetTitle}>{isInitialSet ? "SET USERNAME" : canChange ? "CHANGE USERNAME" : "USERNAME"}</Text>
+          <Text style={styles.sheetTitle}>{isInitialSet ? "SET USER ID" : canChange ? "CHANGE USER ID" : "USER ID"}</Text>
           <Text style={[styles.fieldHint, { marginTop: 0, marginBottom: spacing.md }]}>{statusLine}</Text>
 
           {!canChange ? (
@@ -437,12 +437,12 @@ function UserIdModal({ visible, onClose, currentId, canChange, accessToken }: Us
                 <Text style={{ color: colors.textMuted, fontSize: 14 }}>@{currentId}</Text>
               </View>
               <Text style={[styles.fieldHint, { color: colors.danger }]}>
-                Your username has already been changed once and cannot be changed again.
+                Your User ID has already been changed once and cannot be changed again.
               </Text>
             </>
           ) : (
             <>
-              <Text style={styles.fieldLabel}>USERNAME</Text>
+              <Text style={styles.fieldLabel}>USER ID</Text>
               <View style={styles.userIdRow}>
                 <Text style={styles.userIdAt}>@</Text>
                 <TextInput
@@ -493,7 +493,7 @@ function UserIdModal({ visible, onClose, currentId, canChange, accessToken }: Us
               {formError ? <Text style={[styles.formError, { marginTop: spacing.xs }]}>{formError}</Text> : null}
               {success ? (
                 <Text style={[styles.fieldHint, { color: colors.success, fontWeight: "600" }]}>
-                  ✓ Username saved successfully.
+                  ✓ User ID saved successfully.
                 </Text>
               ) : null}
             </>
@@ -1277,7 +1277,7 @@ export default function ProfileScreen() {
           <InfoRow label="Member Since" value={formatMemberSince(user?.created_at)} />
           <View style={styles.cardDivider} />
           <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: colors.textSecondary, flex: 0 }]}>Username</Text>
+            <Text style={[styles.infoLabel, { color: colors.textSecondary, flex: 0 }]}>User ID</Text>
             <TouchableOpacity
               onPress={() => setUserIdModalVisible(true)}
               style={styles.userIdValueRow}
@@ -1306,9 +1306,9 @@ export default function ProfileScreen() {
             <Text style={styles.lockNote}>
               {profile.can_change_user_id
                 ? profile.custom_user_id
-                  ? "Tap to change your username. You can change it once after setup."
-                  : "Tap to set your username. You can change it once after setup."
-                : "Username can only be changed once after setup."}
+                  ? "Used for account identity and future sharing. You can change it once after setup."
+                  : "Optional account handle for future sharing and support."
+                : "User ID can only be changed once after setup."}
             </Text>
           </TouchableOpacity>
           <View style={styles.cardDivider} />
