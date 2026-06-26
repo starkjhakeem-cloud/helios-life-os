@@ -6,9 +6,10 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.ai.context_builder import build_memory_context
+from app.ai.assistant_context_service import AssistantContextService
 from app.ai.context_service import ContextScope, build_context
 from app.ai.factory import get_ai_provider
+from app.ai.types import HeliosAIError
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.goal import Goal
@@ -30,6 +31,12 @@ from app.schemas.ai import (
 router = APIRouter()
 
 
+def _ai_error_detail(exc: RuntimeError) -> str | dict:
+    if isinstance(exc, HeliosAIError):
+        return exc.public_detail()
+    return "HELIOS AI is temporarily unavailable. Please try again shortly."
+
+
 @router.get("/briefing/daily", response_model=DailyBriefing)
 def get_daily_briefing(
     current_user: User = Depends(get_current_user),
@@ -49,7 +56,7 @@ def get_daily_briefing(
         briefing.context_sources = ctx.sources
         return briefing
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=_ai_error_detail(exc))
 
 
 @router.post("/plan", response_model=PlanResponse)
@@ -85,7 +92,7 @@ def generate_plan(
             user_context=planning_ctx.text,
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=_ai_error_detail(exc))
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -94,29 +101,24 @@ def chat(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ChatResponse:
-    # Long-term memories are always injected — they personalise replies without
-    # exposing operational data the operator hasn't explicitly opted into.
-    # Full assistant-chat context (goals + tasks + memories) is added only when
-    # the client opts in via include_context.
-    if payload.include_context:
-        user_context: str | None = build_context(
-            ContextScope.ASSISTANT_CHAT,
-            user_id=current_user.id,
-            db=db,
-            user_name=current_user.name,
-        ).text
-    else:
-        user_context = build_memory_context(user_id=current_user.id, db=db)
+    svc = AssistantContextService(db)
+    ctx = svc.build_context_for_message(
+        user_id=current_user.id,
+        message=payload.message,
+        context_type=payload.context_type,
+    )
+    user_context = svc.summarize_context_for_prompt(ctx) or None
+    effective_context_type = ctx["retrieval_metadata"]["context_type"]
 
     try:
         return get_ai_provider().generate_chat_reply(
             message=payload.message,
             user_name=current_user.name,
-            context_type=payload.context_type,
+            context_type=effective_context_type,
             user_context=user_context,
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=_ai_error_detail(exc))
 
 
 @router.post("/actions/execute", response_model=ActionExecuteResult)

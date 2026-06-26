@@ -1,4 +1,5 @@
 import uuid
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -9,6 +10,7 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.calendar import CalendarEvent
 from app.models.user import User
+from app.services.semantic_memory_service import SemanticMemoryService
 from app.schemas.calendar import (
     CalendarEventCreate,
     CalendarEventOut,
@@ -16,7 +18,22 @@ from app.schemas.calendar import (
     CalendarEventUpdate,
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _index_event_memory(db: Session, event: CalendarEvent) -> None:
+    try:
+        SemanticMemoryService(db).index_calendar_event(event)
+    except Exception:
+        logger.warning("Semantic calendar event indexing failed.", exc_info=True)
+
+
+def _delete_event_memory(db: Session, user_id: str, event_id: str) -> None:
+    try:
+        SemanticMemoryService(db).delete_memory(user_id, "calendar_event", event_id)
+    except Exception:
+        logger.warning("Semantic calendar event memory delete failed.", exc_info=True)
 
 
 def _to_out(event: CalendarEvent) -> CalendarEventOut:
@@ -75,6 +92,7 @@ def create_event(
     db.add(event)
     db.commit()
     db.refresh(event)
+    _index_event_memory(db, event)
     return _to_out(event)
 
 
@@ -112,6 +130,7 @@ def update_event(
     event.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(event)
+    _index_event_memory(db, event)
     return _to_out(event)
 
 
@@ -129,5 +148,6 @@ def delete_event(
     ).scalar_one_or_none()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found.")
+    _delete_event_memory(db, current_user.id, event.id)
     db.delete(event)
     db.commit()

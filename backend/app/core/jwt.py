@@ -83,7 +83,11 @@ def decode_access_token(token: str) -> str | None:
         )
         return None
     except InvalidTokenError as exc:
-        logger.warning("jwt.decode_access_token: invalid token — %s server_utc=%s", exc, server_utc)
+        logger.warning(
+            "jwt.decode_access_token: invalid token error_type=%s server_utc=%s",
+            type(exc).__name__,
+            server_utc,
+        )
         return None
 
 
@@ -127,5 +131,9 @@ def decode_refresh_token(token: str) -> str | None:
         )
         return None
     except InvalidTokenError as exc:
-        logger.warning("jwt.decode_refresh_token: invalid token — %s server_utc=%s", exc, server_utc)
+        logger.warning(
+            "jwt.decode_refresh_token: invalid token error_type=%s server_utc=%s",
+            type(exc).__name__,
+            server_utc,
+        )
         return None

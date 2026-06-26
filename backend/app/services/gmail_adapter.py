@@ -32,10 +32,9 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
-# Controls whether real HTTP calls to the Gmail API are made.
-# True  → token look-up is skipped; deterministic stub data is returned.
-# False → tokens are decrypted from DB and real API calls are issued.
-_STUB: bool = True
+# Real sync uses live Gmail API calls. Mock development sync remains available
+# through app.services.sync_simulator and /integrations/{id}/sync.
+_STUB: bool = False
 
 _GMAIL_BASE_URL = "https://gmail.googleapis.com/gmail/v1/users/me"
 
@@ -54,6 +53,9 @@ class GmailMessage:
     importance: str                 # "low" | "normal" | "high"
     label_ids: list[str]            # e.g. ["INBOX", "UNREAD"]
     is_unread: bool
+    recipients: list[str] | None = None
+    has_attachments: bool = False
+    raw_metadata: dict | None = None
 
 
 @dataclass
@@ -136,6 +138,9 @@ def _fixture_to_message(data: dict) -> GmailMessage:
         importance=data["importance"],
         label_ids=list(data["label_ids"]),
         is_unread=data["is_unread"],
+        recipients=data.get("recipients") or [],
+        has_attachments=bool(data.get("has_attachments", False)),
+        raw_metadata=data,
     )
 
 
@@ -255,7 +260,7 @@ class GmailAdapter:
         resp = httpx.get(
             f"{_GMAIL_BASE_URL}/messages/{message_id}",
             headers={"Authorization": f"Bearer {access_token}"},
-            params={"format": "metadata", "metadataHeaders": ["From", "Subject", "Date"]},
+            params={"format": "metadata", "metadataHeaders": ["From", "To", "Cc", "Subject", "Date"]},
             timeout=10.0,
         )
         if resp.status_code == 404:
@@ -423,15 +428,23 @@ def _get_access_token(user_id: str, db: Session) -> str:
     NEVER log the returned plaintext value.
     """
     from app.models.integration import UserIntegration
-    from app.services.token_encryption import TokenEncryptionError, decrypt_token
 
     row = db.execute(
         select(UserIntegration).where(
             UserIntegration.user_id == user_id,
-            UserIntegration.provider == "gmail",
+            UserIntegration.provider == "google",
+            UserIntegration.service_type == "gmail",
             UserIntegration.status == "connected",
         )
     ).scalar_one_or_none()
+    if not row:
+        row = db.execute(
+            select(UserIntegration).where(
+                UserIntegration.user_id == user_id,
+                UserIntegration.provider == "gmail",
+                UserIntegration.status == "connected",
+            )
+        ).scalar_one_or_none()
 
     if not row:
         raise RuntimeError(
@@ -443,23 +456,22 @@ def _get_access_token(user_id: str, db: Session) -> str:
         )
 
     try:
-        return decrypt_token(row.access_token_encrypted)
-    except TokenEncryptionError as exc:
+        from app.services.google_oauth import ensure_valid_access_token
+        return ensure_valid_access_token(row, db)
+    except Exception as exc:
         # Log only the exception type — never log ciphertext or key material.
         logger.error(
             "gmail_adapter: token decryption failed for user %s (%s).",
             user_id,
             type(exc).__name__,
         )
-        raise RuntimeError("gmail_adapter: token decryption failed.") from exc
+        raise RuntimeError("gmail_adapter: token unavailable.") from exc
 
 
 def _raise_for_gmail_error(resp) -> None:
     """Raise RuntimeError with a safe message when the Gmail API returns an error."""
     if resp.status_code >= 400:
-        raise RuntimeError(
-            f"Gmail API returned HTTP {resp.status_code}: {resp.text[:200]}"
-        )
+        raise RuntimeError(f"Gmail API returned HTTP {resp.status_code}.")
 
 
 def _parse_api_message(item: dict) -> GmailMessage:
@@ -474,6 +486,16 @@ def _parse_api_message(item: dict) -> GmailMessage:
         headers[h["name"].lower()] = h["value"]
 
     label_ids: list[str] = item.get("labelIds", [])
+    payload = item.get("payload", {})
+    recipients = [
+        value
+        for value in [headers.get("to"), headers.get("cc")]
+        if value
+    ]
+    has_attachments = any(
+        part.get("filename")
+        for part in payload.get("parts", []) or []
+    )
     return GmailMessage(
         id=item["id"],
         thread_id=item.get("threadId", ""),
@@ -484,6 +506,9 @@ def _parse_api_message(item: dict) -> GmailMessage:
         importance="high" if "IMPORTANT" in label_ids else "normal",
         label_ids=label_ids,
         is_unread="UNREAD" in label_ids,
+        recipients=recipients,
+        has_attachments=has_attachments,
+        raw_metadata=item,
     )
 
 

@@ -28,10 +28,9 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
-# Controls whether real HTTP calls to the Google Calendar API are made.
-# True  → token look-up is skipped; deterministic stub data is returned.
-# False → tokens are decrypted from DB and real API calls are issued.
-_STUB: bool = True
+# Real sync uses live Google API calls. Mock development sync remains available
+# through app.services.sync_simulator and /integrations/{id}/sync.
+_STUB: bool = False
 
 _GOOGLE_CALENDAR_BASE_URL = "https://www.googleapis.com/calendar/v3"
 
@@ -50,6 +49,10 @@ class GoogleCalendarEvent:
     status: str = "confirmed"
     html_link: str | None = None
     etag: str | None = None
+    calendar_id: str = "primary"
+    timezone: str | None = None
+    attendees: list[dict] | None = None
+    raw_metadata: dict | None = None
 
 
 @dataclass
@@ -114,6 +117,7 @@ def _fixture_to_event(data: dict) -> GoogleCalendarEvent:
         status=data.get("status", "confirmed"),
         html_link=f"https://calendar.google.com/calendar/event?eid={data['id']}",
         etag=f'"stub-etag-{data["id"]}"',
+        raw_metadata=data,
     )
 
 
@@ -352,15 +356,22 @@ def _get_access_token(user_id: str, db: Session) -> str:
     NEVER log the returned plaintext value.
     """
     from app.models.integration import UserIntegration
-    from app.services.token_encryption import TokenEncryptionError, decrypt_token
-
     row = db.execute(
         select(UserIntegration).where(
             UserIntegration.user_id == user_id,
-            UserIntegration.provider == "google_calendar",
+            UserIntegration.provider == "google",
+            UserIntegration.service_type == "calendar",
             UserIntegration.status == "connected",
         )
     ).scalar_one_or_none()
+    if not row:
+        row = db.execute(
+            select(UserIntegration).where(
+                UserIntegration.user_id == user_id,
+                UserIntegration.provider == "google_calendar",
+                UserIntegration.status == "connected",
+            )
+        ).scalar_one_or_none()
 
     if not row:
         raise RuntimeError(
@@ -372,23 +383,22 @@ def _get_access_token(user_id: str, db: Session) -> str:
         )
 
     try:
-        return decrypt_token(row.access_token_encrypted)
-    except TokenEncryptionError as exc:
+        from app.services.google_oauth import ensure_valid_access_token
+        return ensure_valid_access_token(row, db)
+    except Exception as exc:
         # Log only the exception type — never log ciphertext or key material.
         logger.error(
             "google_calendar_adapter: token decryption failed for user %s (%s).",
             user_id,
             type(exc).__name__,
         )
-        raise RuntimeError("google_calendar_adapter: token decryption failed.") from exc
+        raise RuntimeError("google_calendar_adapter: token unavailable.") from exc
 
 
 def _raise_for_google_error(resp) -> None:
     """Raise RuntimeError with a safe message when the Google API returns an error."""
     if resp.status_code >= 400:
-        raise RuntimeError(
-            f"Google Calendar API returned HTTP {resp.status_code}: {resp.text[:200]}"
-        )
+        raise RuntimeError(f"Google Calendar API returned HTTP {resp.status_code}.")
 
 
 def _parse_api_event(item: dict) -> GoogleCalendarEvent:
@@ -405,6 +415,10 @@ def _parse_api_event(item: dict) -> GoogleCalendarEvent:
         status=item.get("status", "confirmed"),
         html_link=item.get("htmlLink"),
         etag=item.get("etag"),
+        calendar_id=item.get("organizer", {}).get("email") or "primary",
+        timezone=start.get("timeZone") or end.get("timeZone"),
+        attendees=item.get("attendees"),
+        raw_metadata=item,
     )
 
 

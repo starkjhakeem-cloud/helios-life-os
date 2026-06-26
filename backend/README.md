@@ -219,11 +219,15 @@ Backend tests use a lightweight SQLite database and FastAPI's TestClient to vali
 
 ```bash
 cd backend
-python3 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt -r requirements-test.txt
 pytest
 ```
+
+Use Python 3.12 for backend tests. If `python3` points to Python 3.14, SQLAlchemy
+2.0 can fail while reading typed ORM annotations with
+`TypeError: descriptor '__getitem__' requires a 'typing.Union' object but received a 'tuple'`.
 
 ---
 

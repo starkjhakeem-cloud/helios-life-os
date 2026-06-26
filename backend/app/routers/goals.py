@@ -1,4 +1,5 @@
 import uuid
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,8 +11,24 @@ from app.dependencies.auth import get_current_user
 from app.models.goal import Goal
 from app.models.user import User
 from app.schemas.goals import GoalCreate, GoalOut, GoalsResponse, GoalUpdate
+from app.services.semantic_memory_service import SemanticMemoryService
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _index_goal_memory(db: Session, goal: Goal) -> None:
+    try:
+        SemanticMemoryService(db).index_goal(goal)
+    except Exception:
+        logger.warning("Semantic goal indexing failed.", exc_info=True)
+
+
+def _delete_goal_memory(db: Session, user_id: str, goal_id: str) -> None:
+    try:
+        SemanticMemoryService(db).delete_memory(user_id, "goal", goal_id)
+    except Exception:
+        logger.warning("Semantic goal memory delete failed.", exc_info=True)
 
 
 def _to_out(goal: Goal) -> GoalOut:
@@ -58,6 +75,7 @@ def create_goal(
     db.add(goal)
     db.commit()
     db.refresh(goal)
+    _index_goal_memory(db, goal)
     return _to_out(goal)
 
 
@@ -86,6 +104,7 @@ def update_goal(
 
     db.commit()
     db.refresh(goal)
+    _index_goal_memory(db, goal)
     return _to_out(goal)
 
 
@@ -100,5 +119,6 @@ def delete_goal(
     ).scalar_one_or_none()
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found.")
+    _delete_goal_memory(db, current_user.id, goal.id)
     db.delete(goal)
     db.commit()

@@ -6,8 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.ai.context_builder import build_user_context
+from app.ai.assistant_context_service import AssistantContextService
 from app.ai.factory import get_ai_provider
+from app.ai.types import HeliosAIError
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.conversation import Conversation, ConversationMessage
@@ -28,6 +29,12 @@ _EMPTY_META = json.dumps({
     "recommended_actions": [],
     "provider": None,
 })
+
+
+def _ai_error_detail(exc: RuntimeError) -> str | dict:
+    if isinstance(exc, HeliosAIError):
+        return exc.public_detail()
+    return "HELIOS AI is temporarily unavailable. Please try again shortly."
 
 
 def _parse_meta(raw: str | None) -> dict:
@@ -216,13 +223,18 @@ def send_message(
     _msg_lower = payload.message.lower()
     _is_agenda = any(t in _msg_lower for t in _AGENDA_TRIGGERS)
 
-    # Build user context when include_context is set OR agenda intent detected.
-    user_context: str | None = None
-    if payload.include_context or _is_agenda:
-        user_context = build_user_context(user_id=current_user.id, db=db)
-
-    # Signal agenda intent to the provider so it knows to format a structured reply.
+    # Always build structured context — gives the AI full situational awareness
+    # regardless of whether the client toggled include_context. Agenda intent
+    # is forwarded as context_type so the provider formats a structured reply.
     effective_context_type = payload.context_type or ("agenda" if _is_agenda else None)
+    _svc = AssistantContextService(db)
+    _ctx = _svc.build_context_for_message(
+        user_id=current_user.id,
+        message=payload.message,
+        context_type=effective_context_type,
+    )
+    user_context: str | None = _svc.summarize_context_for_prompt(_ctx) or None
+    effective_context_type = _ctx["retrieval_metadata"]["context_type"]
 
     # Generate AI reply, passing conversation history for multi-turn coherence
     try:
@@ -235,7 +247,7 @@ def send_message(
         )
     except RuntimeError as exc:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=_ai_error_detail(exc))
 
     # Persist assistant reply
     reply_time = datetime.now(timezone.utc)

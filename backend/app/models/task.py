@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -25,6 +25,17 @@ class Task(Base):
         String,
         ForeignKey("goals.id", ondelete="SET NULL"),
         nullable=True,
+    )
+    # Relationship extension fields
+    estimated_duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    category: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    scheduled_start: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    scheduled_end: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    focus_block_id: Mapped[str | None] = mapped_column(
+        String,
+        ForeignKey("focus_blocks.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

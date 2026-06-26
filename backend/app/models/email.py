@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -31,6 +31,17 @@ class EmailMessage(Base):
     source: Mapped[str] = mapped_column(String(30), nullable=False, default="manual")
     # Opaque ID from the external mail provider — used for upsert on sync.
     external_message_id: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    thread_id: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    recipients: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    labels: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    has_attachments: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    source_account_id: Mapped[str | None] = mapped_column(
+        String,
+        ForeignKey("user_integrations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    raw_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

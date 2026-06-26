@@ -1,4 +1,5 @@
 import uuid
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -11,8 +12,24 @@ from app.models.goal import Goal
 from app.models.task import Task
 from app.models.user import User
 from app.schemas.tasks import TaskCreate, TaskOut, TasksResponse, TaskUpdate
+from app.services.semantic_memory_service import SemanticMemoryService
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _index_task_memory(db: Session, task: Task) -> None:
+    try:
+        SemanticMemoryService(db).index_task(task)
+    except Exception:
+        logger.warning("Semantic task indexing failed.", exc_info=True)
+
+
+def _delete_task_memory(db: Session, user_id: str, task_id: str) -> None:
+    try:
+        SemanticMemoryService(db).delete_memory(user_id, "task", task_id)
+    except Exception:
+        logger.warning("Semantic task memory delete failed.", exc_info=True)
 
 
 def _to_out(task: Task) -> TaskOut:
@@ -71,12 +88,15 @@ def create_task(
         priority=payload.priority,
         due_date=payload.due_date,
         linked_goal_id=payload.linked_goal_id,
+        estimated_duration_minutes=payload.estimated_duration_minutes,
+        category=payload.category,
         created_at=now,
         updated_at=now,
     )
     db.add(task)
     db.commit()
     db.refresh(task)
+    _index_task_memory(db, task)
     return _to_out(task)
 
 
@@ -105,10 +125,15 @@ def update_task(
         task.due_date = payload.due_date
     if payload.linked_goal_id is not None:
         task.linked_goal_id = payload.linked_goal_id
+    if payload.estimated_duration_minutes is not None:
+        task.estimated_duration_minutes = payload.estimated_duration_minutes
+    if payload.category is not None:
+        task.category = payload.category
     task.updated_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(task)
+    _index_task_memory(db, task)
     return _to_out(task)
 
 
@@ -123,5 +148,6 @@ def delete_task(
     ).scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found.")
+    _delete_task_memory(db, current_user.id, task.id)
     db.delete(task)
     db.commit()

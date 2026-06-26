@@ -13,6 +13,8 @@ class TaskCreate(BaseModel):
     priority: TaskPriority = "medium"
     due_date: str | None = None
     linked_goal_id: str | None = None
+    estimated_duration_minutes: int | None = None
+    category: str | None = Field(default=None, max_length=100)
 
 
 class TaskUpdate(BaseModel):
@@ -22,6 +24,8 @@ class TaskUpdate(BaseModel):
     priority: TaskPriority | None = None
     due_date: str | None = None
     linked_goal_id: str | None = None
+    estimated_duration_minutes: int | None = None
+    category: str | None = Field(default=None, max_length=100)
 
 
 class TaskOut(BaseModel):
@@ -33,6 +37,11 @@ class TaskOut(BaseModel):
     priority: str
     due_date: str | None
     linked_goal_id: str | None
+    estimated_duration_minutes: int | None = None
+    category: str | None = None
+    scheduled_start: str | None = None
+    scheduled_end: str | None = None
+    focus_block_id: str | None = None
     created_at: str
     updated_at: str
 

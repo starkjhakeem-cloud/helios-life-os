@@ -23,6 +23,7 @@ class SyncJob(Base):
         index=True,
     )
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    service_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
     # "running" | "completed" | "failed"
     # Real sync workers will move rows through these states asynchronously.
     status: Mapped[str] = mapped_column(String(30), nullable=False)
@@ -31,5 +32,7 @@ class SyncJob(Base):
     records_processed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     records_created: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     records_updated: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    records_skipped: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # JSON-encoded list of error strings.
     errors: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

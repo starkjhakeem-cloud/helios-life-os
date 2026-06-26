@@ -1,5 +1,7 @@
 import json
 from datetime import datetime, timezone
+from time import perf_counter
+from typing import Any
 
 from app.ai.base import AIProvider
 from app.ai.name_formatting import enforce_name_formatting
@@ -13,6 +15,7 @@ from app.ai.prompts import (
     build_orchestration_user_message,
     build_plan_user_message,
 )
+from app.ai.types import AIErrorCode, AIProviderHealth, AIProviderResponse, HeliosAIError, utc_timestamp
 from app.schemas.ai import BriefingPriority, ChatResponse, DailyBriefing, PlanResponse, PlanStep, RecommendedAction
 from app.schemas.autonomy import DailyPlan, SuggestionItem
 from app.schemas.orchestration import AgentAssessment, OrchestrationResponse
@@ -24,16 +27,205 @@ class OpenAIProvider(AIProvider):
     The openai package must be installed: pip install openai
     """
 
-    def __init__(self, api_key: str, model: str) -> None:
+    provider_name = "openai"
+
+    def __init__(self, api_key: str, model: str, timeout_seconds: int = 30) -> None:
         try:
             from openai import OpenAI
-            self._client = OpenAI(api_key=api_key)
+            self._client = OpenAI(api_key=api_key, timeout=timeout_seconds)
         except ImportError as exc:
-            raise RuntimeError(
+            raise HeliosAIError(
+                AIErrorCode.PROVIDER_OFFLINE,
                 "openai package is required for OpenAI provider. "
-                "Install it: pip install openai"
+                "Install it: pip install openai",
+                provider=self.provider_name,
+                raw_error=exc,
             ) from exc
         self._model = model
+
+    @property
+    def model(self) -> str:
+        return self._model
+
+    def _messages(
+        self,
+        prompt: str,
+        *,
+        system: str | None = None,
+        history: list[dict] | None = None,
+    ) -> list[dict]:
+        messages: list[dict] = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.extend(history or [])
+        messages.append({"role": "user", "content": prompt})
+        return messages
+
+    def _usage_dict(self, usage: Any) -> dict[str, Any] | None:
+        if usage is None:
+            return None
+        if hasattr(usage, "model_dump"):
+            return usage.model_dump()
+        if isinstance(usage, dict):
+            return usage
+        return None
+
+    def _completion_options(self, max_tokens: int) -> dict[str, Any]:
+        model = self._model.lower()
+        if model.startswith(("gpt-5", "o1", "o3", "o4")):
+            return {"max_completion_tokens": max_tokens}
+        return {"temperature": 0.7, "max_tokens": max_tokens}
+
+    def generate_text(
+        self,
+        prompt: str,
+        *,
+        system: str | None = None,
+        history: list[dict] | None = None,
+        max_tokens: int = 1500,
+    ) -> AIProviderResponse:
+        started = perf_counter()
+        try:
+            response = self._client.chat.completions.create(
+                model=self._model,
+                messages=self._messages(prompt, system=system, history=history),
+                **self._completion_options(max_tokens),
+            )
+            choice = response.choices[0]
+            return AIProviderResponse(
+                provider=self.provider_name,
+                model=self._model,
+                content=choice.message.content or "",
+                usage=self._usage_dict(getattr(response, "usage", None)),
+                finish_reason=getattr(choice, "finish_reason", None),
+                latency_ms=round((perf_counter() - started) * 1000),
+                timestamp=utc_timestamp(),
+            )
+        except Exception as exc:
+            raise self.normalize_error(exc) from exc
+
+    def generate_json(
+        self,
+        prompt: str,
+        *,
+        system: str | None = None,
+        history: list[dict] | None = None,
+        max_tokens: int = 1500,
+    ) -> AIProviderResponse:
+        started = perf_counter()
+        try:
+            response = self._client.chat.completions.create(
+                model=self._model,
+                messages=self._messages(prompt, system=system, history=history),
+                response_format={"type": "json_object"},
+                **self._completion_options(max_tokens),
+            )
+            choice = response.choices[0]
+            content = choice.message.content or ""
+            try:
+                parsed = json.loads(content)
+            except json.JSONDecodeError as exc:
+                raise HeliosAIError(
+                    AIErrorCode.MALFORMED_RESPONSE,
+                    "OpenAI returned a malformed response.",
+                    provider=self.provider_name,
+                    raw_error=exc,
+                ) from exc
+            return AIProviderResponse(
+                provider=self.provider_name,
+                model=self._model,
+                content=parsed,
+                usage=self._usage_dict(getattr(response, "usage", None)),
+                finish_reason=getattr(choice, "finish_reason", None),
+                latency_ms=round((perf_counter() - started) * 1000),
+                timestamp=utc_timestamp(),
+            )
+        except Exception as exc:
+            raise self.normalize_error(exc) from exc
+
+    def check_health(self) -> AIProviderHealth:
+        started = perf_counter()
+        try:
+            self.generate_text("Respond with OK.", system="Health check.", max_tokens=8)
+            return AIProviderHealth(
+                provider=self.provider_name,
+                model=self._model,
+                healthy=True,
+                checked_at=utc_timestamp(),
+                latency_ms=round((perf_counter() - started) * 1000),
+            )
+        except Exception as exc:
+            error = self.normalize_error(exc)
+            return AIProviderHealth(
+                provider=self.provider_name,
+                model=self._model,
+                healthy=False,
+                checked_at=utc_timestamp(),
+                error=error.code.value,
+                latency_ms=round((perf_counter() - started) * 1000),
+            )
+
+    def normalize_error(self, exc: Exception) -> HeliosAIError:
+        if isinstance(exc, HeliosAIError):
+            return exc
+        try:
+            import openai
+        except ImportError:
+            return HeliosAIError(
+                AIErrorCode.PROVIDER_OFFLINE,
+                "OpenAI provider package is not installed.",
+                provider=self.provider_name,
+                raw_error=exc,
+            )
+        if isinstance(exc, openai.AuthenticationError):
+            return HeliosAIError(
+                AIErrorCode.INVALID_API_KEY,
+                "OpenAI authentication failed.",
+                provider=self.provider_name,
+                retryable=False,
+                raw_error=exc,
+            )
+        if isinstance(exc, openai.RateLimitError):
+            return HeliosAIError(
+                AIErrorCode.RATE_LIMITED,
+                "OpenAI rate limit reached.",
+                provider=self.provider_name,
+                raw_error=exc,
+            )
+        if isinstance(exc, openai.APITimeoutError):
+            return HeliosAIError(
+                AIErrorCode.TIMEOUT,
+                "OpenAI request timed out.",
+                provider=self.provider_name,
+                raw_error=exc,
+            )
+        if isinstance(exc, openai.APIConnectionError):
+            return HeliosAIError(
+                AIErrorCode.NETWORK_ERROR,
+                "Could not reach OpenAI.",
+                provider=self.provider_name,
+                raw_error=exc,
+            )
+        if isinstance(exc, openai.APIStatusError):
+            if getattr(exc, "status_code", None) in {500, 502, 503, 504}:
+                return HeliosAIError(
+                    AIErrorCode.PROVIDER_OFFLINE,
+                    "OpenAI is temporarily unavailable.",
+                    provider=self.provider_name,
+                    raw_error=exc,
+                )
+            return HeliosAIError(
+                AIErrorCode.UNKNOWN_ERROR,
+                "OpenAI returned an error.",
+                provider=self.provider_name,
+                raw_error=exc,
+            )
+        return HeliosAIError(
+            AIErrorCode.UNKNOWN_ERROR,
+            "OpenAI provider failed.",
+            provider=self.provider_name,
+            raw_error=exc,
+        )
 
     def _call(
         self,
@@ -48,38 +240,13 @@ class OpenAIProvider(AIProvider):
         """
         import openai
 
-        messages: list[dict] = [{"role": "system", "content": system}]
-        messages.extend(history or [])
-        messages.append({"role": "user", "content": user})
-
-        try:
-            response = self._client.chat.completions.create(
-                model=self._model,
-                messages=messages,
-                response_format={"type": "json_object"},
-                temperature=0.7,
-                max_tokens=max_tokens,
-            )
-            content = response.choices[0].message.content or ""
-            return json.loads(content)
-        except openai.AuthenticationError as exc:
-            raise RuntimeError(
-                "OpenAI authentication failed — verify OPENAI_API_KEY."
-            ) from exc
-        except openai.RateLimitError as exc:
-            raise RuntimeError(
-                "OpenAI rate limit reached — try again in a moment."
-            ) from exc
-        except openai.APIConnectionError as exc:
-            raise RuntimeError(
-                "Could not reach OpenAI — check your network connection."
-            ) from exc
-        except openai.APIStatusError as exc:
-            raise RuntimeError(
-                f"OpenAI API error ({exc.status_code}): {exc.message}"
-            ) from exc
-        except json.JSONDecodeError as exc:
-            raise RuntimeError("OpenAI returned malformed JSON.") from exc
+        _ = openai
+        return self.generate_json(
+            user,
+            system=system,
+            history=history,
+            max_tokens=max_tokens,
+        ).content
 
     def generate_briefing(self, user_name: str, user_context: str | None = None) -> DailyBriefing:
         user_msg = build_briefing_user_message(user_name=user_name, user_context=user_context)

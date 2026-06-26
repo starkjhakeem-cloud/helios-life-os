@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.ai.context_service import ContextScope, build_context
 from app.ai.factory import get_ai_provider
+from app.ai.types import HeliosAIError
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.autonomy import AutonomyAuditLog, AutonomyQueueItem, AutonomyRule as AutonomyRuleModel
@@ -33,6 +34,7 @@ from app.schemas.autonomy import (
     DailyPlan,
     DailyPlanRequest,
     GeneratePlanPayload,
+    SuggestionItem,
     SuggestionsResponse,
     _SAFE_AUTONOMY_ACTIONS,
 )
@@ -45,6 +47,29 @@ _VALID_STATUSES = {"pending", "approved", "rejected", "completed"}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _ai_error_detail(exc: RuntimeError) -> str | dict:
+    if isinstance(exc, HeliosAIError):
+        return exc.public_detail()
+    return "HELIOS AI is temporarily unavailable. Please try again shortly."
+
+
+def _local_fallback_suggestions(user_name: str) -> list[SuggestionItem]:
+    now = datetime.now(timezone.utc).isoformat()
+    return [
+        SuggestionItem(
+            id=str(uuid.uuid4()),
+            title="Review today's priorities",
+            description="Open your current goals, tasks, and calendar to choose the next best action.",
+            source_agent="HELIOS",
+            suggested_action_type="review_priorities",
+            risk_level="low",
+            reason=f"{user_name}, HELIOS can still help you orient your day while AI recommendations recover.",
+            payload_preview={"action": "review_priorities"},
+            created_at=now,
+        )
+    ]
+
 
 def _rule_to_out(rule: AutonomyRuleModel) -> AutonomyRuleOut:
     return AutonomyRuleOut(
@@ -215,8 +240,8 @@ def get_suggestions(
             user_name=current_user.name,
             user_context=user_context,
         )
-        # Both AnthropicProvider and OpenAIProvider currently delegate to
-        # MockAIProvider, which generates rule-based context-aware suggestions.
+        # OpenAI suggestions currently share the local rule-based suggestion
+        # generator until the dedicated proactive prompt is enabled.
         source = "local"
         logger.info(
             "suggestions.generated user_id=%s count=%d source=%s degraded=%s",
@@ -239,23 +264,13 @@ def get_suggestions(
             degraded_message = "An unexpected error occurred — showing default recommendations."
         _ = unexpected_exc
 
-    # ── Fallback: generate minimal rule-based suggestions from DB ─────────────
     if not suggestions:
-        try:
-            from app.ai.mock_provider import MockAIProvider
-            suggestions = MockAIProvider().generate_suggestions(
-                user_name=current_user.name,
-                user_context=None,
-            )
-            logger.info(
-                "suggestions.fallback_used user_id=%s count=%d",
-                current_user.id, len(suggestions),
-            )
-        except Exception:
-            logger.exception(
-                "suggestions.fallback_failed user_id=%s — returning empty list",
-                current_user.id,
-            )
+        logger.info(
+            "suggestions.empty user_id=%s degraded=%s",
+            current_user.id,
+            degraded,
+        )
+        suggestions = _local_fallback_suggestions(current_user.name)
 
     trimmed = suggestions[:limit]
 
@@ -324,7 +339,7 @@ def generate_daily_plan(
             user_context=planning_ctx.text,
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=_ai_error_detail(exc))
 
     return plan
 
@@ -975,7 +990,7 @@ def execute_queue_item(
                 related_queue_item_id=item.id,
                 action_type=item.proposed_action_type,
             )
-            raise HTTPException(status_code=502, detail=str(exc))
+            raise HTTPException(status_code=502, detail=_ai_error_detail(exc))
 
         item.status = "completed"
         item.updated_at = now

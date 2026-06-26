@@ -8,16 +8,25 @@ os.environ.setdefault("AI_PROVIDER", "mock")
 import pytest
 from fastapi.testclient import TestClient
 
+import app.models.calendar
 import app.models.conversation
+import app.models.daily_history
+import app.models.focus_block
 import app.models.daily_snapshot
+import app.models.email
 import app.models.goal
+import app.models.integration
+import app.models.integration_oauth_state
 import app.models.reminder
+import app.models.sync_job
 import app.models.task
 import app.models.user
 import app.models.user_preferences
+import app.models.semantic_memory
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.main import app
+from app.core.limiter import limiter
 
 _IS_SQLITE = str(engine.url).startswith("sqlite")
 
@@ -40,10 +49,12 @@ def initialize_database():
 
 @pytest.fixture(autouse=True)
 def clean_database():
+    limiter.reset()
     with engine.begin() as conn:
         for table in reversed(Base.metadata.sorted_tables):
             conn.execute(table.delete())
     yield
+    limiter.reset()
     with engine.begin() as conn:
         for table in reversed(Base.metadata.sorted_tables):
             conn.execute(table.delete())

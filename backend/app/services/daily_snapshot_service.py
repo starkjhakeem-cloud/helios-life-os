@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.models.calendar import CalendarEvent
 from app.models.daily_snapshot import DailyMemorySnapshot
+from app.models.focus_block import FocusBlock
 from app.models.goal import Goal
 from app.models.task import Task
 from app.schemas.daily_snapshot import DailySnapshotGenerate, DailySnapshotUpsert
@@ -71,6 +72,24 @@ def _event_to_dict(event: CalendarEvent) -> dict[str, Any]:
         "external_event_id": event.external_event_id,
         "created_at": event.created_at.isoformat(),
         "updated_at": event.updated_at.isoformat(),
+    }
+
+
+def _focus_block_to_dict(block: FocusBlock) -> dict[str, Any]:
+    return {
+        "id": block.id,
+        "title": block.title,
+        "start_time": block.start_time,
+        "end_time": block.end_time,
+        "linked_goal_id": block.linked_goal_id,
+        "linked_task_ids": block.linked_task_ids or [],
+        "status": block.status,
+        "source": block.source,
+        "notes": block.notes,
+        "actual_start": block.actual_start,
+        "actual_end": block.actual_end,
+        "created_at": block.created_at.isoformat(),
+        "updated_at": block.updated_at.isoformat(),
     }
 
 
@@ -150,10 +169,27 @@ def build_snapshot_payload(
         .scalars()
         .all()
     )
+    focus_blocks = (
+        db.execute(
+            select(FocusBlock)
+            .where(
+                FocusBlock.user_id == user_id,
+                FocusBlock.start_time >= day_start,
+                FocusBlock.start_time <= day_end,
+            )
+            .order_by(FocusBlock.start_time)
+        )
+        .scalars()
+        .all()
+    )
 
     completed = [
         task for task in tasks
-        if task.status.lower() in COMPLETED_TASK_STATUSES and task.updated_at.date() == snapshot_date
+        if task.status.lower() in COMPLETED_TASK_STATUSES
+        and (
+            task.updated_at.date() == snapshot_date
+            or bool(task.due_date and task.due_date[:10] == date_prefix)
+        )
     ]
     planned = [
         task for task in tasks
@@ -176,7 +212,7 @@ def build_snapshot_payload(
         "active_goals": [_goal_to_dict(goal) for goal in active_goals],
         "goal_progress": [_goal_progress(goal, tasks) for goal in active_goals],
         "calendar_events": [_event_to_dict(event) for event in events],
-        "focus_blocks": [],
+        "focus_blocks": [_focus_block_to_dict(block) for block in focus_blocks],
         "daily_brief": extras.daily_brief if extras else None,
         "assistant_activity": extras.assistant_activity if extras and extras.assistant_activity is not None else [],
         "connected_service_sync": extras.connected_service_sync if extras else None,

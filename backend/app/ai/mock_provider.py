@@ -1,14 +1,97 @@
 import uuid
 from datetime import date, datetime, timedelta, timezone
+from time import perf_counter
 
 from app.ai.base import AIProvider
+from app.ai.types import AIErrorCode, AIProviderHealth, AIProviderResponse, HeliosAIError, utc_timestamp
 from app.schemas.ai import BriefingPriority, ChatResponse, DailyBriefing, PlanResponse, PlanStep, RecommendedAction
 from app.schemas.autonomy import DailyPlan, FocusBlock, PriorityTask, SuggestionItem
 from app.schemas.orchestration import AgentAssessment, OrchestrationResponse
 
 # ── Provider ──────────────────────────────────────────────────────────────────
 
+def _detect_intent(message: str) -> str:
+    """Return a lightweight deterministic intent for local/test chat replies."""
+    text = (message or "").lower()
+    if any(word in text for word in ("goal", "milestone", "objective")):
+        return "goals"
+    if any(word in text for word in ("task", "todo", "to-do", "work item")):
+        return "tasks"
+    if any(word in text for word in ("calendar", "schedule", "meeting", "event")):
+        return "calendar"
+    if any(word in text for word in ("brief", "daily", "summary")):
+        return "briefing"
+    if any(word in text for word in ("email", "inbox", "message")):
+        return "email"
+    return "general"
+
+
 class MockAIProvider(AIProvider):
+    provider_name = "mock"
+    model = "mock"
+
+    def generate_text(
+        self,
+        prompt: str,
+        *,
+        system: str | None = None,
+        history: list[dict] | None = None,
+        max_tokens: int = 1500,
+    ) -> AIProviderResponse:
+        started = perf_counter()
+        _ = (system, history, max_tokens)
+        content = "AI provider unavailable."
+        if prompt:
+            content = f"Mock response: {prompt[:240]}"
+        return AIProviderResponse(
+            provider=self.provider_name,
+            model=self.model,
+            content=content,
+            usage=None,
+            finish_reason="stop",
+            latency_ms=round((perf_counter() - started) * 1000),
+            timestamp=utc_timestamp(),
+        )
+
+    def generate_json(
+        self,
+        prompt: str,
+        *,
+        system: str | None = None,
+        history: list[dict] | None = None,
+        max_tokens: int = 1500,
+    ) -> AIProviderResponse:
+        started = perf_counter()
+        _ = (system, history, max_tokens)
+        return AIProviderResponse(
+            provider=self.provider_name,
+            model=self.model,
+            content={"reply": f"Mock response: {prompt[:240]}"},
+            usage=None,
+            finish_reason="stop",
+            latency_ms=round((perf_counter() - started) * 1000),
+            timestamp=utc_timestamp(),
+        )
+
+    def check_health(self) -> AIProviderHealth:
+        return AIProviderHealth(
+            provider=self.provider_name,
+            model=self.model,
+            healthy=True,
+            checked_at=utc_timestamp(),
+            latency_ms=0,
+        )
+
+    def normalize_error(self, exc: Exception) -> HeliosAIError:
+        if isinstance(exc, HeliosAIError):
+            return exc
+        return HeliosAIError(
+            AIErrorCode.UNKNOWN_ERROR,
+            "Mock AI provider failed.",
+            provider=self.provider_name,
+            raw_error=exc,
+        )
+
     def generate_briefing(self, user_name: str, user_context: str | None = None) -> DailyBriefing:
         hour = datetime.now(timezone.utc).hour
         if hour < 12:
@@ -37,7 +120,7 @@ class MockAIProvider(AIProvider):
         risks.append("D278 OA preparation must remain active daily — any gap in study momentum increases exam risk.")
 
         return DailyBriefing(
-            greeting=f"{time_word}\n{user_name}",
+            greeting=f"{time_word}\n{user_name}\n",
             summary=summary,
             priorities=[
                 BriefingPriority(
@@ -296,11 +379,47 @@ class MockAIProvider(AIProvider):
         user_context: str | None = None,
         history: list[dict] | None = None,
     ) -> ChatResponse:
+        _ = history
+        intent = context_type or _detect_intent(message)
+        context_note = (
+            "Context mode active — I used your current HELIOS context to shape this response."
+            if user_context
+            else "Context mode inactive — connect live context for more precise guidance."
+        )
+        reply = (
+            f"{context_note}\n\n"
+            f"{user_name}, I can help with {intent}. "
+            f"Your request was: {message.strip() or 'No message provided.'}"
+        )
+        suggested_actions = [
+            "Review current priorities",
+            "Create a focused next step",
+        ]
+        if intent == "goals":
+            suggested_actions.insert(0, "Open active goals")
+        elif intent == "tasks":
+            suggested_actions.insert(0, "Review open tasks")
+        elif intent == "calendar":
+            suggested_actions.insert(0, "Find available time")
+
         return ChatResponse(
-            reply="AI provider unavailable.",
-            suggested_actions=[],
-            follow_up_questions=[],
-            recommended_actions=[],
+            reply=reply,
+            suggested_actions=suggested_actions,
+            follow_up_questions=[
+                "Should I turn this into a task?",
+                "Do you want a plan for today?",
+            ],
+            recommended_actions=[
+                RecommendedAction(
+                    id=f"chat-{uuid.uuid4().hex[:8]}",
+                    type="create_task",
+                    title="Create a next-step task",
+                    description="Capture this conversation as a concrete task in HELIOS.",
+                    confidence=0.74,
+                    payload_preview={"title": message[:80] or "Follow up with HELIOS"},
+                    execution_payload=None,
+                )
+            ],
             provider="mock",
             generated_at=datetime.now(timezone.utc).isoformat(),
         )

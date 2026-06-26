@@ -1,6 +1,7 @@
 import logging
 import time
 import uuid
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,7 +14,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.config import settings
 from app.core.limiter import limiter
 from app.logging_config import configure_logging
-from app.routers import agents, ai, analytics, auth, autonomy, background_jobs, calendar, conversations, daily_snapshots, dashboard, email, goals, health, integrations, memory, notifications, profile, reminders, tasks
+from app.routers import agents, ai, analytics, auth, autonomy, background_jobs, calendar, conversations, daily_snapshots, dashboard, email, goals, health, history, integrations, memory, notifications, profile, reminders, tasks
+from app.routers import assistant_context, relationships, semantic_memory
 from app.routers import settings as settings_router
 from app.services.token_encryption import validate_key as validate_encryption_key
 
@@ -52,12 +54,67 @@ _WEAK_JWT_SECRETS = {
     "",
 }
 
+async def startup_checks() -> None:
+    logger.info(
+        "Starting %s version %s in %s mode.",
+        settings.app_name,
+        settings.version,
+        settings.environment,
+        extra={"request_id": "-"},
+    )
+    if settings.jwt_secret_key in _WEAK_JWT_SECRETS or len(settings.jwt_secret_key) < 16:
+        logger.warning(
+            "JWT_SECRET_KEY is a weak placeholder value and must not be used in production. "
+            "Generate a strong secret: python3 -c \"import secrets; print(secrets.token_hex(32))\"",
+            extra={"request_id": "-"},
+        )
+    if not settings.token_encryption_key:
+        logger.info(
+            "TOKEN_ENCRYPTION_KEY is not set — mock integrations work without it; "
+            "required before storing real OAuth tokens. "
+            "Generate: python3 -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\"",
+            extra={"request_id": "-"},
+        )
+    else:
+        key_error = validate_encryption_key()
+        if key_error:
+            logger.warning(
+                "TOKEN_ENCRYPTION_KEY is present but invalid — %s. "
+                "OAuth token storage will fail until this is corrected. "
+                "Generate a valid key: python3 -c \"from cryptography.fernet import Fernet; "
+                "print(Fernet.generate_key().decode())\"",
+                key_error,
+                extra={"request_id": "-"},
+            )
+        else:
+            logger.info(
+                "TOKEN_ENCRYPTION_KEY is configured and valid — token storage active.",
+                extra={"request_id": "-"},
+            )
+
+
+async def shutdown_event() -> None:
+    logger.info(
+        "Shutting down %s.",
+        settings.app_name,
+        extra={"request_id": "-"},
+    )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await startup_checks()
+    yield
+    await shutdown_event()
+
+
 app = FastAPI(
     title=settings.app_name,
     version=settings.version,
     description="HELIOS — AI Life Operating System API",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # Rate limiter — 429 responses use slowapi's built-in handler.
@@ -206,8 +263,20 @@ app.include_router(
 )
 
 app.include_router(
+    history.router,
+    prefix=f"/api/{settings.api_version}/history",
+    tags=["history"],
+)
+
+app.include_router(
     email.router,
     prefix=f"/api/{settings.api_version}/email/messages",
+    tags=["email"],
+)
+
+app.include_router(
+    email.router,
+    prefix=f"/api/{settings.api_version}/email",
     tags=["email"],
 )
 
@@ -235,54 +304,23 @@ app.include_router(
     tags=["background-jobs"],
 )
 
+app.include_router(
+    assistant_context.router,
+    prefix=f"/api/{settings.api_version}/assistant/context",
+    tags=["assistant-context"],
+)
 
-@app.on_event("startup")
-async def startup_checks() -> None:
-    logger.info(
-        "Starting %s version %s in %s mode.",
-        settings.app_name,
-        settings.version,
-        settings.environment,
-        extra={"request_id": "-"},
-    )
-    if settings.jwt_secret_key in _WEAK_JWT_SECRETS or len(settings.jwt_secret_key) < 16:
-        logger.warning(
-            "JWT_SECRET_KEY is a weak placeholder value and must not be used in production. "
-            "Generate a strong secret: python3 -c \"import secrets; print(secrets.token_hex(32))\"",
-            extra={"request_id": "-"},
-        )
-    if not settings.token_encryption_key:
-        logger.info(
-            "TOKEN_ENCRYPTION_KEY is not set — mock integrations work without it; "
-            "required before storing real OAuth tokens. "
-            "Generate: python3 -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\"",
-            extra={"request_id": "-"},
-        )
-    else:
-        key_error = validate_encryption_key()
-        if key_error:
-            logger.warning(
-                "TOKEN_ENCRYPTION_KEY is present but invalid — %s. "
-                "OAuth token storage will fail until this is corrected. "
-                "Generate a valid key: python3 -c \"from cryptography.fernet import Fernet; "
-                "print(Fernet.generate_key().decode())\"",
-                key_error,
-                extra={"request_id": "-"},
-            )
-        else:
-            logger.info(
-                "TOKEN_ENCRYPTION_KEY is configured and valid — token storage active.",
-                extra={"request_id": "-"},
-            )
+app.include_router(
+    relationships.router,
+    prefix=f"/api/{settings.api_version}/relationships",
+    tags=["relationships"],
+)
 
-
-@app.on_event("shutdown")
-async def shutdown_event() -> None:
-    logger.info(
-        "Shutting down %s.",
-        settings.app_name,
-        extra={"request_id": "-"},
-    )
+app.include_router(
+    semantic_memory.router,
+    prefix=f"/api/{settings.api_version}/semantic-memory",
+    tags=["semantic-memory"],
+)
 
 
 @app.get("/", tags=["root"])

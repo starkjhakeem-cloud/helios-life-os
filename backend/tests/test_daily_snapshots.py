@@ -55,6 +55,20 @@ def test_generate_daily_snapshot_collects_user_state(client):
     )
     assert event_response.status_code == 201
 
+    focus_block_response = client.post(
+        "/api/v1/relationships/focus-blocks",
+        json={
+            "title": "Deep Study Focus",
+            "start_time": "2026-06-24T20:00:00Z",
+            "end_time": "2026-06-24T21:00:00Z",
+            "linked_goal_id": goal_id,
+            "task_ids": [planned_task.json()["id"]],
+            "source": "manual",
+        },
+        headers=headers,
+    )
+    assert focus_block_response.status_code == 201
+
     snapshot_response = client.post(
         "/api/v1/calendar/daily-snapshots/generate",
         json={
@@ -72,7 +86,9 @@ def test_generate_daily_snapshot_collects_user_state(client):
     assert snapshot["snapshot_date"] == "2026-06-24"
     assert [task["title"] for task in snapshot["tasks_planned"]] == ["Study D278"]
     assert [task["title"] for task in snapshot["tasks_completed"]] == ["Complete morning review"]
-    assert [event["title"] for event in snapshot["calendar_events"]] == ["D278 Study Block"]
+    event_titles = [event["title"] for event in snapshot["calendar_events"]]
+    assert "D278 Study Block" in event_titles
+    assert [block["title"] for block in snapshot["focus_blocks"]] == ["Deep Study Focus"]
     assert snapshot["active_goals"][0]["title"] == "Launch HELIOS"
     assert snapshot["goal_progress"][0]["progress"] == 50
     assert snapshot["daily_brief"]["summary"] == "Focus on D278."

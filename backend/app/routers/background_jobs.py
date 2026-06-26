@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.ai.context_service import ContextScope, build_context
 from app.ai.factory import get_ai_provider
+from app.ai.types import HeliosAIError
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.autonomy import AutonomyQueueItem
@@ -24,6 +25,12 @@ from app.schemas.background_job import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/background-jobs", tags=["background-jobs"])
+
+
+def _ai_error_detail(exc: RuntimeError) -> str | dict:
+    if isinstance(exc, HeliosAIError):
+        return exc.public_detail()
+    return "HELIOS AI is temporarily unavailable. Please try again shortly."
 
 
 def _job_to_out(job: BackgroundJob) -> BackgroundJobOut:
@@ -352,7 +359,7 @@ def trigger_background_job(
         logger.exception("Background job trigger failed (job_id=%s, job_type=%s)", job_id, job.job_type)
         job.status = "failed"
         db.commit()
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=_ai_error_detail(exc))
 
     job.status = "idle"
     db.commit()

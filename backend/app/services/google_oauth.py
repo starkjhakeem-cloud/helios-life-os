@@ -1,62 +1,92 @@
-"""
-Google OAuth 2.0 token exchange service.
-
-V2.16 status: _STUB_EXCHANGE = True.
-All required credential validation is active; actual HTTP calls to Google are
-bypassed until the stub flag is flipped.
-
-To activate real token exchange:
-1. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, TOKEN_ENCRYPTION_KEY in .env
-2. Set _STUB_EXCHANGE = False below
-3. Wire token encryption + DB storage in the calling router (V2.17)
-"""
 from __future__ import annotations
 
 import logging
+import json
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+
+import httpx
 
 from app.config import settings
+from app.models.integration import UserIntegration
+from app.services.integration_errors import IntegrationError, IntegrationErrorCode
+from app.services.token_encryption import TokenEncryptionError, decrypt_token, encrypt_token
 
 logger = logging.getLogger(__name__)
 
 _GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+_GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 
-# Controls whether the real HTTP call to Google is made.
-# True  → credentials are validated, but a clearly-labelled placeholder is returned.
-# False → a real POST to _GOOGLE_TOKEN_URL is performed (requires httpx installed).
-_STUB_EXCHANGE: bool = True
-
-_GOOGLE_SCOPES = [
-    "https://www.googleapis.com/auth/calendar.readonly",
-    "https://www.googleapis.com/auth/calendar.events",
-    "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/gmail.send",
-]
+CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
+GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
+USERINFO_EMAIL_SCOPE = "https://www.googleapis.com/auth/userinfo.email"
+GOOGLE_CLIENT_ID_SUFFIX = ".apps.googleusercontent.com"
+MIN_GOOGLE_CLIENT_SECRET_LENGTH = 16
 
 
-class OAuthNotConfiguredError(Exception):
-    """
-    Raised when one or more required Google OAuth env vars are absent.
-    Callers should surface this as HTTP 503 with detail=str(exc).
-    """
+def _is_placeholder(value: str | None) -> bool:
+    normalized = (value or "").strip().lower()
+    return (
+        not normalized
+        or normalized in {"placeholder", "changeme", "change-me", "your-google-client-id", "your-google-client-secret"}
+        or normalized.startswith("your-")
+    )
+
+
+class OAuthNotConfiguredError(IntegrationError):
+    def __init__(self, missing: list[str]) -> None:
+        super().__init__(
+            IntegrationErrorCode.MISSING_CREDENTIALS,
+            f"Google OAuth is not configured. Missing: {', '.join(missing)}.",
+            status_code=503,
+        )
+        self.missing = missing
 
 
 @dataclass
 class GoogleTokens:
     access_token: str
-    expires_in: int            # seconds until the access token expires
+    expires_in: int
     scope: str
     token_type: str = "Bearer"
     refresh_token: str | None = None
-    stub: bool = False         # True → placeholder tokens from _STUB_EXCHANGE mode; real tokens overwrite on OAuth activation
+    stub: bool = False
+
+    @property
+    def expires_at(self) -> datetime:
+        return datetime.now(timezone.utc) + timedelta(seconds=max(0, self.expires_in))
+
+
+@dataclass
+class GoogleAccountProfile:
+    email: str | None
+    display_name: str | None
+
+
+def configured_google_scopes() -> list[str]:
+    scopes = [scope.strip() for scope in settings.google_scopes.split() if scope.strip()]
+    return scopes or [CALENDAR_SCOPE, GMAIL_SCOPE, USERINFO_EMAIL_SCOPE]
+
+
+def scopes_for_service(service_type: str) -> list[str]:
+    configured = set(configured_google_scopes())
+    scopes: list[str] = []
+    if service_type in {"calendar", "both"} and CALENDAR_SCOPE in configured:
+        scopes.append(CALENDAR_SCOPE)
+    if service_type in {"gmail", "both"} and GMAIL_SCOPE in configured:
+        scopes.append(GMAIL_SCOPE)
+    if USERINFO_EMAIL_SCOPE in configured:
+        scopes.append(USERINFO_EMAIL_SCOPE)
+    return scopes or configured_google_scopes()
 
 
 def missing_oauth_vars() -> list[str]:
-    """Return the names of required OAuth env vars that are absent."""
     missing: list[str] = []
-    if not settings.google_client_id:
+    client_id = (settings.google_client_id or "").strip()
+    client_secret = (settings.google_client_secret or "").strip()
+    if _is_placeholder(client_id) or not client_id.endswith(GOOGLE_CLIENT_ID_SUFFIX):
         missing.append("GOOGLE_CLIENT_ID")
-    if not settings.google_client_secret:
+    if _is_placeholder(client_secret) or len(client_secret) < MIN_GOOGLE_CLIENT_SECRET_LENGTH:
         missing.append("GOOGLE_CLIENT_SECRET")
     if not settings.token_encryption_key:
         missing.append("TOKEN_ENCRYPTION_KEY")
@@ -64,54 +94,38 @@ def missing_oauth_vars() -> list[str]:
 
 
 def is_oauth_configured() -> bool:
-    """True when all required OAuth env vars are present."""
     return not missing_oauth_vars()
 
 
+def _raise_if_not_configured() -> None:
+    missing = missing_oauth_vars()
+    if missing:
+        raise OAuthNotConfiguredError(missing)
+
+
+def _token_error(resp: httpx.Response) -> IntegrationError:
+    try:
+        payload = resp.json()
+    except Exception:
+        payload = {}
+    error = payload.get("error")
+    if error in {"invalid_grant", "unauthorized_client"}:
+        code = IntegrationErrorCode.INVALID_GRANT
+        message = "Google authorization expired or was rejected. Please reconnect."
+    elif resp.status_code == 429:
+        code = IntegrationErrorCode.API_RATE_LIMITED
+        message = "Google rate limit reached. Please try again shortly."
+    elif resp.status_code >= 500:
+        code = IntegrationErrorCode.PROVIDER_UNAVAILABLE
+        message = "Google is temporarily unavailable. Please try again shortly."
+    else:
+        code = IntegrationErrorCode.UNKNOWN_ERROR
+        message = "Google OAuth failed. Please try again."
+    return IntegrationError(code, message, status_code=502)
+
+
 def exchange_authorization_code(code: str, redirect_uri: str) -> GoogleTokens:
-    """
-    Exchange a Google authorization code for access and refresh tokens.
-
-    Raises OAuthNotConfiguredError if GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
-    or TOKEN_ENCRYPTION_KEY are missing — aborting before any network call.
-
-    When _STUB_EXCHANGE is True (V2.16 default):
-    - All credentials are validated.
-    - No HTTP call is made.
-    - Returns a GoogleTokens with stub=True and placeholder token strings.
-
-    When _STUB_EXCHANGE is False:
-    - Issues a real POST to https://oauth2.googleapis.com/token via httpx.
-    - Returns a GoogleTokens with stub=False and live token values.
-    - Caller is responsible for encrypting and persisting the tokens.
-
-    Token storage is NOT performed here — the calling router owns that step.
-    """
-    absent = missing_oauth_vars()
-    if absent:
-        raise OAuthNotConfiguredError(
-            f"Google OAuth is not configured. "
-            f"Missing env var(s): {', '.join(absent)}. "
-            "Add them to backend/.env — see backend/.env.example for instructions."
-        )
-
-    if _STUB_EXCHANGE:
-        logger.warning(
-            "google_oauth: exchange_authorization_code called in STUB mode. "
-            "Credentials are configured but _STUB_EXCHANGE=True — no Google API call was made. "
-            "Set _STUB_EXCHANGE=False in app/services/google_oauth.py to activate real exchange."
-        )
-        return GoogleTokens(
-            access_token="stub_access_token__not_real__do_not_store",
-            refresh_token="stub_refresh_token__not_real__do_not_store",
-            expires_in=3600,
-            scope=" ".join(_GOOGLE_SCOPES),
-            stub=True,
-        )
-
-    # ── Real exchange — reached only when _STUB_EXCHANGE = False ─────────────
-    import httpx  # deferred import; only needed in the non-stub path
-
+    _raise_if_not_configured()
     try:
         resp = httpx.post(
             _GOOGLE_TOKEN_URL,
@@ -125,20 +139,161 @@ def exchange_authorization_code(code: str, redirect_uri: str) -> GoogleTokens:
             timeout=10.0,
         )
     except httpx.TimeoutException as exc:
-        raise RuntimeError("Google token endpoint timed out after 10 s.") from exc
+        raise IntegrationError(
+            IntegrationErrorCode.PROVIDER_UNAVAILABLE,
+            "Google OAuth timed out. Please try again.",
+            raw_error=exc,
+        ) from exc
     except httpx.RequestError as exc:
-        raise RuntimeError(f"Network error contacting Google token endpoint: {exc}") from exc
+        raise IntegrationError(
+            IntegrationErrorCode.PROVIDER_UNAVAILABLE,
+            "Could not reach Google OAuth. Please try again.",
+            raw_error=exc,
+        ) from exc
 
     if resp.status_code != 200:
-        raise RuntimeError(
-            f"Google token exchange returned HTTP {resp.status_code}: {resp.text}"
-        )
+        raise _token_error(resp)
 
     payload = resp.json()
     return GoogleTokens(
         access_token=payload["access_token"],
         refresh_token=payload.get("refresh_token"),
-        expires_in=payload.get("expires_in", 3600),
+        expires_in=int(payload.get("expires_in", 3600)),
         scope=payload.get("scope", ""),
+        token_type=payload.get("token_type", "Bearer"),
         stub=False,
     )
+
+
+def refresh_access_token(refresh_token: str) -> GoogleTokens:
+    _raise_if_not_configured()
+    try:
+        resp = httpx.post(
+            _GOOGLE_TOKEN_URL,
+            data={
+                "client_id": settings.google_client_id,
+                "client_secret": settings.google_client_secret,
+                "refresh_token": refresh_token,
+                "grant_type": "refresh_token",
+            },
+            timeout=10.0,
+        )
+    except httpx.TimeoutException as exc:
+        raise IntegrationError(
+            IntegrationErrorCode.PROVIDER_UNAVAILABLE,
+            "Google token refresh timed out. Please try again.",
+            raw_error=exc,
+        ) from exc
+    except httpx.RequestError as exc:
+        raise IntegrationError(
+            IntegrationErrorCode.PROVIDER_UNAVAILABLE,
+            "Could not refresh Google credentials. Please try again.",
+            raw_error=exc,
+        ) from exc
+
+    if resp.status_code != 200:
+        raise IntegrationError(
+            IntegrationErrorCode.REFRESH_FAILED,
+            "Google credentials need attention. Please reconnect.",
+            raw_error=_token_error(resp),
+        )
+
+    payload = resp.json()
+    return GoogleTokens(
+        access_token=payload["access_token"],
+        refresh_token=payload.get("refresh_token") or refresh_token,
+        expires_in=int(payload.get("expires_in", 3600)),
+        scope=payload.get("scope", ""),
+        token_type=payload.get("token_type", "Bearer"),
+        stub=False,
+    )
+
+
+def fetch_google_account_profile(access_token: str) -> GoogleAccountProfile:
+    try:
+        resp = httpx.get(
+            _GOOGLE_USERINFO_URL,
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=10.0,
+        )
+    except httpx.RequestError:
+        return GoogleAccountProfile(email=None, display_name=None)
+    if resp.status_code != 200:
+        return GoogleAccountProfile(email=None, display_name=None)
+    payload = resp.json()
+    return GoogleAccountProfile(
+        email=payload.get("email"),
+        display_name=payload.get("name"),
+    )
+
+
+def store_google_tokens(account: UserIntegration, tokens: GoogleTokens) -> None:
+    try:
+        account.access_token_encrypted = encrypt_token(tokens.access_token)
+        if tokens.refresh_token:
+            account.refresh_token_encrypted = encrypt_token(tokens.refresh_token)
+        account.token_expires_at = tokens.expires_at
+        if tokens.scope:
+            account.scopes = json.dumps(tokens.scope.split())
+    except TokenEncryptionError as exc:
+        raise IntegrationError(
+            IntegrationErrorCode.UNKNOWN_ERROR,
+            "Token storage failed. Check server configuration.",
+            status_code=500,
+            raw_error=exc,
+        ) from exc
+
+
+def ensure_valid_access_token(account: UserIntegration, db) -> str:
+    if not account.access_token_encrypted:
+        account.status = "needs_attention"
+        db.commit()
+        raise IntegrationError(
+            IntegrationErrorCode.TOKEN_EXPIRED,
+            "Google credentials need attention. Please reconnect.",
+            service_type=account.service_type,
+        )
+
+    now = datetime.now(timezone.utc)
+    expires_at = account.token_expires_at
+    if expires_at and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if not expires_at or expires_at <= now + timedelta(minutes=2):
+        if not account.refresh_token_encrypted:
+            account.status = "needs_attention"
+            db.commit()
+            raise IntegrationError(
+                IntegrationErrorCode.TOKEN_EXPIRED,
+                "Google credentials expired. Please reconnect.",
+                service_type=account.service_type,
+            )
+        try:
+            refresh_token = decrypt_token(account.refresh_token_encrypted)
+            refreshed = refresh_access_token(refresh_token)
+            store_google_tokens(account, refreshed)
+            account.status = "connected"
+            account.updated_at = now
+            db.commit()
+        except Exception as exc:
+            account.status = "needs_attention"
+            account.updated_at = now
+            db.commit()
+            raise IntegrationError(
+                IntegrationErrorCode.REFRESH_FAILED,
+                "Google credentials need attention. Please reconnect.",
+                service_type=account.service_type,
+                raw_error=exc if isinstance(exc, Exception) else None,
+            ) from exc
+
+    try:
+        return decrypt_token(account.access_token_encrypted)
+    except TokenEncryptionError as exc:
+        account.status = "needs_attention"
+        account.updated_at = now
+        db.commit()
+        raise IntegrationError(
+            IntegrationErrorCode.REFRESH_FAILED,
+            "Google credentials need attention. Please reconnect.",
+            service_type=account.service_type,
+            raw_error=exc,
+        ) from exc

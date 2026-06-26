@@ -16,9 +16,14 @@ class UserIntegration(Base):
         nullable=False,
         index=True,
     )
-    # Provider identifier — one of: google_calendar, gmail, outlook_calendar, outlook_mail
+    # Legacy provider identifiers include google_calendar/gmail/outlook_*.
+    # New Google OAuth rows use provider="google" plus service_type.
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
-    # "connected" or "disconnected". Extended to "pending"/"error" when real OAuth is added.
+    # New OAuth rows use "calendar" or "gmail"; legacy rows may be NULL.
+    service_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    display_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # connected | disconnected | needs_attention | syncing | error
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="disconnected")
     connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -45,5 +50,5 @@ class UserIntegration(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("user_id", "provider", name="uq_user_integration_provider"),
+        UniqueConstraint("user_id", "provider", "service_type", name="uq_user_integration_provider_service"),
     )
