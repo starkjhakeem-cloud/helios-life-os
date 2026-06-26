@@ -839,7 +839,7 @@ export default function CalendarScreen() {
               placeholder="e.g. Library, gym, Zoom"
               value={form.location}
               onChangeText={(t) => setForm((f) => ({ ...f, location: t }))}
-              autoCapitalize="none"
+              autoCapitalize="words"
             />
             <Input
               label="DESCRIPTION"

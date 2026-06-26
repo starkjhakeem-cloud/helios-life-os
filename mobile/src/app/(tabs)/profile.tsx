@@ -32,7 +32,6 @@ import {
   SessionExpiredError,
   type ReminderOut,
   type ThemePreference,
-  type BackgroundJob,
   type JobType,
   type AssistantTone,
   type LifeArea,
@@ -230,10 +229,9 @@ function NewReminderModal({ visible, onClose, onSubmit, isMutating }: NewReminde
             onChangeText={setTitle}
             placeholder="e.g. Review weekly goals"
             placeholderTextColor={colors.textMuted}
-            autoCapitalize="none"
-            autoCorrect={false}
-            spellCheck={false}
-            smartInsertDelete={false}
+            autoCapitalize="sentences"
+            autoCorrect
+            spellCheck
             maxLength={200}
           />
           <Text style={styles.fieldLabel}>NOTE (OPTIONAL)</Text>
@@ -243,10 +241,9 @@ function NewReminderModal({ visible, onClose, onSubmit, isMutating }: NewReminde
             onChangeText={setBody}
             placeholder="Additional context"
             placeholderTextColor={colors.textMuted}
-            autoCapitalize="none"
-            autoCorrect={false}
-            spellCheck={false}
-            smartInsertDelete={false}
+            autoCapitalize="sentences"
+            autoCorrect
+            spellCheck
             maxLength={500}
             multiline
           />
@@ -461,7 +458,6 @@ function UserIdModal({ visible, onClose, currentId, canChange, accessToken }: Us
                   autoCapitalize="none"
                   autoCorrect={false}
                   spellCheck={false}
-                  smartInsertDelete={false}
                   textContentType="username"
                   maxLength={24}
                 />
@@ -583,6 +579,9 @@ function PersonalInfoModal({ visible, onClose, accessToken }: PersonalInfoModalP
       setFormError(null);
       setSuccess(false);
     }
+  // Initialize the draft only when the sheet opens; adding profile fields here
+  // would reset in-progress edits after a background profile refresh.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
   function resetAndClose() {
@@ -620,7 +619,11 @@ function PersonalInfoModal({ visible, onClose, accessToken }: PersonalInfoModalP
     }
   }
 
-  const field = (label: string, key: keyof typeof draft, opts?: { placeholder?: string; optional?: boolean }) => (
+  const field = (
+    label: string,
+    key: keyof typeof draft,
+    opts?: { placeholder?: string; optional?: boolean; autoCapitalize?: "none" | "sentences" | "words" | "characters" },
+  ) => (
     <>
       <Text style={styles.fieldLabel}>
         {label}
@@ -632,10 +635,9 @@ function PersonalInfoModal({ visible, onClose, accessToken }: PersonalInfoModalP
         onChangeText={(v) => setDraft((d) => ({ ...d, [key]: v }))}
         placeholder={opts?.placeholder ?? ""}
         placeholderTextColor={colors.textMuted}
-        autoCapitalize="none"
-        autoCorrect={false}
-        spellCheck={false}
-        smartInsertDelete={false}
+        autoCapitalize={opts?.autoCapitalize ?? "words"}
+        autoCorrect={opts?.autoCapitalize !== "none"}
+        spellCheck={opts?.autoCapitalize !== "none"}
       />
     </>
   );
@@ -666,10 +668,9 @@ function PersonalInfoModal({ visible, onClose, accessToken }: PersonalInfoModalP
               onChangeText={(v) => setDraft((d) => ({ ...d, display_name: v }))}
               placeholder="How you'd like to appear"
               placeholderTextColor={colors.textMuted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              spellCheck={false}
-              smartInsertDelete={false}
+              autoCapitalize="words"
+              autoCorrect
+              spellCheck
               editable={!displayNameLocked}
             />
             <Text style={styles.displayNameHint}>
@@ -681,7 +682,7 @@ function PersonalInfoModal({ visible, onClose, accessToken }: PersonalInfoModalP
             <View style={[styles.input, { justifyContent: "center", marginBottom: spacing.md }]}>
               <Text style={{ color: colors.textMuted, fontSize: 14 }}>{user?.email ?? "—"}</Text>
             </View>
-            {field("PHONE NUMBER", "phone_number", { optional: true, placeholder: "+1 555 000 0000" })}
+            {field("PHONE NUMBER", "phone_number", { optional: true, placeholder: "+1 555 000 0000", autoCapitalize: "none" })}
             <DateTimeField
               label="DATE OF BIRTH (OPTIONAL)"
               value={draft.date_of_birth ? parseDateTimeInput(draft.date_of_birth) : null}
@@ -690,12 +691,12 @@ function PersonalInfoModal({ visible, onClose, accessToken }: PersonalInfoModalP
               placeholder="Select date"
               maximumDate={new Date()}
             />
-            {field("ADDRESS LINE 1", "address_line_1")}
-            {field("ADDRESS LINE 2", "address_line_2", { optional: true })}
-            {field("CITY", "city")}
-            {field("STATE / PROVINCE", "state")}
-            {field("ZIP / POSTAL CODE", "postal_code")}
-            {field("COUNTRY", "country")}
+            {field("ADDRESS LINE 1", "address_line_1", { autoCapitalize: "words" })}
+            {field("ADDRESS LINE 2", "address_line_2", { optional: true, autoCapitalize: "words" })}
+            {field("CITY", "city", { autoCapitalize: "words" })}
+            {field("STATE / PROVINCE", "state", { autoCapitalize: "words" })}
+            {field("ZIP / POSTAL CODE", "postal_code", { autoCapitalize: "characters" })}
+            {field("COUNTRY", "country", { autoCapitalize: "words" })}
             <Text style={styles.fieldLabel}>TIME ZONE</Text>
             <View style={[styles.input, { justifyContent: "space-between", flexDirection: "row", alignItems: "center", marginBottom: spacing.sm }]}>
               <Text style={{ color: draft.timezone ? colors.textPrimary : colors.textMuted, fontSize: 14, flex: 1 }}>
@@ -785,6 +786,9 @@ function PersonalizationModal({ visible, onClose, accessToken }: Personalization
       setFormError(null);
       setSuccess(false);
     }
+  // Initialize the draft only when the sheet opens; adding preferences here
+  // would reset in-progress edits after a background preference refresh.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
   function toggleArea(area: LifeArea) {
@@ -846,10 +850,9 @@ function PersonalizationModal({ visible, onClose, accessToken }: Personalization
               onChangeText={(v) => setDraft((d) => ({ ...d, preferred_name: v }))}
               placeholder="How HELIOS should address you"
               placeholderTextColor={colors.textMuted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              spellCheck={false}
-              smartInsertDelete={false}
+              autoCapitalize="words"
+              autoCorrect
+              spellCheck
               maxLength={100}
             />
 
@@ -886,10 +889,9 @@ function PersonalizationModal({ visible, onClose, accessToken }: Personalization
               onChangeText={(v) => setDraft((d) => ({ ...d, primary_location: v }))}
               placeholder="Auto-detected on login"
               placeholderTextColor={colors.textMuted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              spellCheck={false}
-              smartInsertDelete={false}
+              autoCapitalize="words"
+              autoCorrect
+              spellCheck
               maxLength={120}
             />
 
@@ -901,10 +903,9 @@ function PersonalizationModal({ visible, onClose, accessToken }: Personalization
               onChangeText={(v) => setDraft((d) => ({ ...d, work_focus: v }))}
               placeholder="e.g. Software engineering, law, nursing"
               placeholderTextColor={colors.textMuted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              spellCheck={false}
-              smartInsertDelete={false}
+              autoCapitalize="sentences"
+              autoCorrect
+              spellCheck
               maxLength={200}
             />
 
@@ -919,7 +920,6 @@ function PersonalizationModal({ visible, onClose, accessToken }: Personalization
               autoCapitalize="none"
               autoCorrect={false}
               spellCheck={false}
-              smartInsertDelete={false}
               maxLength={5}
               keyboardType="numbers-and-punctuation"
             />
@@ -1087,6 +1087,8 @@ export default function ProfileScreen() {
       fetchJobs(accessToken);
       profile.fetchProfile(accessToken);
     }
+  // Fetch once when authentication becomes available; store actions are stable.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
 
   useEffect(() => {
@@ -1568,7 +1570,6 @@ export default function ProfileScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 spellCheck={false}
-                smartInsertDelete={false}
                 accessibilityLabel="Profile location"
               />
               <TouchableOpacity

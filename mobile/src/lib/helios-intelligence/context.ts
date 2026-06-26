@@ -171,14 +171,14 @@ export const DEMO_CONTEXT: HeliosIntelligenceContext = {
 // inside each generator via the useDemoFallback helper.
 
 export function buildIntelligenceContext(input: {
-  goals: Array<{
+  goals: {
     id: string;
     title: string;
     status?: string | null;
     target_date?: string | null;
     description?: string | null;
-  }>;
-  tasks: Array<{
+  }[];
+  tasks: {
     id: string;
     title: string;
     status?: string | null;
@@ -187,14 +187,14 @@ export function buildIntelligenceContext(input: {
     updated_at?: string | null;
     linked_goal_id?: string | null;
     description?: string | null;
-  }>;
-  notifications: Array<{
+  }[];
+  notifications: {
     id: string;
     title: string;
     body?: string | null;
     is_read: boolean;
     event_type: string;
-  }>;
+  }[];
   calendarEvents?: HeliosCalendarEvent[];
   profile: { name: string; location: string; timezone: string };
   appStatus: {

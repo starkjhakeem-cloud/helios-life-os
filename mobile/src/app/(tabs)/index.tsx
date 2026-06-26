@@ -37,7 +37,6 @@ import { useTheme } from "../../theme/ThemeContext";
 import type { ThemeColors } from "../../theme/theme";
 import {
   formatHeroDate,
-  formatHeroTime,
   formatHeroTimeLocation,
   getTimeBasedGreeting,
 } from "../../utils/homeFormatting";
@@ -158,17 +157,6 @@ function getAssistantStatus({
   };
 }
 
-function getToneColor(tone: StatusTone, colors: ThemeColors): string {
-  switch (tone) {
-    case "danger":    return colors.danger;
-    case "warning":   return colors.warning;
-    case "attention": return colors.warning;
-    case "syncing":   return colors.accentCyan;
-    case "focus":     return colors.accent;
-    case "active":    return colors.accentCyan;
-  }
-}
-
 export default function HomeScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -176,10 +164,9 @@ export default function HomeScreen() {
   const now = useCurrentDateTime();
   const accessToken = useAuthStore((s) => s.accessToken);
   const authUserName = useAuthStore((s) => s.user?.name ?? "Operator");
-  const preferredName = useSettingsStore((s) => s.preferred_name);
   const profileDisplayName = useProfileStore((s) => s.display_name);
-  // Priority: preferred_name (set by user for AI/greeting) → profile display_name → auth name
-  const userName = preferredName ?? profileDisplayName ?? authUserName;
+  // Hero identity: Display Name → Account Name. Preferred Name is conversational-only (AI/greeting).
+  const userName = profileDisplayName ?? authUserName;
 
   const goals = useGoalsStore((s) => s.goals);
   const goalsError = useGoalsStore((s) => s.error);
@@ -278,7 +265,6 @@ export default function HomeScreen() {
   const greeting = getTimeBasedGreeting(now);
   const dateStr = formatHeroDate(now);
   const timeLocationStr = formatHeroTimeLocation(now, location, timeFormat);
-  const timeStr = formatHeroTime(now, timeFormat);
 
   const displayName = userName;
 
@@ -847,6 +833,71 @@ function DailyCommand({
   const s = useMemo(() => createStyles(colors), [colors]);
   const router = useRouter();
 
+  // ── Single source of truth: derive all displayed counts from backendBrief ────
+  //
+  // When backendBrief is available, the summary text (compact_text/summary) AND
+  // the stat chips below are both derived from the same API response object.
+  // This guarantees they can never disagree.  The local intelligence-engine
+  // brief (brief.stats) is used only as a fallback when no backend data exists.
+
+  type BriefStatLocal = { label: string; value: string };
+
+  const backendStats: BriefStatLocal[] = useMemo(() => {
+    if (!backendBrief) return [];
+    const activeGoals = backendBrief.goals.length;
+    const overdueTasks = backendBrief.tasks.filter(
+      (t) => (t as Record<string, unknown>).category === "overdue",
+    ).length;
+    const dueTodayTasks = backendBrief.tasks.filter(
+      (t) => (t as Record<string, unknown>).category === "due_today",
+    ).length;
+    const emailCount = backendBrief.email.length;
+
+    const stats: BriefStatLocal[] = [];
+    stats.push({
+      label: activeGoals === 1 ? "active goal" : "active goals",
+      value: String(activeGoals),
+    });
+    stats.push({
+      label: dueTodayTasks === 1 ? "task due today" : "tasks due today",
+      value: String(dueTodayTasks),
+    });
+    if (overdueTasks > 0) {
+      stats.push({
+        label: overdueTasks === 1 ? "overdue task" : "overdue tasks",
+        value: String(overdueTasks),
+      });
+    }
+    if (emailCount > 0) {
+      stats.push({
+        label: emailCount === 1 ? "important email" : "important emails",
+        value: String(emailCount),
+      });
+    }
+    return stats;
+  }, [backendBrief]);
+
+  // DEV-only consistency check — warns if summary text and stat chips disagree.
+  if (__DEV__ && backendBrief) {
+    const summaryGoalMatch = backendBrief.summary.match(/(\d+)\s+active\s+goal/i);
+    if (summaryGoalMatch) {
+      const summaryGoalCount = parseInt(summaryGoalMatch[1], 10);
+      const chipGoalCount = backendBrief.goals.length;
+      if (summaryGoalCount !== chipGoalCount) {
+        console.warn(
+          "[HELIOS][DailyBrief] CONSISTENCY MISMATCH: summary says",
+          summaryGoalCount,
+          "active goals but goals array has",
+          chipGoalCount,
+          "— both should come from the same backend snapshot.",
+        );
+      }
+    }
+  }
+
+  // Stats to render: backend-derived when available, local engine as fallback.
+  const displayStats: BriefStatLocal[] = backendBrief ? backendStats : brief.stats;
+
   // Content resolution — backend brief takes priority when available.
   const bodyText = isGenerating
     ? "Generating your Daily Brief…"
@@ -864,7 +915,7 @@ function DailyCommand({
   const firstWarning =
     backendBrief && backendBrief.warnings.length > 0 ? backendBrief.warnings[0] : null;
 
-  const showStats = !isGenerating && brief.stats.length > 0;
+  const showStats = !isGenerating && displayStats.length > 0;
   const isBusy = isLoadingBrief || isGenerating;
 
   return (
@@ -928,10 +979,10 @@ function DailyCommand({
         {bodyText}
       </Text>
 
-      {/* Stats row — local data, always accurate */}
+      {/* Stats row — sourced from backendBrief when available, local fallback otherwise */}
       {showStats && (
         <View style={s.commandStatsRow}>
-          {brief.stats.map((stat) => (
+          {displayStats.map((stat) => (
             <View key={stat.label} style={s.commandStatItem}>
               <View style={s.commandStatDot} />
               <Text style={s.commandStatText}>

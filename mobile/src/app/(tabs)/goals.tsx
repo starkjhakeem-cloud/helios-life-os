@@ -230,7 +230,11 @@ export default function GoalsScreen() {
     if (!form.title.trim()) { setFormError("Goal title is required."); return; }
     setFormError(null);
     const payload = { title: form.title.trim(), description: form.description.trim() || undefined, target_date: form.target_date.trim() || undefined };
-    editingGoal ? await updateGoal(accessToken, editingGoal.id, payload) : await createGoal(accessToken, payload);
+    if (editingGoal) {
+      await updateGoal(accessToken, editingGoal.id, payload);
+    } else {
+      await createGoal(accessToken, payload);
+    }
     closeModal();
   }
 
@@ -365,7 +369,7 @@ export default function GoalsScreen() {
             <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>{editingGoal ? "EDIT GOAL" : "NEW GOAL"}</Text>
             <Input label="GOAL TITLE" placeholder="e.g. Launch HELIOS" value={form.title} onChangeText={(t) => setForm((f) => ({ ...f, title: t }))} error={formError ?? undefined} autoFocus />
-            <Input label="DESCRIPTION" placeholder="What does success look like?" value={form.description} onChangeText={(t) => setForm((f) => ({ ...f, description: t }))} multiline style={styles.multiline} />
+            <Input label="DESCRIPTION" placeholder="What does success look like?" value={form.description} onChangeText={(t) => setForm((f) => ({ ...f, description: t }))} multiline style={styles.multiline} autoCapitalize="sentences" />
             <Input label="TARGET DATE" placeholder="e.g. 2027-06-01" value={form.target_date} onChangeText={(t) => setForm((f) => ({ ...f, target_date: t }))} autoCapitalize="none" />
             <View style={styles.sheetActions}>
               <Button label="CANCEL" variant="secondary" onPress={closeModal} />

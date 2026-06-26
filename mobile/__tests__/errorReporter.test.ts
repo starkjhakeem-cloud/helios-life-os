@@ -17,6 +17,7 @@ describe("errorReporter", () => {
 
   test("logs handled network failures without triggering LogBox in development", () => {
     (global as any).__DEV__ = true;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { reportError } = require("../src/services/errorReporter") as typeof import("../src/services/errorReporter");
 
     reportError(new Error("Request timed out. Check your connection."), "Network request failed", {
@@ -36,6 +37,7 @@ describe("errorReporter", () => {
 
   test("keeps uncaught UI failures on console.error", () => {
     (global as any).__DEV__ = true;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { reportError } = require("../src/services/errorReporter") as typeof import("../src/services/errorReporter");
     const error = new Error("boom");
 

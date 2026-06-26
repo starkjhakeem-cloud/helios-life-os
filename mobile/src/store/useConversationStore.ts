@@ -6,8 +6,7 @@ import {
   type ConversationSummary,
   type StoredMessage,
 } from "../services/conversationService";
-import type { RecommendedAction } from "./useAIStore";
-import type { ChatMessage } from "./useAIStore";
+import type { ChatMessage, RecommendedAction } from "./useAIStore";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

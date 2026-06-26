@@ -210,7 +210,6 @@ visible, onClose, onSubmit, isMutating }: AddMemoryModalProps) {
             autoCapitalize="none"
             autoCorrect={false}
             spellCheck={false}
-            smartInsertDelete={false}
             multiline
             maxLength={2000}
             autoFocus

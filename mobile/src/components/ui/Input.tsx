@@ -15,10 +15,9 @@ const Input = forwardRef<TextInput, Props>(function Input(
     style,
     onFocus,
     onBlur,
-    autoCapitalize = "none",
-    autoCorrect = false,
-    spellCheck = false,
-    smartInsertDelete = false,
+    autoCapitalize = "sentences",
+    autoCorrect = true,
+    spellCheck = true,
     ...rest
   },
   ref,
@@ -54,7 +53,6 @@ const Input = forwardRef<TextInput, Props>(function Input(
         autoCapitalize={autoCapitalize}
         autoCorrect={autoCorrect}
         spellCheck={spellCheck}
-        smartInsertDelete={smartInsertDelete}
         onFocus={(e) => {
           setFocused(true);
           onFocus?.(e);

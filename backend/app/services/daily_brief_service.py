@@ -495,19 +495,60 @@ class DailyBriefService:
         goals: int,
         next_best: dict[str, Any],
     ) -> str:
+        recommendation = (
+            f" Start with {next_best.get('title')}."
+            if next_best.get("title") and next_best.get("type") != "none"
+            else ""
+        )
+
+        # Fully empty state — nothing at all
         if not any([events, emails, due, overdue, goals]):
-            return "Your schedule is open and HELIOS has not found urgent work. This is a good day to choose one meaningful focus block."
-        parts = [
-            f"{events} calendar event{'s' if events != 1 else ''}",
-            f"{emails} important Gmail item{'s' if emails != 1 else ''}",
-            f"{due} task{'s' if due != 1 else ''} due today",
-        ]
-        if overdue:
-            parts.append(f"{overdue} overdue task{'s' if overdue != 1 else ''}")
-        if goals:
-            parts.append(f"{goals} active goal{'s' if goals != 1 else ''}")
-        recommendation = f" Start with {next_best.get('title')}." if next_best.get("title") and next_best.get("type") != "none" else ""
-        return f"HELIOS found {', '.join(parts)}.{recommendation}"
+            return "Your schedule is open today. No meetings, overdue work, or urgent email require immediate attention."
+
+        # Open calendar + no urgent work but goals exist
+        if not events and not emails and not due and not overdue and goals:
+            goal_phrase = f"{goals} active {'goal' if goals == 1 else 'goals'}"
+            return f"Your schedule is open today. Focus on your {goal_phrase}.{recommendation}"
+
+        # Build a human-readable summary from whatever is non-zero
+        sentences: list[str] = []
+
+        # Calendar
+        if events == 0:
+            sentences.append("No meetings today.")
+        elif events == 1:
+            sentences.append("You have 1 meeting today.")
+        else:
+            sentences.append(f"You have {events} meetings today.")
+
+        # Tasks
+        if due > 0 and overdue > 0:
+            sentences.append(
+                f"{due} {'task is' if due == 1 else 'tasks are'} due today and "
+                f"{overdue} {'is' if overdue == 1 else 'are'} overdue."
+            )
+        elif due > 0:
+            sentences.append(
+                f"{due} {'task is' if due == 1 else 'tasks are'} due today."
+            )
+        elif overdue > 0:
+            sentences.append(
+                f"{overdue} overdue {'task needs' if overdue == 1 else 'tasks need'} attention."
+            )
+
+        # Email
+        if emails > 0:
+            sentences.append(
+                f"{emails} important {'email requires' if emails == 1 else 'emails require'} review."
+            )
+
+        # Goals — only mention when there are active goals
+        if goals > 0:
+            sentences.append(
+                f"You have {goals} active {'goal' if goals == 1 else 'goals'} in progress."
+            )
+
+        return " ".join(sentences) + recommendation
 
     def _compact_text(
         self,
@@ -517,20 +558,29 @@ class DailyBriefService:
         overdue: int,
         next_best: dict[str, Any],
     ) -> str:
-        task_phrase = f"{due} task{'s' if due != 1 else ''} due today"
-        if overdue:
-            task_phrase += f" and {overdue} overdue"
         action = next_best.get("title") if next_best.get("type") != "none" else None
+
+        # Fully empty state
+        if not any([events, emails, due, overdue]):
+            if action:
+                return f"Your schedule is clear. HELIOS recommends starting with {action}."
+            return "Your schedule is open today. No urgent items require attention."
+
+        # Build compact parts — skip zeros silently
+        parts: list[str] = []
+        if events > 0:
+            parts.append(f"{events} {'event' if events == 1 else 'events'}")
+        if emails > 0:
+            parts.append(f"{emails} {'email' if emails == 1 else 'emails'}")
+        if due > 0:
+            parts.append(f"{due} due today")
+        if overdue > 0:
+            parts.append(f"{overdue} overdue")
+
+        body = ", ".join(parts) if parts else "nothing urgent"
         if action:
-            return (
-                f"HELIOS found {events} calendar event{'s' if events != 1 else ''}, "
-                f"{emails} important email{'s' if emails != 1 else ''}, {task_phrase}, "
-                f"and recommends starting with {action}."
-            )
-        return (
-            f"HELIOS found {events} calendar event{'s' if events != 1 else ''}, "
-            f"{emails} important email{'s' if emails != 1 else ''}, and {task_phrase}."
-        )
+            return f"HELIOS found {body} and recommends starting with {action}."
+        return f"HELIOS found {body}."
 
     def _insights(self, context: dict[str, Any], upcoming_count: int) -> list[str]:
         insights: list[str] = []
@@ -672,4 +722,3 @@ class DailyBriefService:
             snapshot.daily_brief = brief
             snapshot.updated_at = now
         self.db.commit()
-

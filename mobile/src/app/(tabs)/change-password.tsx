@@ -74,7 +74,6 @@ function SecureField({
           autoCapitalize="none"
           autoCorrect={false}
           spellCheck={false}
-          smartInsertDelete={false}
           autoComplete="off"
           textContentType={textContentType}
           returnKeyType={returnKeyType}

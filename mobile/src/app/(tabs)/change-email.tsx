@@ -59,7 +59,6 @@ function Field({
           autoCapitalize="none"
           autoCorrect={false}
           spellCheck={false}
-          smartInsertDelete={false}
           autoComplete={secure ? "off" : "email"}
           textContentType={secure ? "password" : "emailAddress"}
           keyboardType={secure ? "default" : "email-address"}

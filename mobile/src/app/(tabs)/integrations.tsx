@@ -438,19 +438,8 @@ export default function IntegrationsScreen() {
     const token = explicitToken ?? authState.accessToken;
     const params = getOAuthReturnParams(url);
     const success = params.success === "true";
-    const serviceType = params.service_type;
-    const services = params.services || serviceType || "Google";
     const message = params.message;
     const code = params.code;
-
-    console.log("[integrations] google_oauth.return", {
-      success,
-      serviceType: serviceType ?? null,
-      services,
-      code: code ?? null,
-      hasAccessToken: !!token,
-      clientTime: new Date().toISOString(),
-    });
 
     if (token) {
       await fetchIntegrations(token);
@@ -523,22 +512,6 @@ export default function IntegrationsScreen() {
     const token = authState.accessToken;
     const user = authState.user;
     const serviceType = providerToServiceType(provider);
-    const endpoint = isReconnect
-      ? `/api/v1/integrations/google/reconnect-url?service_type=${serviceType}`
-      : `/api/v1/integrations/google/auth-url?service_type=${serviceType}`;
-
-    console.log("[integrations] google_oauth.start", {
-      provider,
-      serviceType,
-      isReconnect,
-      isLoggedIn: !!user,
-      userId: user?.id ?? null,
-      hasAccessToken: !!token,
-      tokenLength: token?.length ?? 0,
-      authorizationHeader: token ? "Bearer <redacted>" : null,
-      endpoint,
-      clientTime: new Date().toISOString(),
-    });
 
     if (!user || !token) {
       Alert.alert(
@@ -554,18 +527,6 @@ export default function IntegrationsScreen() {
       const data = isReconnect
         ? await integrationService.getReconnectUrl(token, serviceType)
         : await integrationService.getAuthUrl(token, serviceType);
-
-      console.log("[integrations] google_oauth.response", {
-        endpoint,
-        status: 200,
-        configured: data.configured,
-        hasUrl: !!data.url,
-        urlHost: getUrlHost(data.url),
-        serviceType: data.service_type,
-        scopeCount: data.scopes?.length ?? 0,
-        note: data.note,
-        clientTime: new Date().toISOString(),
-      });
 
       if (!data.configured) {
         Alert.alert(
@@ -596,14 +557,6 @@ export default function IntegrationsScreen() {
         return;
       }
 
-      if (result.type === "cancel" || result.type === "dismiss") {
-        console.log("[integrations] google_oauth.dismissed", {
-          endpoint,
-          resultType: result.type,
-          clientTime: new Date().toISOString(),
-        });
-      }
-
       // Refresh status after the user returns from the browser session, even if
       // the platform only reports a dismiss event.
       await fetchIntegrations(token);
@@ -624,13 +577,6 @@ export default function IntegrationsScreen() {
     } catch (err) {
       const status = err instanceof ApiError ? err.status : undefined;
       const message = err instanceof Error ? err.message : "Something went wrong.";
-      console.log("[integrations] google_oauth.error", {
-        endpoint,
-        status: status ?? null,
-        errorName: err instanceof Error ? err.name : "UnknownError",
-        message,
-        clientTime: new Date().toISOString(),
-      });
 
       if (err instanceof SessionExpiredError || status === 401) {
         Alert.alert(
@@ -769,14 +715,6 @@ function friendlyOAuthError(rawMessage: string): string {
     return "Your session expired. Please try connecting again.";
   }
   return "We couldn't complete the connection. Please try again.";
-}
-
-function getUrlHost(url: string): string | null {
-  try {
-    return new URL(url).host;
-  } catch {
-    return null;
-  }
 }
 
 function isGoogleOAuthReturnUrl(url: string): boolean {

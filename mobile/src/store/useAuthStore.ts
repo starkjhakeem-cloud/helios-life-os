@@ -122,14 +122,9 @@ export const useAuthStore = create<AuthState>()(
       error: null,
 
       login: async (email, password) => {
-        console.log("[auth] login.attempt", { email, clientTime: new Date().toISOString() });
         set({ isLoading: true, error: null, sessionExpired: false });
         try {
           const { user, access_token, refresh_token } = await authService.login(email, password);
-          console.log("[auth] login.success storing tokens", {
-            userId: user.id,
-            clientTime: new Date().toISOString(),
-          });
           // Explicitly clear sessionExpired in the success path — a concurrent revalidate()
           // running with stale tokens from a previous session could set it to true while
           // this login request is in-flight; the fresh login wins.
@@ -147,13 +142,11 @@ export const useAuthStore = create<AuthState>()(
         } catch (err) {
           const message =
             err instanceof ApiError ? err.message : "Login failed. Please try again.";
-          console.log("[auth] login.failed", { message, clientTime: new Date().toISOString() });
           set({ error: message, isLoading: false });
         }
       },
 
       signup: async (name, email, password) => {
-        console.log("[auth] signup.attempt", { email, clientTime: new Date().toISOString() });
         set({ isLoading: true, error: null, sessionExpired: false });
         try {
           const { user, access_token, refresh_token } = await authService.signup(
@@ -161,10 +154,6 @@ export const useAuthStore = create<AuthState>()(
             email,
             password,
           );
-          console.log("[auth] signup.success storing tokens", {
-            userId: user.id,
-            clientTime: new Date().toISOString(),
-          });
           set({
             user,
             accessToken: access_token,
@@ -179,13 +168,11 @@ export const useAuthStore = create<AuthState>()(
         } catch (err) {
           const message =
             err instanceof ApiError ? err.message : "Signup failed. Please try again.";
-          console.log("[auth] signup.failed", { message, clientTime: new Date().toISOString() });
           set({ error: message, isLoading: false });
         }
       },
 
       logout: () => {
-        console.log("[auth] logout", { clientTime: new Date().toISOString() });
         resetAllStores();
         set({ user: null, accessToken: null, refreshToken: null, sessionExpired: false, error: null });
       },
@@ -210,43 +197,28 @@ export const useAuthStore = create<AuthState>()(
 
       refreshSession: async (): Promise<string | null> => {
         const { accessToken: accessTokenAtStart, refreshToken } = get();
-        console.log("[auth] refreshSession.attempt", {
-          hasRefreshToken: !!refreshToken,
-          clientTime: new Date().toISOString(),
-        });
 
         if (!refreshToken) {
           // No refresh token at all. Only mark session as expired when there is
           // also no valid access token — a concurrent login() may have just stored
           // a fresh access token while this refresh attempt was queued.
           if (!get().accessToken) {
-            console.log("[auth] refreshSession.no_token — no active session, skipping session-expired");
             set({ user: null, accessToken: null, refreshToken: null, sessionExpired: true });
-          } else {
-            console.log("[auth] refreshSession.no_refresh_token but active access token exists — ignoring (concurrent login succeeded)");
           }
           return null;
         }
 
         try {
           const { user, access_token, refresh_token } = await authService.refresh(refreshToken);
-          console.log("[auth] refreshSession.success", {
-            userId: user.id,
-            clientTime: new Date().toISOString(),
-          });
           set({ user, accessToken: access_token, refreshToken: refresh_token });
           return access_token;
-        } catch (err) {
-          const message = err instanceof ApiError ? err.message : "unknown";
-          console.log("[auth] refreshSession.failed", { message, clientTime: new Date().toISOString() });
-
+        } catch {
           // Before evicting the session, check if a concurrent login() succeeded
           // while this refresh was in-flight. A stale persisted access token is
           // still present during normal refresh failure, so only preserve the
           // session when the token changed after this refresh attempt started.
           const latestAccessToken = get().accessToken;
           if (latestAccessToken && latestAccessToken !== accessTokenAtStart) {
-            console.log("[auth] refreshSession.failed but concurrent login succeeded — not clearing session");
             return null;
           }
 
@@ -264,13 +236,7 @@ export const useAuthStore = create<AuthState>()(
 
       revalidate: async () => {
         const { accessToken, refreshToken } = get();
-        console.log("[auth] revalidate.start", {
-          hasAccessToken: !!accessToken,
-          hasRefreshToken: !!refreshToken,
-          clientTime: new Date().toISOString(),
-        });
         if (!accessToken && !refreshToken) {
-          console.log("[auth] revalidate.skip — no stored tokens");
           return;
         }
 
@@ -278,7 +244,6 @@ export const useAuthStore = create<AuthState>()(
           // Try the access token first. If it's valid we get the user back.
           if (accessToken) {
             const user = await authService.me(accessToken);
-            console.log("[auth] revalidate.access_token_valid userId=%s", user.id);
             set({ user });
             // Prefetch user-specific data while we have a valid token.
             useSettingsStore.getState().fetchPreferences(accessToken).catch(() => {});
@@ -289,11 +254,6 @@ export const useAuthStore = create<AuthState>()(
           const isAuthError =
             err instanceof SessionExpiredError ||
             (err instanceof ApiError && err.status === 401);
-          console.log("[auth] revalidate.access_token_failed", {
-            isAuthError,
-            message: err instanceof ApiError ? err.message : String(err),
-            clientTime: new Date().toISOString(),
-          });
           if (!isAuthError) {
             // Non-auth error (network down, timeout) — don't clear the session.
             return;
@@ -301,21 +261,16 @@ export const useAuthStore = create<AuthState>()(
           // The executeRequest 401 interceptor already called refreshSession() here.
           // If it set sessionExpired, bail — don't call refreshSession() a second time.
           if (get().sessionExpired) {
-            console.log("[auth] revalidate — interceptor already handled refresh failure, bailing");
             return;
           }
         }
 
         // Access token failed AND the interceptor did not already handle refresh
         // (e.g. access token was absent but refresh token exists). Try refreshing.
-        console.log("[auth] revalidate.attempting_refresh", { clientTime: new Date().toISOString() });
         const newToken = await get().refreshSession();
         if (newToken) {
-          console.log("[auth] revalidate.refresh_succeeded");
           useSettingsStore.getState().fetchPreferences(newToken).catch(() => {});
           useProfileStore.getState().fetchProfile(newToken).catch(() => {});
-        } else {
-          console.log("[auth] revalidate.refresh_failed — session cleared");
         }
       },
     }),

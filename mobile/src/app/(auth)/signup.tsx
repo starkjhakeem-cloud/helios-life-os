@@ -52,7 +52,7 @@ export default function SignupScreen() {
           value={name}
           onChangeText={(t) => { setName(t); setLocalError(null); }}
           placeholder="Operator name"
-          autoCapitalize="none"
+          autoCapitalize="words"
           autoComplete="name"
           returnKeyType="next"
           onSubmitEditing={() => emailRef.current?.focus()}

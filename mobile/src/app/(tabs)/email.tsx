@@ -427,7 +427,6 @@ export default function EmailScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             spellCheck={false}
-            smartInsertDelete={false}
             clearButtonMode="while-editing"
             accessibilityLabel="Search Inbox"
           />

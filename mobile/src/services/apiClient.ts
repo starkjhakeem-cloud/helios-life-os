@@ -152,16 +152,10 @@ async function executeRequest<T>(
   // here would immediately set sessionExpired: true and show the "Session Expired"
   // dialog even while the user is actively trying to log in.
   if (response.status === 401 && token !== undefined) {
-    console.log(
-      `[apiClient] 401 on authenticated ${method} ${endpoint} — attempting token refresh`,
-      { clientTime: new Date().toISOString() },
-    );
     const newToken = await attemptRefresh();
     if (!newToken) {
-      console.log("[apiClient] token refresh failed — throwing SessionExpiredError");
       throw new SessionExpiredError();
     }
-    console.log("[apiClient] token refresh succeeded — retrying request");
     // Retry once with the refreshed token.
     response = await makeFetch(method, endpoint, newToken, body);
   }

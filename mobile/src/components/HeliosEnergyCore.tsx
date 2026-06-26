@@ -242,11 +242,13 @@ function HeliosEnergyCore({
     // Orbital rings: proportional-arc handoff (never setValue(0) mid-cycle)
     smartSpin(spin1, spin1Ref, outerDur, first);
     smartSpin(spin2, spin2Ref, counterDur, first);
+    const spin1Loop = spin1Ref.current;
+    const spin2Loop = spin2Ref.current;
 
     // Breath animations: stop and restart from current value — no hard reset.
     // ease-in-out at the extremes means the transition is imperceptible.
     pulseRef.current?.stop();
-    pulseRef.current = Animated.loop(
+    const pulseLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, {
           toValue: 1,
@@ -262,10 +264,11 @@ function HeliosEnergyCore({
         }),
       ]),
     );
-    pulseRef.current.start();
+    pulseRef.current = pulseLoop;
+    pulseLoop.start();
 
     ringGlowRef.current?.stop();
-    ringGlowRef.current = Animated.loop(
+    const ringGlowLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(ringGlow, {
           toValue: 1,
@@ -281,13 +284,14 @@ function HeliosEnergyCore({
         }),
       ]),
     );
-    ringGlowRef.current.start();
+    ringGlowRef.current = ringGlowLoop;
+    ringGlowLoop.start();
 
     return () => {
-      spin1Ref.current?.stop();
-      spin2Ref.current?.stop();
-      pulseRef.current?.stop();
-      ringGlowRef.current?.stop();
+      spin1Loop?.stop();
+      spin2Loop?.stop();
+      pulseLoop.stop();
+      ringGlowLoop.stop();
     };
   }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
 

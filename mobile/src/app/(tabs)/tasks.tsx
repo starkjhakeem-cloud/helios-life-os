@@ -366,7 +366,6 @@ export default function TasksScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             spellCheck={false}
-            smartInsertDelete={false}
             clearButtonMode="while-editing"
           />
         </View>
@@ -538,7 +537,7 @@ export default function TasksScreen() {
             <Input label="TASK TITLE" placeholder="What needs to get done?" value={form.title}
               onChangeText={t => setForm(f => ({ ...f, title: t }))} error={formError ?? undefined} autoFocus />
             <Input label="DESCRIPTION" placeholder="Optional context" value={form.description}
-              onChangeText={t => setForm(f => ({ ...f, description: t }))} multiline style={{ height: 68, textAlignVertical: "top" }} />
+              onChangeText={t => setForm(f => ({ ...f, description: t }))} multiline style={{ height: 68, textAlignVertical: "top" }} autoCapitalize="sentences" />
 
             <Text style={styles.fieldLabel}>PRIORITY</Text>
             <View style={styles.priorityRow}>

@@ -164,7 +164,7 @@ function StreamingCursor({ colors }: { colors: ThemeColors }) {
       ])
     ).start();
     return () => blink.stopAnimation();
-  }, []);
+  }, [blink]);
 
   return (
     <Animated.Text
@@ -482,7 +482,7 @@ function AssistantBubble({
   // Fade in on mount
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 280, useNativeDriver: true }).start();
-  }, []);
+  }, [fadeAnim]);
 
   const topAction     = message.recommended_actions?.[0] ?? null;
   const suggestedList = message.suggested_actions;
@@ -619,10 +619,9 @@ function MessageComposer({
         onChangeText={onChange}
         placeholder="Ask HELIOS anything..."
         placeholderTextColor={colors.textMuted}
-        autoCapitalize="none"
-        autoCorrect={false}
-        spellCheck={false}
-        smartInsertDelete={false}
+        autoCapitalize="sentences"
+        autoCorrect
+        spellCheck
         multiline
         maxLength={2000}
         returnKeyType="send"
@@ -815,7 +814,7 @@ export default function AssistantScreen() {
 
   useEffect(() => {
     if (accessToken) initializeConversation(accessToken);
-  }, [accessToken]);
+  }, [accessToken, initializeConversation]);
 
   // Smart auto-scroll: only pull to bottom when user is already near bottom
   // or when a new user message was just added (we always want to see our own sends).
@@ -825,11 +824,11 @@ export default function AssistantScreen() {
     if (isAtBottomRef.current || userJustSent || isSending) {
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
     }
-  }, [currentMessages.length, isSending]);
+  }, [currentMessages, isSending]);
 
   useEffect(() => {
     if (historyVisible && accessToken) fetchConversations(accessToken);
-  }, [historyVisible]);
+  }, [accessToken, fetchConversations, historyVisible]);
 
   const handleScroll = useCallback((e: any) => {
     const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;

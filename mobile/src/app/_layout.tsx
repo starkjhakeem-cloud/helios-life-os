@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, ActivityIndicator, Alert, TextInput, type TextInputProps } from 'react-native';
+import { View, ActivityIndicator, Alert } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -8,18 +8,6 @@ import { ErrorBoundary } from '../components/ErrorBoundary';
 import { useBackendHealth } from '../hooks/useBackendHealth';
 import { useAuthStore } from '../store';
 import { ThemeProvider, useTheme } from '../theme/ThemeContext';
-
-const textInputWithDefaults = TextInput as typeof TextInput & {
-  defaultProps?: Partial<TextInputProps>;
-};
-
-textInputWithDefaults.defaultProps = {
-  ...textInputWithDefaults.defaultProps,
-  autoCapitalize: 'none',
-  autoCorrect: false,
-  spellCheck: false,
-  smartInsertDelete: false,
-};
 
 export default function RootLayout() {
   return (
