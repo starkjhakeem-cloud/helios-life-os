@@ -34,7 +34,7 @@ export type { InboxNotification, NotificationEventType } from "../services/inbox
 export type { AutonomyAuditLogEntry, AutonomyQueueItem, AutonomyExecuteResult, SuggestionItem, DailyPlan, FocusBlock, PriorityTask, AutonomyRule, AutonomyRuleCreate, AutonomyRuleUpdate, QueueStatus, RiskLevel } from "../services/autonomyService";
 export { useProfileStore } from "./useProfileStore";
 export type { ProfileOut, ProfileUpdate, UserIdCheckResponse } from "../services/profileService";
-export type { AssistantTone, LifeArea, TimeFormat } from "../services/settingsService";
+export type { AssistantNamePreference, AssistantTone, LifeArea, TimeFormat } from "../services/settingsService";
 export { useDailyBriefStore } from "./useDailyBriefStore";
 export type { BackendDailyBrief } from "../services/dailyBriefService";
 export type { BriefErrorCode } from "./useDailyBriefStore";

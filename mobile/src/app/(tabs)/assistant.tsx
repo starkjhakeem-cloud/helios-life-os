@@ -783,9 +783,21 @@ export default function AssistantScreen() {
   const navClearance = insets.bottom + NAV_PILL_STATIC;
   const accessToken = useAuthStore((s) => s.accessToken);
 
-  const preferredName   = useSettingsStore((s) => s.preferred_name);
-  const profileDispName = useProfileStore((s) => s.display_name);
-  const displayName     = preferredName ?? profileDispName ?? "there";
+  // ── Identity resolution for AI greeting ──────────────────────────────────────
+  // assistant_name_preference controls which identity field HELIOS uses.
+  // The home hero card always uses display_name; this chain is AI-conversation only.
+  const assistantNamePref = useSettingsStore((s) => s.assistant_name_preference ?? "display_name");
+  const preferredName     = useSettingsStore((s) => s.preferred_name);
+  const profileDispName   = useProfileStore((s) => s.display_name);
+  const profileFirstName  = useProfileStore((s) => s.first_name);
+  const authUserName      = useAuthStore((s) => s.user?.name ?? null);
+
+  const displayName = (() => {
+    if (assistantNamePref === "preferred_name" && preferredName) return preferredName;
+    if (assistantNamePref === "first_name" && profileFirstName) return profileFirstName;
+    // Default: display_name, then fall through the full chain
+    return profileDispName ?? preferredName ?? profileFirstName ?? authUserName ?? "there";
+  })();
 
   const {
     currentConversationId,

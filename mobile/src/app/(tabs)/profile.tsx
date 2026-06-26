@@ -33,6 +33,7 @@ import {
   type ReminderOut,
   type ThemePreference,
   type JobType,
+  type AssistantNamePreference,
   type AssistantTone,
   type LifeArea,
 } from "../../store";
@@ -59,6 +60,12 @@ const TONE_OPTIONS: { value: AssistantTone; label: string }[] = [
   { value: "formal", label: "Formal" },
   { value: "casual", label: "Casual" },
   { value: "brief", label: "Brief" },
+];
+
+const AI_NAME_OPTIONS: { value: AssistantNamePreference; label: string }[] = [
+  { value: "display_name", label: "Display" },
+  { value: "preferred_name", label: "Preferred" },
+  { value: "first_name", label: "First" },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -750,6 +757,7 @@ function PersonalizationModal({ visible, onClose, accessToken }: Personalization
   const styles = useMemo(() => createStyles(colors), [colors]);
   const {
     preferred_name,
+    assistant_name_preference,
     assistant_tone,
     primary_location,
     work_focus,
@@ -762,6 +770,7 @@ function PersonalizationModal({ visible, onClose, accessToken }: Personalization
 
   const [draft, setDraft] = useState({
     preferred_name: preferred_name ?? "",
+    assistant_name_preference: assistant_name_preference,
     assistant_tone: assistant_tone,
     primary_location: primary_location ?? "",
     work_focus: work_focus ?? "",
@@ -776,6 +785,7 @@ function PersonalizationModal({ visible, onClose, accessToken }: Personalization
     if (visible) {
       setDraft({
         preferred_name: preferred_name ?? "",
+        assistant_name_preference: assistant_name_preference,
         assistant_tone: assistant_tone,
         primary_location: primary_location ?? "",
         work_focus: work_focus ?? "",
@@ -810,6 +820,7 @@ function PersonalizationModal({ visible, onClose, accessToken }: Personalization
     try {
       await updatePreferences(accessToken, {
         preferred_name: draft.preferred_name.trim() || null,
+        assistant_name_preference: draft.assistant_name_preference,
         assistant_tone: draft.assistant_tone,
         primary_location: draft.primary_location.trim() || null,
         work_focus: draft.work_focus.trim() || null,
@@ -855,6 +866,31 @@ function PersonalizationModal({ visible, onClose, accessToken }: Personalization
               spellCheck
               maxLength={100}
             />
+
+            {/* AI Greeting Name */}
+            <Text style={styles.fieldLabel}>AI GREETING NAME</Text>
+            <Text style={[styles.fieldHint, { marginBottom: spacing.xs }]}>
+              Which name HELIOS uses when addressing you in conversation.
+            </Text>
+            <View style={[styles.segmented, { marginBottom: spacing.md }]}>
+              {AI_NAME_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[styles.segment, draft.assistant_name_preference === opt.value && styles.segmentActive]}
+                  onPress={() => setDraft((d) => ({ ...d, assistant_name_preference: opt.value }))}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      draft.assistant_name_preference === opt.value && styles.segmentTextActive,
+                    ]}
+                  >
+                    {opt.label.toUpperCase()}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
             {/* Assistant Tone */}
             <Text style={styles.fieldLabel}>ASSISTANT TONE</Text>

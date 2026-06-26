@@ -11,6 +11,8 @@ from app.models.user import User
 from app.models.user_preferences import UserPreferences
 from app.schemas.settings import PreferencesOut, PreferencesUpdate, VALID_LIFE_AREAS
 
+VALID_ASSISTANT_NAME_PREFERENCES = {"display_name", "preferred_name", "first_name"}
+
 router = APIRouter()
 
 _DEFAULTS = {
@@ -21,6 +23,7 @@ _DEFAULTS = {
     "default_planning_horizon": 7,
     "location": "New York",
     "preferred_name": None,
+    "assistant_name_preference": "display_name",
     "assistant_tone": "balanced",
     "primary_location": None,
     "work_focus": None,
@@ -65,6 +68,7 @@ def _to_out(p: UserPreferences) -> PreferencesOut:
         default_planning_horizon=p.default_planning_horizon,
         location=p.location,
         preferred_name=p.preferred_name,
+        assistant_name_preference=p.assistant_name_preference or "display_name",
         assistant_tone=p.assistant_tone,  # type: ignore[arg-type]
         primary_location=p.primary_location,
         work_focus=p.work_focus,
@@ -107,6 +111,9 @@ def update_preferences(
         prefs.location = payload.location.strip() or "New York"
     if "preferred_name" in payload.model_fields_set:
         prefs.preferred_name = payload.preferred_name
+    if payload.assistant_name_preference is not None:
+        if payload.assistant_name_preference in VALID_ASSISTANT_NAME_PREFERENCES:
+            prefs.assistant_name_preference = payload.assistant_name_preference
     if payload.assistant_tone is not None:
         prefs.assistant_tone = payload.assistant_tone
     if "primary_location" in payload.model_fields_set:

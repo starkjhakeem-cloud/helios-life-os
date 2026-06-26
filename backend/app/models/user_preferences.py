@@ -49,6 +49,13 @@ class UserPreferences(Base):
     # Name HELIOS uses when addressing the user in responses.
     preferred_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
+    # Which identity field the AI uses when greeting the user.
+    # "display_name" | "preferred_name" | "first_name"
+    # "custom" is reserved for a future phase.
+    assistant_name_preference: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, default="display_name"
+    )
+
     # Tone of HELIOS assistant responses: "balanced" | "formal" | "casual" | "brief"
     assistant_tone: Mapped[str] = mapped_column(
         String(20), nullable=False, default="balanced"

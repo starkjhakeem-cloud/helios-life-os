@@ -8,6 +8,7 @@ const BASE = API_ENDPOINTS.settings.preferences;
 export type ThemePreference = "system" | "dark" | "light";
 export type AssistantTone = "balanced" | "formal" | "casual" | "brief";
 export type TimeFormat = "12h" | "24h";
+export type AssistantNamePreference = "display_name" | "preferred_name" | "first_name";
 export type LifeArea =
   | "school"
   | "work"
@@ -28,6 +29,7 @@ export type PreferencesOut = {
   location: string;
   // Personalization
   preferred_name: string | null;
+  assistant_name_preference: AssistantNamePreference;
   assistant_tone: AssistantTone;
   primary_location: string | null;
   work_focus: string | null;
@@ -46,6 +48,7 @@ export type PreferencesUpdate = {
   location?: string;
   // Personalization
   preferred_name?: string | null;
+  assistant_name_preference?: AssistantNamePreference;
   assistant_tone?: AssistantTone;
   primary_location?: string | null;
   work_focus?: string | null;

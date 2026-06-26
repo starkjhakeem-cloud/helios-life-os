@@ -5,6 +5,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { ApiError } from "../services/apiClient";
 import {
   settingsService,
+  type AssistantNamePreference,
   type AssistantTone,
   type LifeArea,
   type PreferencesOut,
@@ -23,6 +24,7 @@ const DEFAULT_PREFS: Omit<PreferencesOut, "user_id" | "updated_at"> = {
   default_planning_horizon: 7,
   location: "New York",
   preferred_name: null,
+  assistant_name_preference: "display_name" as AssistantNamePreference,
   assistant_tone: "balanced",
   primary_location: null,
   work_focus: null,
@@ -42,6 +44,7 @@ type SettingsState = {
   location: string;
   // Personalization
   preferred_name: string | null;
+  assistant_name_preference: AssistantNamePreference;
   assistant_tone: AssistantTone;
   primary_location: string | null;
   work_focus: string | null;
@@ -80,6 +83,7 @@ export const useSettingsStore = create<SettingsState>()(
             default_planning_horizon: prefs.default_planning_horizon,
             location: prefs.location,
             preferred_name: prefs.preferred_name,
+            assistant_name_preference: prefs.assistant_name_preference,
             assistant_tone: prefs.assistant_tone,
             primary_location: prefs.primary_location,
             work_focus: prefs.work_focus,
@@ -108,6 +112,7 @@ export const useSettingsStore = create<SettingsState>()(
             default_planning_horizon: prefs.default_planning_horizon,
             location: prefs.location,
             preferred_name: prefs.preferred_name,
+            assistant_name_preference: prefs.assistant_name_preference,
             assistant_tone: prefs.assistant_tone,
             primary_location: prefs.primary_location,
             work_focus: prefs.work_focus,
@@ -142,6 +147,7 @@ export const useSettingsStore = create<SettingsState>()(
         default_planning_horizon: s.default_planning_horizon,
         location: s.location,
         preferred_name: s.preferred_name,
+        assistant_name_preference: s.assistant_name_preference,
         assistant_tone: s.assistant_tone,
         primary_location: s.primary_location,
         work_focus: s.work_focus,

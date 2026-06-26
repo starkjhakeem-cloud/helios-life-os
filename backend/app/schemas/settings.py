@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 ThemePreference = Literal["system", "dark", "light"]
 AssistantTone = Literal["balanced", "formal", "casual", "brief"]
 TimeFormat = Literal["12h", "24h"]
+AssistantNamePreference = Literal["display_name", "preferred_name", "first_name"]
 
 VALID_LIFE_AREAS = {
     "school", "work", "family", "health", "finances",
@@ -22,6 +23,7 @@ class PreferencesOut(BaseModel):
     location: str
     # Personalization
     preferred_name: str | None
+    assistant_name_preference: str
     assistant_tone: AssistantTone
     primary_location: str | None
     work_focus: str | None
@@ -42,6 +44,7 @@ class PreferencesUpdate(BaseModel):
     location: str | None = Field(default=None, min_length=1, max_length=120)
     # Personalization
     preferred_name: str | None = Field(default=None, max_length=100)
+    assistant_name_preference: AssistantNamePreference | None = None
     assistant_tone: AssistantTone | None = None
     primary_location: str | None = Field(default=None, max_length=120)
     work_focus: str | None = Field(default=None, max_length=200)
