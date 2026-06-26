@@ -361,7 +361,7 @@ def _get_access_token(user_id: str, db: Session) -> str:
             UserIntegration.user_id == user_id,
             UserIntegration.provider == "google",
             UserIntegration.service_type == "calendar",
-            UserIntegration.status == "connected",
+            UserIntegration.status.in_(("connected", "syncing")),
         )
     ).scalar_one_or_none()
     if not row:
@@ -369,7 +369,7 @@ def _get_access_token(user_id: str, db: Session) -> str:
             select(UserIntegration).where(
                 UserIntegration.user_id == user_id,
                 UserIntegration.provider == "google_calendar",
-                UserIntegration.status == "connected",
+                UserIntegration.status.in_(("connected", "syncing")),
             )
         ).scalar_one_or_none()
 
