@@ -64,12 +64,24 @@ async function parseApiError(response: Response): Promise<ApiError> {
     } else if (Array.isArray(data.detail) && data.detail.length > 0) {
       const first = data.detail[0] as { msg?: string };
       message = first.msg ?? `HTTP ${response.status}`;
+    } else if (
+      data.detail !== null &&
+      typeof data.detail === "object" &&
+      "message" in (data.detail as object)
+    ) {
+      // Backend integration errors: { error, code, message, provider, service_type }
+      message = (data.detail as { message: string }).message;
     } else {
       message = `HTTP ${response.status}`;
     }
     return new ApiError(message, response.status);
   } catch {
-    return new ApiError(`HTTP ${response.status}`, response.status);
+    const result = new ApiError(`HTTP ${response.status}`, response.status);
+    reportError(result, "Failed to parse API error response", {
+      status: response.status,
+      endpoint: response.url,
+    });
+    return result;
   }
 }
 
@@ -192,6 +204,14 @@ async function patch<T>(endpoint: string, body: unknown, token?: string): Promis
   }
 }
 
+async function put<T>(endpoint: string, body: unknown, token?: string): Promise<T> {
+  try {
+    return await executeRequest<T>("PUT", endpoint, token, body);
+  } catch (err) {
+    throw wrapNetworkError(err);
+  }
+}
+
 async function del(endpoint: string, token?: string): Promise<void> {
   try {
     await executeRequest<void>("DELETE", endpoint, token);
@@ -223,4 +243,4 @@ async function postRaw<T>(endpoint: string, body: unknown): Promise<T> {
   }
 }
 
-export const apiClient = { get, post, patch, del, postRaw };
+export const apiClient = { get, post, patch, put, del, postRaw };

@@ -6,6 +6,8 @@ FastAPI REST API for the HELIOS iOS application. Provides JWT authentication, Po
 
 ## Quick Start
 
+Supported Python version: **Python 3.12.13**.
+
 ```bash
 cd backend
 cp .env.example .env
@@ -20,6 +22,18 @@ docker compose up --build
 - ReDoc: [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
 `docker-compose.yml` is intended for local development only. It starts PostgreSQL in a local Docker volume, mounts the app source tree into the container, and runs Uvicorn with `--reload`.
+
+For a reproducible backend test run, use Docker:
+
+```bash
+cd backend
+make test
+```
+
+`make test` builds the API image, starts PostgreSQL, applies the same image dependencies used by the app, and runs the complete backend pytest suite inside the API container.
+The test command forces `DATABASE_URL=sqlite:////app/tests/test_helios.db` and
+`AI_PROVIDER=mock` so tests do not depend on local Postgres contents or external
+AI providers.
 
 ### Production Startup Notes
 
@@ -201,33 +215,110 @@ To implement the OpenAI provider, add logic to `app/ai/openai_provider.py`. The 
 
 ## Running Without Docker
 
-Requires Python 3.12, a local PostgreSQL instance, and a virtual environment.
+Requires Python **3.12.13**, a local PostgreSQL instance, and a virtual environment.
+The repository includes `.python-version` files at the repo root and under
+`backend/`; `pyenv` should automatically select `3.12.13`.
 
 ```bash
-python3 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt -r requirements-test.txt
 
 # Set DATABASE_URL in .env to point to your local Postgres
 alembic upgrade head
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+If you have an old virtualenv created with another Python version, recreate it:
+
+```bash
+rm -rf .venv .venv-test
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt -r requirements-test.txt
+```
+
 ## Testing
 
 Backend tests use a lightweight SQLite database and FastAPI's TestClient to validate authentication, protected routes, health checks, goal CRUD flows, and the mock AI provider.
+
+Preferred, reproducible Docker command:
+
+```bash
+cd backend
+make test
+```
+
+Equivalent Docker command without Make:
+
+```bash
+cd backend
+docker compose up -d --build
+docker compose exec \
+  -e DATABASE_URL=sqlite:////app/tests/test_helios.db \
+  -e AI_PROVIDER=mock \
+  api python -m pytest
+```
+
+Local Python command:
 
 ```bash
 cd backend
 python3.12 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt -r requirements-test.txt
-pytest
+python -m pip install -r requirements.txt -r requirements-test.txt
+python -m pytest
 ```
 
 Use Python 3.12 for backend tests. If `python3` points to Python 3.14, SQLAlchemy
 2.0 can fail while reading typed ORM annotations with
 `TypeError: descriptor '__getitem__' requires a 'typing.Union' object but received a 'tuple'`.
+This is a Python 3.14 ecosystem compatibility issue, not an app failure. Use
+Python 3.12.13 or run `make test`.
+
+### Developer Commands
+
+```bash
+cd backend
+make up          # Build and start API + Postgres
+make migrate     # Run alembic upgrade head inside the API container
+make test        # Run the complete backend pytest suite in Docker
+make test-local  # Run pytest from backend/.venv
+make logs        # Tail API container logs
+```
+
+### Migration Commands
+
+Docker:
+
+```bash
+cd backend
+docker compose exec api alembic upgrade head
+docker compose exec api alembic current
+```
+
+Local:
+
+```bash
+cd backend
+source .venv/bin/activate
+alembic upgrade head
+alembic current
+```
+
+### Troubleshooting
+
+- `ModuleNotFoundError: No module named 'app'`: run tests from `backend/`, or use
+  `make test`.
+- SQLAlchemy annotation errors on Python 3.14: recreate the virtualenv with
+  Python 3.12.13, or use Docker.
+- `pytest: executable file not found` or `No module named 'app'` inside Docker:
+  rebuild the API image with `docker compose build api`, then run tests with
+  `python -m pytest` or `make test`.
+- `Database unavailable. Please try again.` in the app: confirm the local stack
+  is up with `docker compose ps` and check API logs with `make logs`.
 
 ---
 

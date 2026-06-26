@@ -20,6 +20,7 @@ import app.models.integration_oauth_state
 import app.models.reminder
 import app.models.sync_job
 import app.models.task
+import app.models.task_suggestion
 import app.models.user
 import app.models.user_preferences
 import app.models.semantic_memory
@@ -31,8 +32,23 @@ from app.core.limiter import limiter
 _IS_SQLITE = str(engine.url).startswith("sqlite")
 
 
+def _assert_safe_test_database() -> None:
+    """Prevent pytest from deleting a shared/local development database."""
+    if _IS_SQLITE:
+        return
+    if os.environ.get("HELIOS_ALLOW_DESTRUCTIVE_TEST_DB") == "1":
+        return
+    raise RuntimeError(
+        "Refusing to run backend tests against a non-SQLite database. "
+        "The test fixtures delete all table rows. Use `make test`, unset "
+        "DATABASE_URL, or set HELIOS_ALLOW_DESTRUCTIVE_TEST_DB=1 only for a "
+        "throwaway database."
+    )
+
+
 @pytest.fixture(scope="session", autouse=True)
 def initialize_database():
+    _assert_safe_test_database()
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     yield

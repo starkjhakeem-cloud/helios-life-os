@@ -11,10 +11,19 @@ import { useAnalyticsStore } from "./useAnalyticsStore";
 import { useAutonomyStore } from "./useAutonomyStore";
 import { useConversationStore } from "./useConversationStore";
 import { useDashboardStore } from "./useDashboardStore";
+import { useBackgroundJobsStore } from "./useBackgroundJobsStore";
+import { useCalendarStore } from "./useCalendarStore";
+import { useDailyBriefStore } from "./useDailyBriefStore";
+import { useEmailStore } from "./useEmailStore";
 import { useGoalsStore } from "./useGoalsStore";
+import { useIntegrationStore } from "./useIntegrationStore";
+import { useMemoryStore } from "./useMemoryStore";
+import { useNotificationsStore } from "./useNotificationsStore";
+import { useOrchestrationStore } from "./useOrchestrationStore";
 import { useProfileStore } from "./useProfileStore";
 import { useRemindersStore } from "./useRemindersStore";
 import { useSettingsStore } from "./useSettingsStore";
+import { useTaskEngineStore } from "./useTaskEngineStore";
 import { useTasksStore } from "./useTasksStore";
 
 export type User = {
@@ -82,11 +91,20 @@ async function syncLocationAfterAuth(accessToken: string): Promise<void> {
 function resetAllStores() {
   useGoalsStore.getState().reset();
   useTasksStore.getState().reset();
+  useTaskEngineStore.getState().reset();
   useAnalyticsStore.getState().reset();
   useAIStore.getState().reset();
   useDashboardStore.getState().reset();
   useAgentsStore.getState().reset();
   useConversationStore.getState().reset();
+  useCalendarStore.getState().reset();
+  useDailyBriefStore.getState().reset();
+  useEmailStore.getState().reset();
+  useIntegrationStore.getState().reset();
+  useMemoryStore.getState().reset();
+  useNotificationsStore.getState().reset();
+  useBackgroundJobsStore.getState().reset();
+  useOrchestrationStore.getState().reset();
   useRemindersStore.getState().reset();
   useSettingsStore.getState().reset();
   useAutonomyStore.getState().reset();
@@ -191,7 +209,7 @@ export const useAuthStore = create<AuthState>()(
       clearSessionExpired: () => set({ sessionExpired: false }),
 
       refreshSession: async (): Promise<string | null> => {
-        const { refreshToken } = get();
+        const { accessToken: accessTokenAtStart, refreshToken } = get();
         console.log("[auth] refreshSession.attempt", {
           hasRefreshToken: !!refreshToken,
           clientTime: new Date().toISOString(),
@@ -223,8 +241,11 @@ export const useAuthStore = create<AuthState>()(
           console.log("[auth] refreshSession.failed", { message, clientTime: new Date().toISOString() });
 
           // Before evicting the session, check if a concurrent login() succeeded
-          // while this refresh was in-flight. If so, leave the fresh session intact.
-          if (get().accessToken) {
+          // while this refresh was in-flight. A stale persisted access token is
+          // still present during normal refresh failure, so only preserve the
+          // session when the token changed after this refresh attempt started.
+          const latestAccessToken = get().accessToken;
+          if (latestAccessToken && latestAccessToken !== accessTokenAtStart) {
             console.log("[auth] refreshSession.failed but concurrent login succeeded — not clearing session");
             return null;
           }

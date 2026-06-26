@@ -426,6 +426,8 @@ export default function EmailScreen() {
             placeholderTextColor={colors.textMuted}
             autoCapitalize="none"
             autoCorrect={false}
+            spellCheck={false}
+            smartInsertDelete={false}
             clearButtonMode="while-editing"
             accessibilityLabel="Search Inbox"
           />

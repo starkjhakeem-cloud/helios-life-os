@@ -20,17 +20,21 @@ import { SymbolView } from "expo-symbols";
 
 import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
+import DateTimeField from "../../components/ui/DateTimeField";
 import { radius, spacing, typography, type ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 import { useAuthStore, useCalendarStore, useTasksStore } from "../../store";
 import type { CalendarEvent, CalendarEventCreate } from "../../store";
 import type { Task } from "../../services/tasksService";
+import { historyService } from "../../services/historyService";
+import type { DailyHistoryDaySummary, DailyHistoryOut } from "../../services/historyService";
+import { relationshipService, type TimeWindow } from "../../services/relationshipService";
 
 type FormState = {
   title: string;
   description: string;
-  start_time: string;
-  end_time: string;
+  start_time: Date | null;
+  end_time: Date | null;
   location: string;
 };
 
@@ -71,8 +75,8 @@ type MonthStats = {
 const EMPTY_FORM: FormState = {
   title: "",
   description: "",
-  start_time: "",
-  end_time: "",
+  start_time: null,
+  end_time: null,
   location: "",
 };
 
@@ -81,14 +85,21 @@ function defaultTimes(): Pick<FormState, "start_time" | "end_time"> {
   now.setMinutes(0, 0, 0);
   const start = new Date(now.getTime() + 60 * 60 * 1000);
   const end = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-  const fmt = (d: Date) => d.toISOString().slice(0, 16);
-  return { start_time: fmt(start), end_time: fmt(end) };
+  return { start_time: start, end_time: end };
 }
 
 function startOfLocalDay(date: Date): Date {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
   return d;
+}
+
+// Produces "YYYY-MM-DD" using local calendar date (not UTC), safe for any timezone.
+function localDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function endOfLocalDay(date: Date): Date {
@@ -128,6 +139,26 @@ function getMonthGrid(month: Date): { date: Date; inMonth: boolean }[] {
     const date = addDays(gridStart, index);
     return { date, inMonth: date.getMonth() === first.getMonth() };
   });
+}
+
+function getWeekDays(date: Date): { date: Date; inMonth: boolean }[] {
+  const weekStart = addDays(date, -date.getDay());
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = addDays(weekStart, i);
+    return { date: d, inMonth: d.getMonth() === date.getMonth() };
+  });
+}
+
+function formatWeekTitle(date: Date): string {
+  const weekStart = addDays(date, -date.getDay());
+  const weekEnd = addDays(weekStart, 6);
+  if (weekStart.getMonth() === weekEnd.getMonth()) {
+    const month = weekStart.toLocaleDateString("en-US", { month: "long" });
+    return `${month} ${weekStart.getDate()}–${weekEnd.getDate()}, ${weekEnd.getFullYear()}`;
+  }
+  const s = weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const e = weekEnd.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return `${s} – ${e}`;
 }
 
 function dayMode(date: Date, today: Date): DayMode {
@@ -240,13 +271,62 @@ export default function CalendarScreen() {
   const [formError, setFormError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(() => startOfLocalDay(new Date()));
   const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(new Date()));
+  const [calendarMode, setCalendarMode] = useState<"month" | "week">("month");
   const slide = useMemo(() => new Animated.Value(0), []);
+
+  // ── History data ────────────────────────────────────────────────────────────
+  const [dayHistory, setDayHistory]       = useState<DailyHistoryOut | null>(null);
+  const [monthHistory, setMonthHistory]   = useState<DailyHistoryDaySummary[]>([]);
+  const [availableWindows, setAvailableWindows] = useState<TimeWindow[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+
+  // Fetch month history whenever the visible month changes
+  useEffect(() => {
+    if (!accessToken) return;
+    const year  = visibleMonth.getFullYear();
+    const month = visibleMonth.getMonth() + 1;
+    historyService.getMonthSummary(accessToken, year, month)
+      .then((res) => setMonthHistory(res.days))
+      .catch(() => {});
+  }, [accessToken, visibleMonth]);
+
+  // Fetch day history only for past days (dayMode computed inline to avoid declaration-order issue)
+  useEffect(() => {
+    setDayHistory(null);
+    const todayLocal = startOfLocalDay(new Date());
+    const mode = dayMode(selectedDate, todayLocal);
+    if (!accessToken || mode !== "past") return;
+    const dateStr = localDateStr(selectedDate);
+    setIsHistoryLoading(true);
+    historyService.getDayHistory(accessToken, dateStr)
+      .then((data) => setDayHistory(data))
+      .catch(() => {})
+      .finally(() => setIsHistoryLoading(false));
+  }, [accessToken, selectedDate]);
+
+  useEffect(() => {
+    if (!accessToken) {
+      setAvailableWindows([]);
+      return;
+    }
+    relationshipService.availableWindows(accessToken, localDateStr(selectedDate))
+      .then(setAvailableWindows)
+      .catch(() => setAvailableWindows([]));
+  }, [accessToken, selectedDate]);
 
   const onRefresh = useCallback(() => {
     if (!accessToken) return;
     fetchEvents(accessToken);
     fetchTasks(accessToken);
-  }, [accessToken, fetchEvents, fetchTasks]);
+    const year  = visibleMonth.getFullYear();
+    const month = visibleMonth.getMonth() + 1;
+    historyService.getMonthSummary(accessToken, year, month)
+      .then((res) => setMonthHistory(res.days))
+      .catch(() => {});
+    relationshipService.availableWindows(accessToken, localDateStr(selectedDate))
+      .then(setAvailableWindows)
+      .catch(() => setAvailableWindows([]));
+  }, [accessToken, fetchEvents, fetchTasks, selectedDate, visibleMonth]);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -266,8 +346,8 @@ export default function CalendarScreen() {
     setForm({
       title: event.title,
       description: event.description ?? "",
-      start_time: event.start_time.slice(0, 16),
-      end_time: event.end_time.slice(0, 16),
+      start_time: new Date(event.start_time),
+      end_time: new Date(event.end_time),
       location: event.location ?? "",
     });
     setFormError(null);
@@ -287,23 +367,25 @@ export default function CalendarScreen() {
       setFormError("Event title is required.");
       return;
     }
-    if (!form.start_time.trim() || !form.end_time.trim()) {
-      setFormError("Start and end time are required (e.g. 2026-06-11T10:00).");
+    const startDate = form.start_time;
+    const endDate = form.end_time;
+
+    if (!startDate || !endDate) {
+      setFormError("Start and end time are required.");
+      return;
+    }
+    if (endDate <= startDate) {
+      setFormError("End time must be after start time.");
       return;
     }
 
     setFormError(null);
-    const normalise = (t: string) => {
-      const s = t.trim();
-      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s)) return `${s}:00Z`;
-      return s;
-    };
 
     const body: CalendarEventCreate = {
       title: form.title.trim(),
       description: form.description.trim() || undefined,
-      start_time: normalise(form.start_time),
-      end_time: normalise(form.end_time),
+      start_time: startDate.toISOString(),
+      end_time: endDate.toISOString(),
       location: form.location.trim() || undefined,
     };
 
@@ -347,6 +429,11 @@ export default function CalendarScreen() {
     animateDayChange(delta);
   }, [animateDayChange, visibleMonth]);
 
+  const moveWeek = useCallback((delta: number) => {
+    const next = addDays(selectedDate, delta * 7);
+    selectDate(next);
+  }, [selectDate, selectedDate]);
+
   const todayEvents = useMemo(() => (
     events
       .filter((event) => isSameLocalDay(new Date(event.start_time), selectedDate))
@@ -362,6 +449,16 @@ export default function CalendarScreen() {
   ), [selectedDate, tasks]);
 
   const freeBlocks = useMemo(() => {
+    if (availableWindows.length > 0) {
+      return availableWindows
+        .map((window) => ({
+          start: new Date(window.start_time),
+          end: new Date(window.end_time),
+          minutes: window.duration_minutes,
+        }))
+        .filter((block) => !Number.isNaN(block.start.getTime()) && !Number.isNaN(block.end.getTime()));
+    }
+
     const blocks: { start: Date; end: Date; minutes: number }[] = [];
     let cursor = selectedMode === "today"
       ? new Date(Math.max(dayStart.getTime(), new Date().getTime()))
@@ -378,7 +475,7 @@ export default function CalendarScreen() {
     const finalGap = minutesBetween(cursor, dayEnd);
     if (finalGap >= 45) blocks.push({ start: cursor, end: dayEnd, minutes: finalGap });
     return blocks;
-  }, [dayEnd, dayStart, selectedMode, todayEvents]);
+  }, [availableWindows, dayEnd, dayStart, selectedMode, todayEvents]);
 
   const totalScheduledMinutes = todayEvents.reduce(
     (sum, event) => sum + minutesBetween(new Date(event.start_time), new Date(event.end_time)),
@@ -396,6 +493,38 @@ export default function CalendarScreen() {
 
   const monthDays = useMemo<WeekDay[]>(() => (
     getMonthGrid(visibleMonth).map(({ date, inMonth }) => {
+      const dateStr = localDateStr(date);
+      const histDay = monthHistory.find((d) => d.date === dateStr);
+      const localActivity = getActivityForDate(date, events, tasks);
+
+      // Prefer backend history data for past days if available
+      let activity = localActivity;
+      let count = events.filter((e) => isSameLocalDay(new Date(e.start_time), date)).length;
+      if (histDay) {
+        const histActivity: ActivityKind[] = [];
+        if (histDay.has_events)   histActivity.push("event");
+        if (histDay.has_tasks)    histActivity.push("task");
+        if (histDay.has_focus)    histActivity.push("focus");
+        if (histDay.has_personal) histActivity.push("personal");
+        if (histActivity.length === 0) histActivity.push("low");
+        activity = histActivity.slice(0, 3) as ActivityKind[];
+        count = histDay.event_count;
+      }
+
+      return {
+        activity,
+        date,
+        count,
+        inMonth,
+        workload: Math.min(3, Math.max(1, count)),
+        isToday: isSameLocalDay(date, today),
+        isSelected: isSameLocalDay(date, selectedDate),
+      };
+    })
+  ), [events, monthHistory, selectedDate, tasks, today, visibleMonth]);
+
+  const weekDays = useMemo<WeekDay[]>(() => (
+    getWeekDays(selectedDate).map(({ date, inMonth }) => {
       const activity = getActivityForDate(date, events, tasks);
       const count = events.filter((event) => isSameLocalDay(new Date(event.start_time), date)).length;
       return {
@@ -408,7 +537,7 @@ export default function CalendarScreen() {
         isSelected: isSameLocalDay(date, selectedDate),
       };
     })
-  ), [events, selectedDate, tasks, today, visibleMonth]);
+  ), [events, selectedDate, tasks, today]);
 
   const monthStats = useMemo<MonthStats>(() => {
     const inMonthDays = monthDays.filter((day) => day.inMonth);
@@ -519,14 +648,14 @@ export default function CalendarScreen() {
         <View style={styles.heroCard}>
           <View style={styles.heroTopRow}>
             <Text style={styles.heroLabel}>{dayLabel}</Text>
-            {(isLoading || isMutating) ? <ActivityIndicator size="small" color={colors.accentCyan} /> : null}
+            {(isLoading || isMutating || isHistoryLoading) ? <ActivityIndicator size="small" color={colors.accentCyan} /> : null}
           </View>
           <Text style={styles.heroDate}>
             {selectedDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
           </Text>
           <Text style={styles.heroGreeting}>
             {selectedMode === "past"
-              ? "A preserved snapshot of what happened that day."
+              ? (dayHistory?.summary ?? "A preserved snapshot of what happened that day.")
               : selectedMode === "future"
                 ? "A planning view for what HELIOS can help prepare."
                 : getGreeting(new Date())}
@@ -535,10 +664,21 @@ export default function CalendarScreen() {
             {selectedMode === "past" ? "Day Summary" : selectedMode === "future" ? "Planned Summary" : "Today's Summary"}
           </Text>
           <View style={styles.summaryGrid}>
-            <SummaryDot label={`${todayEvents.length} scheduled ${todayEvents.length === 1 ? "event" : "events"}`} colors={colors} />
-            <SummaryDot label={`${focusBlocks.length} focus ${focusBlocks.length === 1 ? "block" : "blocks"}`} colors={colors} />
-            <SummaryDot label={`${todayTasks.length} ${todayTasks.length === 1 ? "task" : "tasks"} planned`} colors={colors} />
-            <SummaryDot label={`${formatLongDuration(totalFreeMinutes)} of free time`} colors={colors} />
+            {selectedMode === "past" && dayHistory ? (
+              <>
+                <SummaryDot label={`${dayHistory.calendar_events.length} scheduled ${dayHistory.calendar_events.length === 1 ? "event" : "events"}`} colors={colors} />
+                <SummaryDot label={`${dayHistory.focus_blocks.length} focus ${dayHistory.focus_blocks.length === 1 ? "block" : "blocks"}`} colors={colors} />
+                <SummaryDot label={`${dayHistory.completed_tasks.length} ${dayHistory.completed_tasks.length === 1 ? "task" : "tasks"} completed`} colors={colors} />
+                <SummaryDot label={`${dayHistory.planned_tasks.length} ${dayHistory.planned_tasks.length === 1 ? "task" : "tasks"} planned`} colors={colors} />
+              </>
+            ) : (
+              <>
+                <SummaryDot label={`${todayEvents.length} scheduled ${todayEvents.length === 1 ? "event" : "events"}`} colors={colors} />
+                <SummaryDot label={`${focusBlocks.length} focus ${focusBlocks.length === 1 ? "block" : "blocks"}`} colors={colors} />
+                <SummaryDot label={`${todayTasks.length} ${todayTasks.length === 1 ? "task" : "tasks"} planned`} colors={colors} />
+                <SummaryDot label={`${formatLongDuration(totalFreeMinutes)} of free time`} colors={colors} />
+              </>
+            )}
           </View>
           <AllocationBar
             colors={colors}
@@ -549,19 +689,31 @@ export default function CalendarScreen() {
               { label: "Free", value: Math.max(0, totalFreeMinutes - focusMinutes), color: colors.success },
             ]}
           />
+          {selectedMode === "past" && dayHistory?.notes ? (
+            <View style={styles.dayNotesWrap}>
+              <Text style={styles.dayNotesLabel}>NOTES</Text>
+              <Text style={styles.dayNotesText}>{dayHistory.notes}</Text>
+            </View>
+          ) : null}
         </View>
         </Animated.View>
 
         <LifeTimelineMonth
+          calendarMode={calendarMode}
           colors={colors}
           days={monthDays}
           month={visibleMonth}
           monthStats={monthStats}
           onNextMonth={() => moveMonth(1)}
+          onNextWeek={() => moveWeek(1)}
           onPreviousMonth={() => moveMonth(-1)}
+          onPreviousWeek={() => moveWeek(-1)}
           onSelectDate={selectDate}
+          onSetCalendarMode={setCalendarMode}
           onToday={returnToToday}
+          selectedDate={selectedDate}
           styles={styles}
+          weekDays={weekDays}
         />
 
         <View style={styles.sectionHeaderRow}>
@@ -670,23 +822,24 @@ export default function CalendarScreen() {
               error={formError ?? undefined}
               autoFocus
             />
-            <Input
+            <DateTimeField
               label="START TIME"
-              placeholder="e.g. 2026-06-11T10:00"
               value={form.start_time}
-              onChangeText={(t) => setForm((f) => ({ ...f, start_time: t }))}
+              onChange={(date) => setForm((f) => ({ ...f, start_time: date }))}
+              mode="datetime"
             />
-            <Input
+            <DateTimeField
               label="END TIME"
-              placeholder="e.g. 2026-06-11T11:00"
               value={form.end_time}
-              onChangeText={(t) => setForm((f) => ({ ...f, end_time: t }))}
+              onChange={(date) => setForm((f) => ({ ...f, end_time: date }))}
+              mode="datetime"
             />
             <Input
               label="LOCATION"
               placeholder="e.g. Library, gym, Zoom"
               value={form.location}
               onChangeText={(t) => setForm((f) => ({ ...f, location: t }))}
+              autoCapitalize="none"
             />
             <Input
               label="DESCRIPTION"
@@ -747,94 +900,179 @@ function AllocationBar({
   );
 }
 
+const DAY_ABBR = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+
 function LifeTimelineMonth({
+  calendarMode,
   colors,
   days,
   month,
   monthStats,
   onNextMonth,
+  onNextWeek,
   onPreviousMonth,
+  onPreviousWeek,
   onSelectDate,
+  onSetCalendarMode,
   onToday,
+  selectedDate,
   styles,
+  weekDays,
 }: {
+  calendarMode: "month" | "week";
   colors: ThemeColors;
   days: WeekDay[];
   month: Date;
   monthStats: MonthStats;
   onNextMonth: () => void;
+  onNextWeek: () => void;
   onPreviousMonth: () => void;
+  onPreviousWeek: () => void;
   onSelectDate: (date: Date) => void;
+  onSetCalendarMode: (mode: "month" | "week") => void;
   onToday: () => void;
+  selectedDate: Date;
   styles: ReturnType<typeof createStyles>;
+  weekDays: WeekDay[];
 }) {
+  const isWeek = calendarMode === "week";
+  const title = isWeek
+    ? formatWeekTitle(selectedDate)
+    : month.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const onPrev = isWeek ? onPreviousWeek : onPreviousMonth;
+  const onNext = isWeek ? onNextWeek : onNextMonth;
+
   return (
-    <View style={styles.lifeCard}>
-      <Text style={styles.lifeLabel}>LIFE TIMELINE</Text>
-      <View style={styles.monthHeader}>
-        <Text style={styles.monthTitle}>
-          {month.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
-        </Text>
-        <View style={styles.monthControls}>
-          <TouchableOpacity style={styles.monthButton} onPress={onPreviousMonth} accessibilityLabel="Previous month">
-            <SymbolView name="chevron.left" size={18} tintColor={colors.textSecondary} resizeMode="scaleAspectFit" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.monthTodayButton} onPress={onToday}>
-            <Text style={styles.monthTodayText}>Today</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.monthButton} onPress={onNextMonth} accessibilityLabel="Next month">
-            <SymbolView name="chevron.right" size={18} tintColor={colors.textSecondary} resizeMode="scaleAspectFit" />
-          </TouchableOpacity>
-        </View>
-        <View style={styles.modeToggle}>
-          <View style={styles.modeSelected}>
-            <Text style={styles.modeSelectedText}>Month</Text>
-          </View>
-          <Text style={styles.modeText}>Week</Text>
-        </View>
-      </View>
+    <View style={{ gap: 24 }}>
 
-      <View style={styles.monthGrid}>
-        {["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].map((label) => (
-          <View key={label} style={styles.weekdayCell}>
-            <Text style={styles.weekdayText}>{label}</Text>
-          </View>
-        ))}
-        {days.map((day) => (
-          <TouchableOpacity
-            key={day.date.toISOString()}
-            activeOpacity={0.84}
-            onPress={() => onSelectDate(day.date)}
-            style={[
-              styles.dayCell,
-              day.isSelected && styles.dayCellSelected,
-              day.isToday && !day.isSelected && styles.dayCellToday,
-            ]}
-          >
-            <Text
-              style={[
-                styles.dayNumber,
-                !day.inMonth && styles.dayNumberMuted,
-                day.isSelected && styles.dayNumberSelected,
-              ]}
-            >
-              {day.date.getDate()}
-            </Text>
-            <View style={styles.activityDots}>
-              {day.activity.map((kind) => (
-                <View
-                  key={kind}
-                  style={[styles.activityDot, { backgroundColor: getActivityColor(kind, colors) }]}
-                />
-              ))}
+      {/* ── Card 1: Calendar grid ── */}
+      <View style={styles.lifeCard}>
+        <Text style={styles.lifeLabel}>LIFE TIMELINE</Text>
+
+        {/* Row 1: title */}
+        {/* Row 2: nav controls + mode toggle */}
+        <View style={styles.monthHeader}>
+          <Text style={styles.monthTitle}>{title}</Text>
+
+          <View style={styles.monthSubRow}>
+            <View style={styles.monthControls}>
+              <TouchableOpacity style={styles.monthButton} onPress={onPrev} accessibilityLabel={isWeek ? "Previous week" : "Previous month"}>
+                <SymbolView name="chevron.left" size={14} tintColor={colors.textSecondary} resizeMode="scaleAspectFit" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.monthTodayButton} onPress={onToday}>
+                <Text style={styles.monthTodayText}>Today</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.monthButton} onPress={onNext} accessibilityLabel={isWeek ? "Next week" : "Next month"}>
+                <SymbolView name="chevron.right" size={14} tintColor={colors.textSecondary} resizeMode="scaleAspectFit" />
+              </TouchableOpacity>
             </View>
-            {day.isSelected ? <View style={styles.selectedUnderline} /> : null}
-          </TouchableOpacity>
-        ))}
+
+            <View style={styles.modeToggle}>
+              <TouchableOpacity
+                style={!isWeek ? styles.modeSelected : styles.modeInactive}
+                onPress={() => onSetCalendarMode("month")}
+              >
+                <Text style={!isWeek ? styles.modeSelectedText : styles.modeText}>Month</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={isWeek ? styles.modeSelected : styles.modeInactive}
+                onPress={() => onSetCalendarMode("week")}
+              >
+                <Text style={isWeek ? styles.modeSelectedText : styles.modeText}>Week</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        {/* Month grid */}
+        {!isWeek && (
+          <View style={styles.monthGrid}>
+            {DAY_ABBR.map((label) => (
+              <View key={label} style={styles.weekdayCell}>
+                <Text style={styles.weekdayText}>{label}</Text>
+              </View>
+            ))}
+            {days.map((day) => (
+              <TouchableOpacity
+                key={day.date.toISOString()}
+                activeOpacity={0.84}
+                onPress={() => onSelectDate(day.date)}
+                style={[
+                  styles.dayCell,
+                  day.isSelected && styles.dayCellSelected,
+                  day.isToday && !day.isSelected && styles.dayCellToday,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.dayNumber,
+                    !day.inMonth && styles.dayNumberMuted,
+                    day.isSelected && styles.dayNumberSelected,
+                  ]}
+                >
+                  {day.date.getDate()}
+                </Text>
+                <View style={styles.activityDots}>
+                  {day.activity.map((kind) => (
+                    <View
+                      key={kind}
+                      style={[styles.activityDot, { backgroundColor: getActivityColor(kind, colors) }]}
+                    />
+                  ))}
+                </View>
+                {day.isSelected ? <View style={styles.selectedUnderline} /> : null}
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Week grid */}
+        {isWeek && (
+          <View style={styles.weekGrid}>
+            {weekDays.map((day) => (
+              <TouchableOpacity
+                key={day.date.toISOString()}
+                activeOpacity={0.84}
+                onPress={() => onSelectDate(day.date)}
+                style={[
+                  styles.weekCell,
+                  day.isSelected && styles.weekCellSelected,
+                  day.isToday && !day.isSelected && styles.weekCellToday,
+                ]}
+              >
+                <Text style={[styles.weekCellDayLabel, day.isSelected && { color: colors.accent }]}>
+                  {DAY_ABBR[day.date.getDay()]}
+                </Text>
+                <Text
+                  style={[
+                    styles.weekCellNumber,
+                    day.isSelected && styles.weekCellNumberSelected,
+                    day.isToday && !day.isSelected && { color: colors.accent },
+                  ]}
+                >
+                  {day.date.getDate()}
+                </Text>
+                <View style={styles.activityDots}>
+                  {day.activity.map((kind) => (
+                    <View
+                      key={kind}
+                      style={[styles.activityDot, { backgroundColor: getActivityColor(kind, colors) }]}
+                    />
+                  ))}
+                </View>
+                {day.isSelected ? <View style={styles.selectedUnderline} /> : null}
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </View>
 
+      {/* ── Card 2: Monthly summary ── */}
       <MonthSummary colors={colors} monthStats={monthStats} styles={styles} />
+
+      {/* ── Card 3: Activity legend ── */}
       <ActivityLegend colors={colors} styles={styles} />
+
       <Text style={styles.timelineHint}>Tap any day to view full details and timeline.</Text>
     </View>
   );
@@ -902,11 +1140,17 @@ function MonthStat({
 function ActivityLegend({ colors, styles }: { colors: ThemeColors; styles: ReturnType<typeof createStyles> }) {
   return (
     <View style={styles.legendCard}>
-      <LegendItem color={colors.accent} icon="calendar" title="Events" subtitle="Days with meetings or scheduled events" styles={styles} />
-      <LegendItem color={colors.success} icon="person" title="Personal" subtitle="Days with personal activities or habits" styles={styles} />
-      <LegendItem color={colors.accentCyan} icon="target" title="Focus" subtitle="Days with focus blocks or deep work sessions" styles={styles} />
-      <LegendItem color={colors.warning} icon="waveform.path.ecg" title="Low Activity" subtitle="Days with minimal recorded activity" styles={styles} />
-      <LegendItem color={colors.info} icon="checkmark.circle" title="Tasks" subtitle="Days with completed or scheduled tasks" styles={styles} />
+      <View style={styles.legendColumns}>
+        <View style={styles.legendColumn}>
+          <LegendItem color={colors.accent} icon="calendar" title="Events" subtitle="Days with meetings or scheduled events" styles={styles} />
+          <LegendItem color={colors.accentCyan} icon="target" title="Focus" subtitle="Deep work sessions or focus blocks" styles={styles} />
+          <LegendItem color={colors.info} icon="checkmark.circle" title="Tasks" subtitle="Days with completed or scheduled tasks" styles={styles} />
+        </View>
+        <View style={styles.legendColumn}>
+          <LegendItem color={colors.success} icon="person" title="Personal" subtitle="Personal activities or habits" styles={styles} />
+          <LegendItem color={colors.warning} icon="waveform.path.ecg" title="Low Activity" subtitle="Days with minimal recorded activity" styles={styles} />
+        </View>
+      </View>
     </View>
   );
 }
@@ -927,7 +1171,7 @@ function LegendItem({
   return (
     <View style={styles.legendItem}>
       <View style={[styles.legendIcon, { backgroundColor: `${color}22` }]}>
-        <SymbolView name={icon as never} size={18} tintColor={color} resizeMode="scaleAspectFit" />
+        <SymbolView name={icon as never} size={14} tintColor={color} resizeMode="scaleAspectFit" />
       </View>
       <View style={styles.legendCopy}>
         <Text style={[styles.legendTitle, { color }]}>{title}</Text>
@@ -1099,7 +1343,7 @@ function ConnectedCalendarRow({
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     container: {
-      paddingHorizontal: spacing.lg,
+      paddingHorizontal: spacing.md,
       paddingBottom: spacing.xxl * 2,
       gap: spacing.lg,
     },
@@ -1141,41 +1385,60 @@ function createStyles(colors: ThemeColors) {
       flexWrap: "wrap",
       gap: spacing.sm,
     },
+    dayNotesWrap: {
+      marginTop: spacing.md,
+      paddingTop: spacing.md,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
+    },
+    dayNotesLabel: {
+      ...typography.label,
+      fontSize: 10,
+      color: colors.textMuted,
+      marginBottom: 5,
+    },
+    dayNotesText: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      lineHeight: 19,
+    },
     lifeCard: {
       backgroundColor: colors.card,
-      borderRadius: radius.xl,
+      borderRadius: 16,
       borderWidth: 1,
       borderColor: colors.border,
-      padding: spacing.lg,
-      gap: spacing.lg,
+      padding: 16,
     },
     lifeLabel: {
       ...typography.label,
       color: colors.accent,
-      letterSpacing: 5,
+      letterSpacing: 3,
+      marginBottom: 10,
     },
     monthHeader: {
+      flexDirection: "column",
+      gap: 10,
+      marginBottom: 12,
+    },
+    monthSubRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      gap: spacing.sm,
-      flexWrap: "wrap",
     },
     monthTitle: {
       color: colors.textPrimary,
-      fontSize: 24,
-      fontWeight: "900",
-      minWidth: 150,
+      fontSize: 22,
+      fontWeight: "800",
     },
     monthControls: {
       flexDirection: "row",
       alignItems: "center",
-      gap: spacing.sm,
+      gap: 6,
     },
     monthButton: {
-      width: 44,
-      height: 44,
-      borderRadius: radius.sm,
+      width: 32,
+      height: 32,
+      borderRadius: 9,
       borderWidth: 1,
       borderColor: colors.border,
       alignItems: "center",
@@ -1183,9 +1446,9 @@ function createStyles(colors: ThemeColors) {
       backgroundColor: "rgba(10,20,39,0.72)",
     },
     monthTodayButton: {
-      height: 44,
-      paddingHorizontal: spacing.lg,
-      borderRadius: radius.sm,
+      height: 32,
+      paddingHorizontal: 12,
+      borderRadius: 9,
       borderWidth: 1,
       borderColor: colors.border,
       alignItems: "center",
@@ -1194,14 +1457,14 @@ function createStyles(colors: ThemeColors) {
     },
     monthTodayText: {
       color: colors.textSecondary,
-      fontSize: 15,
-      fontWeight: "800",
+      fontSize: 13,
+      fontWeight: "700",
     },
     modeToggle: {
-      height: 44,
+      height: 32,
       flexDirection: "row",
       alignItems: "center",
-      borderRadius: radius.md,
+      borderRadius: 9,
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: "rgba(10,20,39,0.72)",
@@ -1209,79 +1472,88 @@ function createStyles(colors: ThemeColors) {
     },
     modeSelected: {
       height: "100%",
-      paddingHorizontal: spacing.lg,
+      paddingHorizontal: 12,
       alignItems: "center",
       justifyContent: "center",
-      borderRadius: radius.md,
+      borderRadius: 9,
       borderWidth: 1,
       borderColor: colors.accent,
       backgroundColor: "rgba(168,85,247,0.16)",
+      flexShrink: 0,
     },
     modeSelectedText: {
       color: colors.accent,
-      fontSize: 15,
-      fontWeight: "900",
+      fontSize: 13,
+      fontWeight: "800",
+    },
+    modeInactive: {
+      height: "100%",
+      paddingHorizontal: 12,
+      alignItems: "center",
+      justifyContent: "center",
     },
     modeText: {
       color: colors.textMuted,
-      fontSize: 15,
-      fontWeight: "800",
-      paddingHorizontal: spacing.lg,
+      fontSize: 13,
+      fontWeight: "700",
     },
     monthGrid: {
       flexDirection: "row",
       flexWrap: "wrap",
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
-      borderRadius: radius.lg,
+      borderRadius: 10,
       overflow: "hidden",
       backgroundColor: "rgba(3,11,28,0.58)",
     },
     weekdayCell: {
       width: `${100 / 7}%`,
-      minHeight: 48,
+      height: 34,
       alignItems: "center",
       justifyContent: "center",
-      borderBottomWidth: 1,
+      borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.border,
       backgroundColor: "rgba(8,18,36,0.64)",
     },
     weekdayText: {
-      ...typography.label,
+      fontSize: 10,
+      fontWeight: "700",
       color: colors.textMuted,
-      letterSpacing: 2.6,
+      letterSpacing: 0.5,
     },
     dayCell: {
       width: `${100 / 7}%`,
-      aspectRatio: 0.9,
+      minHeight: 76,
       borderRightWidth: StyleSheet.hairlineWidth,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderColor: colors.borderDark,
-      paddingTop: spacing.lg,
+      paddingTop: 8,
+      paddingBottom: 6,
       alignItems: "center",
-      gap: spacing.sm,
+      gap: 4,
       backgroundColor: "rgba(4,13,30,0.42)",
     },
     dayCellSelected: {
       borderWidth: 2,
       borderColor: colors.accent,
-      backgroundColor: "rgba(168,85,247,0.16)",
+      backgroundColor: "rgba(168,85,247,0.14)",
+      borderRadius: 10,
       shadowColor: colors.accent,
-      shadowOpacity: 0.55,
-      shadowRadius: 14,
+      shadowOpacity: 0.4,
+      shadowRadius: 10,
       shadowOffset: { width: 0, height: 0 },
+      elevation: 4,
     },
     dayCellToday: {
-      borderColor: "rgba(168,85,247,0.55)",
-      backgroundColor: "rgba(168,85,247,0.08)",
+      backgroundColor: "rgba(168,85,247,0.06)",
     },
     dayNumber: {
       color: colors.textPrimary,
-      fontSize: 22,
-      fontWeight: "900",
+      fontSize: 17,
+      fontWeight: "700",
     },
     dayNumberMuted: {
-      color: "rgba(132,144,171,0.48)",
+      color: "rgba(132,144,171,0.38)",
     },
     dayNumberSelected: {
       color: colors.textPrimary,
@@ -1290,143 +1562,201 @@ function createStyles(colors: ThemeColors) {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      gap: 7,
-      minHeight: 8,
+      gap: 4,
+      minHeight: 6,
     },
     activityDot: {
-      width: 7,
-      height: 7,
-      borderRadius: 4,
+      width: 5,
+      height: 5,
+      borderRadius: 3,
     },
     selectedUnderline: {
-      width: 20,
-      height: 3,
-      borderRadius: 2,
+      width: 16,
+      height: 2,
+      borderRadius: 1,
       backgroundColor: colors.accent,
-      marginTop: spacing.xs,
+    },
+    weekGrid: {
+      flexDirection: "row",
+      borderRadius: 10,
+      overflow: "hidden",
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      backgroundColor: "rgba(3,11,28,0.58)",
+    },
+    weekCell: {
+      flex: 1,
+      minHeight: 108,
+      paddingTop: 10,
+      paddingBottom: 8,
+      alignItems: "center",
+      gap: 5,
+      borderRightWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.borderDark,
+      backgroundColor: "rgba(4,13,30,0.42)",
+    },
+    weekCellSelected: {
+      borderWidth: 2,
+      borderColor: colors.accent,
+      backgroundColor: "rgba(168,85,247,0.14)",
+      borderRadius: 10,
+      shadowColor: colors.accent,
+      shadowOpacity: 0.4,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 0 },
+      elevation: 4,
+    },
+    weekCellToday: {
+      backgroundColor: "rgba(168,85,247,0.06)",
+    },
+    weekCellDayLabel: {
+      fontSize: 9,
+      fontWeight: "700",
+      color: colors.textMuted,
+      letterSpacing: 0.5,
+    },
+    weekCellNumber: {
+      fontSize: 24,
+      fontWeight: "800",
+      color: colors.textPrimary,
+    },
+    weekCellNumberSelected: {
+      color: colors.textPrimary,
     },
     monthSummaryCard: {
-      backgroundColor: "rgba(10,20,39,0.72)",
-      borderRadius: radius.lg,
+      backgroundColor: colors.card,
+      borderRadius: 16,
       borderWidth: 1,
       borderColor: colors.border,
-      padding: spacing.lg,
+      padding: 16,
       flexDirection: "row",
       alignItems: "center",
-      gap: spacing.lg,
+      gap: 14,
     },
     activityRing: {
-      width: 104,
-      height: 104,
-      borderRadius: 52,
+      width: 88,
+      height: 88,
+      borderRadius: 44,
       alignItems: "center",
       justifyContent: "center",
-      borderWidth: 6,
-      borderColor: "rgba(168,85,247,0.35)",
+      borderWidth: 5,
+      borderColor: "rgba(168,85,247,0.28)",
+      flexShrink: 0,
     },
     activityRingProgress: {
       position: "absolute",
-      width: 104,
-      height: 104,
-      borderRadius: 52,
-      borderWidth: 6,
+      width: 88,
+      height: 88,
+      borderRadius: 44,
+      borderWidth: 5,
       borderTopColor: colors.accentCyan,
       borderRightColor: colors.success,
       borderBottomColor: colors.accent,
       borderLeftColor: colors.warning,
     },
     activityRingInner: {
-      width: 78,
-      height: 78,
-      borderRadius: 39,
+      width: 64,
+      height: 64,
+      borderRadius: 32,
       backgroundColor: colors.card,
       alignItems: "center",
       justifyContent: "center",
     },
     activityRingNumber: {
       color: colors.textPrimary,
-      fontSize: 28,
+      fontSize: 22,
       fontWeight: "900",
+      lineHeight: 26,
     },
     activityRingLabel: {
       color: colors.textMuted,
-      fontSize: 11,
+      fontSize: 9,
       fontWeight: "700",
+      textAlign: "center",
     },
     monthSummaryContent: {
       flex: 1,
-      gap: spacing.sm,
+      gap: 2,
     },
     monthSummaryTitle: {
       color: colors.textPrimary,
-      fontSize: 18,
-      fontWeight: "900",
+      fontSize: 16,
+      fontWeight: "800",
+      lineHeight: 21,
     },
     monthSummaryText: {
-      ...typography.body,
+      fontSize: 13,
       color: colors.textMuted,
+      marginBottom: 4,
     },
     monthStatsRow: {
       flexDirection: "row",
       flexWrap: "wrap",
-      gap: spacing.md,
-      marginTop: spacing.xs,
+      rowGap: 6,
+      columnGap: 10,
     },
     monthStat: {
-      minWidth: 88,
-      gap: spacing.xs,
+      gap: 2,
     },
     monthStatValue: {
       color: colors.textPrimary,
-      fontSize: 18,
+      fontSize: 17,
       fontWeight: "900",
     },
     monthStatLabelRow: {
       flexDirection: "row",
       alignItems: "center",
-      gap: spacing.xs,
+      gap: 4,
     },
     monthStatLabel: {
-      ...typography.caption,
+      fontSize: 9,
+      fontWeight: "500",
       color: colors.textMuted,
     },
     legendCard: {
-      backgroundColor: "rgba(10,20,39,0.72)",
-      borderRadius: radius.lg,
+      backgroundColor: colors.card,
+      borderRadius: 16,
       borderWidth: 1,
       borderColor: colors.border,
-      padding: spacing.lg,
+      padding: 16,
+    },
+    legendColumns: {
       flexDirection: "row",
-      flexWrap: "wrap",
-      gap: spacing.lg,
+      gap: 14,
+    },
+    legendColumn: {
+      flex: 1,
+      gap: 16,
     },
     legendItem: {
-      width: "46%",
       flexDirection: "row",
-      gap: spacing.md,
-      alignItems: "center",
+      gap: 10,
+      alignItems: "flex-start",
     },
     legendIcon: {
-      width: 42,
-      height: 42,
-      borderRadius: 21,
+      width: 34,
+      height: 34,
+      borderRadius: 17,
       alignItems: "center",
       justifyContent: "center",
+      flexShrink: 0,
     },
     legendCopy: {
       flex: 1,
       gap: 2,
     },
     legendTitle: {
-      fontSize: 16,
-      fontWeight: "900",
+      fontSize: 14,
+      fontWeight: "800",
     },
     legendSubtitle: {
-      ...typography.caption,
+      fontSize: 11,
+      fontWeight: "500",
       color: colors.textMuted,
+      lineHeight: 15,
     },
     timelineHint: {
-      ...typography.body,
+      fontSize: 13,
       color: colors.textMuted,
       textAlign: "center",
     },
@@ -1755,22 +2085,28 @@ function createStyles(colors: ThemeColors) {
       backgroundColor: colors.overlay,
     },
     modalWrapper: {
+      ...StyleSheet.absoluteFillObject,
       justifyContent: "flex-end",
     },
     sheet: {
-      backgroundColor: colors.surface,
+      backgroundColor: colors.glassStrong,
       borderTopLeftRadius: radius.xl,
       borderTopRightRadius: radius.xl,
       borderWidth: 1,
-      borderColor: colors.border,
-      padding: spacing.lg,
+      borderColor: colors.primaryBorder,
+      padding: spacing.lg + 2,
       paddingTop: spacing.md,
+      shadowColor: colors.shadow,
+      shadowOpacity: 0.18,
+      shadowRadius: 28,
+      shadowOffset: { width: 0, height: -12 },
+      elevation: 18,
     },
     sheetHandle: {
       width: 40,
       height: 4,
       borderRadius: 2,
-      backgroundColor: colors.border,
+      backgroundColor: colors.secondaryBorder,
       alignSelf: "center",
       marginBottom: spacing.lg,
     },

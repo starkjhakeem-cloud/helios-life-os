@@ -23,6 +23,10 @@ export type ChatMessage = {
   recommended_actions: RecommendedAction[];
   timestamp: string;
   provider?: string;
+  // Backend can return context chips once the engine surfaces them
+  context_sources?: string[];
+  // True while the message is being streamed (partial content)
+  streaming?: boolean;
 };
 
 const WELCOME: ChatMessage = {

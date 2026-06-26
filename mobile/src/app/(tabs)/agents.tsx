@@ -245,6 +245,10 @@ export default function AgentsScreen() {
           placeholderTextColor={colors.textMuted}
           value={prompt}
           onChangeText={(t) => { setPrompt(t); setPromptError(null); }}
+          autoCapitalize="none"
+          autoCorrect={false}
+          spellCheck={false}
+          smartInsertDelete={false}
           multiline
           numberOfLines={3}
           textAlignVertical="top"
@@ -360,6 +364,10 @@ export default function AgentsScreen() {
             setOrchObjective(t);
             setOrchObjectiveError(null);
           }}
+          autoCapitalize="none"
+          autoCorrect={false}
+          spellCheck={false}
+          smartInsertDelete={false}
           multiline
           numberOfLines={3}
           textAlignVertical="top"

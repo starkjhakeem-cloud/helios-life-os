@@ -27,11 +27,14 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.core.security import hash_password, verify_password
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User
 from app.models.user_profile import UserProfile
 from app.schemas.profile import (
+    ChangeEmailRequest,
+    ChangePasswordRequest,
     ProfileOut,
     ProfileUpdate,
     UserIdCheckResponse,
@@ -42,6 +45,7 @@ from app.schemas.profile import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+DISPLAY_NAME_MAX_POST_SETUP_CHANGES = 2
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -71,6 +75,43 @@ def _can_change(profile: UserProfile) -> bool:
     return not profile.user_id_changed
 
 
+def _display_name_changes_remaining(profile: UserProfile) -> int:
+    return max(
+        DISPLAY_NAME_MAX_POST_SETUP_CHANGES - profile.display_name_change_count,
+        0,
+    )
+
+
+def _normalize_optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _apply_display_name_update(profile: UserProfile, value: str | None) -> None:
+    new_value = _normalize_optional_text(value)
+    old_value = _normalize_optional_text(profile.display_name)
+    if new_value == old_value:
+        profile.display_name = new_value
+        return
+
+    is_post_setup_change = old_value is not None
+    if is_post_setup_change and profile.display_name_change_count >= DISPLAY_NAME_MAX_POST_SETUP_CHANGES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Display Name can only be changed twice after initial account setup."
+            ),
+        )
+
+    now = datetime.now(timezone.utc)
+    if is_post_setup_change:
+        profile.display_name_change_count += 1
+        profile.display_name_changed_at = now
+    profile.display_name = new_value
+
+
 def _to_out(p: UserProfile) -> ProfileOut:
     return ProfileOut(
         user_id=p.user_id,
@@ -83,6 +124,12 @@ def _to_out(p: UserProfile) -> ProfileOut:
         first_name=p.first_name,
         last_name=p.last_name,
         display_name=p.display_name,
+        display_name_change_count=p.display_name_change_count,
+        display_name_changes_remaining=_display_name_changes_remaining(p),
+        can_change_display_name=_display_name_changes_remaining(p) > 0,
+        display_name_changed_at=(
+            p.display_name_changed_at.isoformat() if p.display_name_changed_at else None
+        ),
         phone_number=p.phone_number,
         date_of_birth=p.date_of_birth,
         address_line_1=p.address_line_1,
@@ -136,11 +183,19 @@ def update_profile(
     try:
         profile = _get_or_create(db, current_user.id)
         for field, val in payload.model_dump(exclude_unset=True).items():
-            setattr(profile, field, val)
+            if field == "display_name":
+                _apply_display_name_update(profile, val)
+            elif isinstance(val, str):
+                setattr(profile, field, _normalize_optional_text(val))
+            else:
+                setattr(profile, field, val)
         profile.updated_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(profile)
         return _to_out(profile)
+    except HTTPException:
+        db.rollback()
+        raise
     except (OperationalError, ProgrammingError) as exc:
         db.rollback()
         logger.error(
@@ -277,6 +332,8 @@ def update_user_id(
         profile = _get_or_create(db, current_user.id)
 
         is_change = profile.custom_user_id is not None
+        if profile.custom_user_id == payload.value:
+            return _to_out(profile)
 
         # Lock check: slot already consumed on a previous change.
         if is_change and profile.user_id_changed:
@@ -359,4 +416,129 @@ def update_user_id(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Unable to reach HELIOS services. Please try again.",
+        )
+
+
+# ── POST /profile/change-email ────────────────────────────────────────────────
+
+@router.post("/change-email", status_code=status.HTTP_204_NO_CONTENT)
+def change_email(
+    payload: ChangeEmailRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    """
+    Update the authenticated user's email address.
+
+    Requires the current password for identity verification.
+    Rejects if the new email matches the current address.
+    Rejects if the new email is already registered to another account.
+    """
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        logger.warning(
+            "change_email: incorrect password attempt for user %s",
+            current_user.id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Current password is incorrect.",
+        )
+
+    if payload.new_email == current_user.email.lower():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="New email must be different from your current address.",
+        )
+
+    taken = db.execute(
+        select(User.id).where(
+            User.email == payload.new_email,
+            User.id != current_user.id,
+        )
+    ).scalar_one_or_none()
+    if taken:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="That email address is already associated with another account.",
+        )
+
+    try:
+        current_user.email = payload.new_email
+        db.commit()
+        logger.info("change_email: email updated for user %s", current_user.id)
+    except (OperationalError, ProgrammingError) as exc:
+        db.rollback()
+        logger.error(
+            "change_email: database error for user %s — %s: %s",
+            current_user.id, type(exc).__name__, exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to update email right now. Please try again.",
+        )
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.error(
+            "change_email: unexpected error for user %s — %s: %s",
+            current_user.id, type(exc).__name__, exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to update email right now. Please try again.",
+        )
+
+
+# ── POST /profile/change-password ────────────────────────────────────────────
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+def change_password(
+    payload: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    """
+    Securely update the authenticated user's password.
+
+    Verifies the current password, rejects reuse of the same password,
+    then stores the new bcrypt hash.  Never logs or returns password material.
+    """
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        logger.warning(
+            "change_password: incorrect current password attempt for user %s",
+            current_user.id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Current password is incorrect.",
+        )
+
+    if verify_password(payload.new_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="New password must be different from your current password.",
+        )
+
+    try:
+        current_user.hashed_password = hash_password(payload.new_password)
+        db.commit()
+        logger.info("change_password: password updated successfully for user %s", current_user.id)
+    except (OperationalError, ProgrammingError) as exc:
+        db.rollback()
+        logger.error(
+            "change_password: database error for user %s — %s: %s",
+            current_user.id, type(exc).__name__, exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to update password right now. Please try again.",
+        )
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.error(
+            "change_password: unexpected error for user %s — %s: %s",
+            current_user.id, type(exc).__name__, exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to update password right now. Please try again.",
         )

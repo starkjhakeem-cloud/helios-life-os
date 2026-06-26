@@ -35,3 +35,8 @@ export type { AutonomyAuditLogEntry, AutonomyQueueItem, AutonomyExecuteResult, S
 export { useProfileStore } from "./useProfileStore";
 export type { ProfileOut, ProfileUpdate, UserIdCheckResponse } from "../services/profileService";
 export type { AssistantTone, LifeArea, TimeFormat } from "../services/settingsService";
+export { useDailyBriefStore } from "./useDailyBriefStore";
+export type { BackendDailyBrief } from "../services/dailyBriefService";
+export type { BriefErrorCode } from "./useDailyBriefStore";
+export { useTaskEngineStore } from "./useTaskEngineStore";
+export type { TaskSuggestion } from "../services/taskEngineService";

@@ -1,5 +1,6 @@
 import { apiClient } from "./apiClient";
 import { API_ENDPOINTS } from "../config/api";
+import type { TasksListResponse } from "./tasksService";
 
 export type Goal = {
   id: string;
@@ -14,6 +15,18 @@ export type Goal = {
 
 export type GoalsListResponse = {
   goals: Goal[];
+};
+
+export type GoalProgress = {
+  goal_id: string;
+  goal_title: string;
+  total_tasks: number;
+  completed_tasks: number;
+  in_progress_tasks: number;
+  todo_tasks: number;
+  computed_progress: number;
+  manual_progress: number | null;
+  effective_progress: number;
 };
 
 export type CreateGoalInput = {
@@ -35,6 +48,15 @@ const BASE = API_ENDPOINTS.goals.list;
 export const goalsService = {
   list: (token: string) =>
     apiClient.get<GoalsListResponse>(BASE, token),
+
+  detail: (token: string, id: string) =>
+    apiClient.get<Goal>(API_ENDPOINTS.goals.detail(id), token),
+
+  linkedTasks: (token: string, id: string) =>
+    apiClient.get<TasksListResponse>(API_ENDPOINTS.goals.linkedTasks(id), token),
+
+  progress: (token: string, id: string) =>
+    apiClient.get<GoalProgress>(API_ENDPOINTS.relationships.goalProgress(id), token),
 
   create: (token: string, body: CreateGoalInput) =>
     apiClient.post<Goal>(BASE, body, token),

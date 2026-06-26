@@ -14,6 +14,7 @@ type NotificationsState = {
   markRead: (token: string, id: string) => Promise<void>;
   markAllRead: (token: string) => Promise<void>;
   deleteNotification: (token: string, id: string) => Promise<void>;
+  deleteAll: (token: string) => Promise<void>;
 
   reset: () => void;
 };
@@ -77,6 +78,26 @@ export const useNotificationsStore = create<NotificationsState>()((set, get) => 
       });
     } catch (err) {
       set({ error: extractMessage(err), isMutating: false });
+    }
+  },
+
+  deleteAll: async (token) => {
+    const ids = get().notifications.map((n) => n.id);
+    if (ids.length === 0) return;
+    // Optimistically clear the list immediately so the UI feels instant
+    set({ isMutating: true, error: null, notifications: [], unreadCount: 0 });
+    try {
+      await Promise.all(ids.map((id) => inboxService.remove(token, id)));
+      set({ isMutating: false });
+    } catch (err) {
+      // Re-fetch to restore correct server state on partial failure
+      set({ isMutating: false, error: extractMessage(err) });
+      try {
+        const data = await inboxService.list(token);
+        set({ notifications: data.notifications, unreadCount: data.unread_count });
+      } catch {
+        // Leave the store empty; user can pull-to-refresh
+      }
     }
   },
 

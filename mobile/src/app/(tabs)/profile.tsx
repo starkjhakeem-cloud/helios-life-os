@@ -18,6 +18,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { detectLocation, getDeviceTimezone } from "../../services/locationService";
+import DateTimeField from "../../components/ui/DateTimeField";
+import { formatBackendDate, parseDateTimeInput } from "../../utils/dateInput";
 
 import { systemService, type VersionResponse } from "../../services/systemService";
 import { requestPermissions } from "../../services/notificationService";
@@ -183,13 +185,13 @@ function NewReminderModal({ visible, onClose, onSubmit, isMutating }: NewReminde
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  const [remindAt, setRemindAt] = useState("");
+  const [remindAt, setRemindAt] = useState<Date | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   function resetAndClose() {
     setTitle("");
     setBody("");
-    setRemindAt("");
+    setRemindAt(null);
     setFormError(null);
     Keyboard.dismiss();
     onClose();
@@ -200,21 +202,16 @@ function NewReminderModal({ visible, onClose, onSubmit, isMutating }: NewReminde
       setFormError("Reminder title is required.");
       return;
     }
-    if (!remindAt.trim()) {
-      setFormError("Remind at date/time is required.");
+    if (!remindAt) {
+      setFormError("Reminder time is required.");
       return;
     }
-    const parsed = new Date(remindAt.trim());
-    if (isNaN(parsed.getTime())) {
-      setFormError("Invalid date format. Use YYYY-MM-DD HH:MM or ISO 8601.");
-      return;
-    }
-    if (parsed <= new Date()) {
+    if (remindAt <= new Date()) {
       setFormError("Reminder time must be in the future.");
       return;
     }
     setFormError(null);
-    onSubmit({ title: title.trim(), body: body.trim(), remind_at: parsed.toISOString() });
+    onSubmit({ title: title.trim(), body: body.trim(), remind_at: remindAt.toISOString() });
   }
 
   return (
@@ -233,6 +230,10 @@ function NewReminderModal({ visible, onClose, onSubmit, isMutating }: NewReminde
             onChangeText={setTitle}
             placeholder="e.g. Review weekly goals"
             placeholderTextColor={colors.textMuted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            spellCheck={false}
+            smartInsertDelete={false}
             maxLength={200}
           />
           <Text style={styles.fieldLabel}>NOTE (OPTIONAL)</Text>
@@ -242,20 +243,21 @@ function NewReminderModal({ visible, onClose, onSubmit, isMutating }: NewReminde
             onChangeText={setBody}
             placeholder="Additional context"
             placeholderTextColor={colors.textMuted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            spellCheck={false}
+            smartInsertDelete={false}
             maxLength={500}
             multiline
           />
-          <Text style={styles.fieldLabel}>REMIND AT</Text>
-          <TextInput
-            style={styles.input}
+          <DateTimeField
+            label="REMIND AT"
             value={remindAt}
-            onChangeText={setRemindAt}
-            placeholder="e.g. 2026-06-01 09:00"
-            placeholderTextColor={colors.textMuted}
-            autoCapitalize="none"
-            autoCorrect={false}
+            onChange={setRemindAt}
+            mode="datetime"
+            placeholder="Select reminder time"
+            minimumDate={new Date()}
           />
-          <Text style={styles.fieldHint}>Format: YYYY-MM-DD HH:MM (24h) or full ISO 8601</Text>
           {formError ? <Text style={styles.formError}>{formError}</Text> : null}
           <View style={styles.sheetActions}>
             <TouchableOpacity style={styles.cancelButton} onPress={resetAndClose} activeOpacity={0.7}>
@@ -290,7 +292,7 @@ type UserIdCheckResult = {
 
 /** Map a check `reason` code to a human-readable sentence. */
 function formatCheckMessage(result: UserIdCheckResult): string {
-  if (result.available) return result.message;
+  if (result.available) return result.message || "Username is available.";
   switch (result.reason) {
     case "too_short":
       return "Username too short — needs at least 3 characters.";
@@ -302,8 +304,10 @@ function formatCheckMessage(result: UserIdCheckResult): string {
       return "This username is reserved and cannot be used.";
     case "taken":
       return "Username already taken. Please choose a different one.";
+    case "available":
+      return "Username is available.";
     default:
-      return result.message || "Username not available.";
+      return result.message || "Unable to check this username right now.";
   }
 }
 
@@ -311,13 +315,14 @@ function formatCheckMessage(result: UserIdCheckResult): string {
 function formatApiError(err: unknown): string {
   if (!err || typeof err !== "object") return "Something went wrong. Try again.";
   const e = err as { status?: number; message?: string };
-  if (e.status === 503) return "Unable to reach HELIOS services. Check your connection.";
-  if (e.status === 409) return e.message ?? "Username already taken.";
-  if (e.status === 422) return "Invalid username format.";
+  const message = e.message && !/^HTTP\s+\d+$/.test(e.message) ? e.message : null;
+  if (e.status === 503) return message ?? "Unable to reach HELIOS services. Check your connection.";
+  if (e.status === 409) return message ?? "Username already taken.";
+  if (e.status === 422) return message ?? "Invalid username format.";
   if (e.status === 401) return "Session expired. Please sign in again.";
   if (e.message?.toLowerCase().includes("network"))
     return "Network unavailable. Check your connection.";
-  return e.message ?? "Something went wrong. Try again.";
+  return message ?? "Something went wrong. Try again.";
 }
 
 type UserIdModalProps = {
@@ -325,18 +330,10 @@ type UserIdModalProps = {
   onClose: () => void;
   currentId: string | null;
   canChange: boolean;
-  userIdChanged: boolean;
   accessToken: string;
 };
 
-function UserIdModal({
-  visible,
-  onClose,
-  currentId,
-  canChange,
-  userIdChanged,
-  accessToken,
-}: UserIdModalProps) {
+function UserIdModal({ visible, onClose, currentId, canChange, accessToken }: UserIdModalProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { updateUserId, checkUserId, isSaving } = useProfileStore();
@@ -347,38 +344,37 @@ function UserIdModal({
   const [formError, setFormError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  // Reset state each time the modal opens.
   useEffect(() => {
-    if (visible) {
-      setDraft(currentId ?? "");
-      setCheckResult(null);
-      setFormError(null);
-      setSuccess(false);
-    }
-  }, [visible]);
+    if (!visible) return;
+    setDraft(currentId ?? "");
+    setCheckResult(null);
+    setFormError(null);
+    setSuccess(false);
+  }, [currentId, visible]);
 
   function resetAndClose() {
     Keyboard.dismiss();
     onClose();
   }
 
+  function validate(value: string): string | null {
+    if (value.length < 3) return "Username too short — needs at least 3 characters.";
+    if (value.length > 24) return "Username too long — 24 characters maximum.";
+    if (!USER_ID_RE.test(value)) return "Use only lowercase letters (a–z), numbers, underscores, or periods.";
+    return null;
+  }
+
   async function handleCheck() {
     const val = draft.trim().toLowerCase();
-
-    // Client-side fast-path validation — avoids a round-trip for obvious errors.
-    if (val.length < 3) {
-      setFormError("Username too short — needs at least 3 characters.");
+    const validation = validate(val);
+    if (validation) {
+      setFormError(validation);
       setCheckResult(null);
       return;
     }
-    if (val.length > 24) {
-      setFormError("Username too long — 24 characters maximum.");
-      setCheckResult(null);
-      return;
-    }
-    if (!USER_ID_RE.test(val)) {
-      setFormError("Use only lowercase letters (a–z), numbers, underscores, or periods.");
-      setCheckResult(null);
+    if (currentId && val === currentId) {
+      setFormError(null);
+      setCheckResult({ available: true, reason: "available", message: "This is already your username." });
       return;
     }
 
@@ -386,10 +382,8 @@ function UserIdModal({
     setCheckResult(null);
     setIsChecking(true);
     try {
-      const result = await checkUserId(accessToken, val);
-      setCheckResult(result);
+      setCheckResult(await checkUserId(accessToken, val));
     } catch (err) {
-      // Network/server error — the check endpoint itself failed.
       setFormError(formatApiError(err));
     } finally {
       setIsChecking(false);
@@ -398,24 +392,25 @@ function UserIdModal({
 
   async function handleSave() {
     const val = draft.trim().toLowerCase();
-    if (val.length < 3) {
-      setFormError("Username too short — needs at least 3 characters.");
+    const validation = validate(val);
+    if (validation) {
+      setFormError(validation);
       return;
     }
-    if (!USER_ID_RE.test(val)) {
-      setFormError("Use only lowercase letters (a–z), numbers, underscores, or periods.");
+    if (currentId && val === currentId) {
+      setFormError("Enter a different username before saving.");
       return;
     }
-    // Warn if the user skipped the check step, but don't block — the server will validate.
     if (checkResult && !checkResult.available) {
       setFormError(formatCheckMessage(checkResult));
       return;
     }
+
     setFormError(null);
     try {
       await updateUserId(accessToken, val);
       setSuccess(true);
-      setTimeout(resetAndClose, 900);
+      setTimeout(resetAndClose, 800);
     } catch (err) {
       setFormError(formatApiError(err));
     }
@@ -425,7 +420,7 @@ function UserIdModal({
   const statusLine = canChange
     ? isInitialSet
       ? "Choose your @handle. You may change it once after setup."
-      : "You have 1 change remaining. Use it carefully."
+      : "You have 1 username change remaining. Use it carefully."
     : "Your username has been changed once and is now locked.";
 
   return (
@@ -436,16 +431,10 @@ function UserIdModal({
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalWrapper}>
         <View style={styles.sheet}>
           <View style={styles.sheetHandle} />
-          <Text style={styles.sheetTitle}>
-            {isInitialSet ? "SET USERNAME" : canChange ? "CHANGE USERNAME" : "USERNAME"}
-          </Text>
-
-          <Text style={[styles.fieldHint, { marginTop: 0, marginBottom: spacing.md }]}>
-            {statusLine}
-          </Text>
+          <Text style={styles.sheetTitle}>{isInitialSet ? "SET USERNAME" : canChange ? "CHANGE USERNAME" : "USERNAME"}</Text>
+          <Text style={[styles.fieldHint, { marginTop: 0, marginBottom: spacing.md }]}>{statusLine}</Text>
 
           {!canChange ? (
-            // Locked — read-only view.
             <>
               <View style={[styles.input, { justifyContent: "center", marginBottom: spacing.sm }]}>
                 <Text style={{ color: colors.textMuted, fontSize: 14 }}>@{currentId}</Text>
@@ -455,7 +444,6 @@ function UserIdModal({
               </Text>
             </>
           ) : (
-            // Editable.
             <>
               <Text style={styles.fieldLabel}>USERNAME</Text>
               <View style={styles.userIdRow}>
@@ -464,8 +452,7 @@ function UserIdModal({
                   style={[styles.input, styles.userIdInput]}
                   value={draft}
                   onChangeText={(t) => {
-                    // Force lowercase, strip spaces.
-                    setDraft(t.toLowerCase().replace(/\s/g, ""));
+                    setDraft(t);
                     setCheckResult(null);
                     setFormError(null);
                   }}
@@ -474,6 +461,8 @@ function UserIdModal({
                   autoCapitalize="none"
                   autoCorrect={false}
                   spellCheck={false}
+                  smartInsertDelete={false}
+                  textContentType="username"
                   maxLength={24}
                 />
                 <TouchableOpacity
@@ -490,8 +479,6 @@ function UserIdModal({
                 </TouchableOpacity>
               </View>
               <Text style={styles.fieldHint}>3–24 chars · a–z · 0–9 · _ ·  .</Text>
-
-              {/* Check result */}
               {checkResult && !formError ? (
                 <Text
                   style={[
@@ -507,13 +494,7 @@ function UserIdModal({
                   {formatCheckMessage(checkResult)}
                 </Text>
               ) : null}
-
-              {/* Validation / API error */}
-              {formError ? (
-                <Text style={[styles.formError, { marginTop: spacing.xs }]}>{formError}</Text>
-              ) : null}
-
-              {/* Success banner */}
+              {formError ? <Text style={[styles.formError, { marginTop: spacing.xs }]}>{formError}</Text> : null}
               {success ? (
                 <Text style={[styles.fieldHint, { color: colors.success, fontWeight: "600" }]}>
                   ✓ Username saved successfully.
@@ -526,12 +507,9 @@ function UserIdModal({
             <TouchableOpacity style={styles.cancelButton} onPress={resetAndClose} activeOpacity={0.7}>
               <Text style={styles.cancelButtonText}>CANCEL</Text>
             </TouchableOpacity>
-            {canChange && (
+            {canChange ? (
               <TouchableOpacity
-                style={[
-                  styles.createButton,
-                  (isSaving || !draft.trim() || success) && { opacity: 0.5 },
-                ]}
+                style={[styles.createButton, (isSaving || !draft.trim() || success) && { opacity: 0.5 }]}
                 onPress={handleSave}
                 disabled={isSaving || !draft.trim() || success}
                 activeOpacity={0.8}
@@ -542,13 +520,14 @@ function UserIdModal({
                   <Text style={styles.createButtonText}>SAVE</Text>
                 )}
               </TouchableOpacity>
-            )}
+            ) : null}
           </View>
         </View>
       </KeyboardAvoidingView>
     </Modal>
   );
 }
+
 
 // ── Personal Information Modal ────────────────────────────────────────────────
 
@@ -563,6 +542,10 @@ function PersonalInfoModal({ visible, onClose, accessToken }: PersonalInfoModalP
   const styles = useMemo(() => createStyles(colors), [colors]);
   const profile = useProfileStore();
   const user = useAuthStore((s) => s.user);
+  const displayNameLocked = !profile.can_change_display_name;
+  const displayNameLimitMessage = profile.display_name
+    ? `Display Name changes are limited to 2 after initial account setup. You have ${profile.display_name_changes_remaining} change${profile.display_name_changes_remaining === 1 ? "" : "s"} remaining.`
+    : "Your first Display Name setup is free. After initial setup, you can change your Display Name up to 2 times.";
 
   const [draft, setDraft] = useState({
     first_name: profile.first_name ?? "",
@@ -649,7 +632,10 @@ function PersonalInfoModal({ visible, onClose, accessToken }: PersonalInfoModalP
         onChangeText={(v) => setDraft((d) => ({ ...d, [key]: v }))}
         placeholder={opts?.placeholder ?? ""}
         placeholderTextColor={colors.textMuted}
+        autoCapitalize="none"
         autoCorrect={false}
+        spellCheck={false}
+        smartInsertDelete={false}
       />
     </>
   );
@@ -669,13 +655,41 @@ function PersonalInfoModal({ visible, onClose, accessToken }: PersonalInfoModalP
           <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {field("FIRST NAME", "first_name")}
             {field("LAST NAME", "last_name")}
-            {field("DISPLAY NAME / ORGANIZATION", "display_name", { optional: true, placeholder: "How you'd like to appear" })}
+            <Text style={styles.fieldLabel}>DISPLAY NAME / ORGANIZATION (OPTIONAL)</Text>
+            <TextInput
+              style={[
+                styles.input,
+                styles.displayNameInput,
+                displayNameLocked && { opacity: 0.55 },
+              ]}
+              value={draft.display_name}
+              onChangeText={(v) => setDraft((d) => ({ ...d, display_name: v }))}
+              placeholder="How you'd like to appear"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
+              smartInsertDelete={false}
+              editable={!displayNameLocked}
+            />
+            <Text style={styles.displayNameHint}>
+              {displayNameLocked
+                ? "Display Name is locked. You have used both allowed changes after initial account setup."
+                : displayNameLimitMessage}
+            </Text>
             <Text style={styles.fieldLabel}>EMAIL ADDRESS</Text>
             <View style={[styles.input, { justifyContent: "center", marginBottom: spacing.md }]}>
               <Text style={{ color: colors.textMuted, fontSize: 14 }}>{user?.email ?? "—"}</Text>
             </View>
             {field("PHONE NUMBER", "phone_number", { optional: true, placeholder: "+1 555 000 0000" })}
-            {field("DATE OF BIRTH", "date_of_birth", { optional: true, placeholder: "YYYY-MM-DD" })}
+            <DateTimeField
+              label="DATE OF BIRTH (OPTIONAL)"
+              value={draft.date_of_birth ? parseDateTimeInput(draft.date_of_birth) : null}
+              onChange={(date) => setDraft((d) => ({ ...d, date_of_birth: date ? formatBackendDate(date) : "" }))}
+              mode="date"
+              placeholder="Select date"
+              maximumDate={new Date()}
+            />
             {field("ADDRESS LINE 1", "address_line_1")}
             {field("ADDRESS LINE 2", "address_line_2", { optional: true })}
             {field("CITY", "city")}
@@ -690,7 +704,7 @@ function PersonalInfoModal({ visible, onClose, accessToken }: PersonalInfoModalP
               <SymbolView name="location.fill" size={12} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
             </View>
             <Text style={[styles.fieldHint, { marginBottom: spacing.md }]}>
-              Detected automatically from your device. Tap "Detect Location" on the Profile screen to refresh.
+              Detected automatically from your device. Tap &quot;Detect Location&quot; on the Profile screen to refresh.
             </Text>
             {formError ? <Text style={[styles.formError, { marginBottom: spacing.sm }]}>{formError}</Text> : null}
             {success ? (
@@ -832,6 +846,10 @@ function PersonalizationModal({ visible, onClose, accessToken }: Personalization
               onChangeText={(v) => setDraft((d) => ({ ...d, preferred_name: v }))}
               placeholder="How HELIOS should address you"
               placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
+              smartInsertDelete={false}
               maxLength={100}
             />
 
@@ -868,6 +886,10 @@ function PersonalizationModal({ visible, onClose, accessToken }: Personalization
               onChangeText={(v) => setDraft((d) => ({ ...d, primary_location: v }))}
               placeholder="Auto-detected on login"
               placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
+              smartInsertDelete={false}
               maxLength={120}
             />
 
@@ -879,6 +901,10 @@ function PersonalizationModal({ visible, onClose, accessToken }: Personalization
               onChangeText={(v) => setDraft((d) => ({ ...d, work_focus: v }))}
               placeholder="e.g. Software engineering, law, nursing"
               placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
+              smartInsertDelete={false}
               maxLength={200}
             />
 
@@ -890,6 +916,10 @@ function PersonalizationModal({ visible, onClose, accessToken }: Personalization
               onChangeText={(v) => setDraft((d) => ({ ...d, daily_brief_time: v }))}
               placeholder="HH:MM (24-hour)"
               placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
+              smartInsertDelete={false}
               maxLength={5}
               keyboardType="numbers-and-punctuation"
             />
@@ -1091,8 +1121,8 @@ export default function ProfileScreen() {
         return;
       }
 
-      // Always sync timezone from device.
-      const timezone = getDeviceTimezone();
+      // Always sync timezone from the detected location when available.
+      const timezone = detected.timezone || getDeviceTimezone();
       await profile.updateProfile(accessToken, {
         timezone,
         city: detected.city ?? undefined,
@@ -1107,6 +1137,18 @@ export default function ProfileScreen() {
           location: next,
           primary_location: next,
         }).catch(() => {});
+      } else if (detected.warningCode === "simulator_default") {
+        Alert.alert(
+          "Simulator Location Detected",
+          "The iOS Simulator is still reporting its default San Francisco-area location. Set a custom simulator location or run HELIOS on your phone to detect your real location.",
+          [{ text: "OK" }],
+        );
+      } else if (detected.warningCode) {
+        Alert.alert(
+          "Location Not Found",
+          "HELIOS could not resolve your current city from Location Services. Your timezone was updated, but your location label was left unchanged.",
+          [{ text: "OK" }],
+        );
       }
     } finally {
       setIsDetectingLocation(false);
@@ -1199,7 +1241,6 @@ export default function ProfileScreen() {
     const name = [profile.first_name, profile.last_name].filter(Boolean).join(" ");
     personalSummary.push({ label: "Name", value: name });
   }
-  if (profile.display_name) personalSummary.push({ label: "Display Name", value: profile.display_name });
   if (profile.phone_number) personalSummary.push({ label: "Phone", value: profile.phone_number });
   if (profile.city) {
     const loc = [profile.city, profile.state, profile.country].filter(Boolean).join(", ");
@@ -1224,31 +1265,6 @@ export default function ProfileScreen() {
             <View style={styles.avatarInfo}>
               <Text style={styles.displayName} numberOfLines={1}>{displayName}</Text>
               <Text style={styles.emailText} numberOfLines={1}>{user?.email ?? "—"}</Text>
-              {profile.custom_user_id ? (
-                <TouchableOpacity
-                  onPress={() => setUserIdModalVisible(true)}
-                  activeOpacity={0.7}
-                  style={styles.handleRow}
-                >
-                  <Text style={styles.handleText}>@{profile.custom_user_id}</Text>
-                  {profile.can_change_user_id && (
-                    <SymbolView
-                      name="pencil"
-                      size={10}
-                      tintColor={colors.textMuted}
-                      resizeMode="scaleAspectFit"
-                    />
-                  )}
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  onPress={() => setUserIdModalVisible(true)}
-                  activeOpacity={0.7}
-                  style={styles.handleRow}
-                >
-                  <Text style={styles.handlePrompt}>Set your @username</Text>
-                </TouchableOpacity>
-              )}
             </View>
           </View>
         </View>
@@ -1259,18 +1275,18 @@ export default function ProfileScreen() {
           <InfoRow label="Member Since" value={formatMemberSince(user?.created_at)} />
           <View style={styles.cardDivider} />
           <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>User ID</Text>
+            <Text style={[styles.infoLabel, { color: colors.textSecondary, flex: 0 }]}>Username</Text>
             <TouchableOpacity
               onPress={() => setUserIdModalVisible(true)}
               style={styles.userIdValueRow}
               activeOpacity={0.7}
             >
               {profile.custom_user_id ? (
-                <Text style={[styles.infoValue, { color: colors.accentCyan }]}>
+                <Text style={[styles.infoValue, { color: colors.textPrimary }]} numberOfLines={1}>
                   @{profile.custom_user_id}
                 </Text>
               ) : (
-                <Text style={[styles.infoValue, { color: colors.textMuted, fontStyle: "italic" }]}>
+                <Text style={[styles.infoValue, { color: colors.textMuted, fontStyle: "italic" }]} numberOfLines={1}>
                   Not set
                 </Text>
               )}
@@ -1281,9 +1297,103 @@ export default function ProfileScreen() {
               )}
             </TouchableOpacity>
           </View>
-          {!profile.can_change_user_id && (
-            <Text style={styles.lockNote}>User ID can only be changed once after setup.</Text>
-          )}
+          <TouchableOpacity
+            onPress={() => setUserIdModalVisible(true)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.lockNote}>
+              {profile.can_change_user_id
+                ? profile.custom_user_id
+                  ? "Tap to change your username. You can change it once after setup."
+                  : "Tap to set your username. You can change it once after setup."
+                : "Username can only be changed once after setup."}
+            </Text>
+          </TouchableOpacity>
+          <View style={styles.cardDivider} />
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: colors.textSecondary, flex: 0 }]}>Display Name</Text>
+            <TouchableOpacity
+              onPress={() => setPersonalInfoModalVisible(true)}
+              style={styles.userIdValueRow}
+              activeOpacity={0.7}
+            >
+              {profile.display_name ? (
+                <Text style={[styles.infoValue, { color: colors.textPrimary }]} numberOfLines={1}>
+                  {profile.display_name}
+                </Text>
+              ) : (
+                <Text style={[styles.infoValue, { color: colors.textMuted, fontStyle: "italic" }]} numberOfLines={1}>
+                  Not set
+                </Text>
+              )}
+              {profile.can_change_display_name ? (
+                <Text style={styles.editChip}>{profile.display_name ? "CHANGE" : "SET"}</Text>
+              ) : (
+                <SymbolView name="lock" size={11} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+              )}
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            onPress={() => setPersonalInfoModalVisible(true)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.lockNote}>
+              {profile.can_change_display_name
+                ? `${profile.display_name_changes_remaining} display name change${profile.display_name_changes_remaining === 1 ? "" : "s"} remaining after setup.`
+                : "Display Name can only be changed twice after setup."}
+            </Text>
+          </TouchableOpacity>
+          <View style={styles.cardDivider} />
+          <TouchableOpacity
+            style={styles.infoRow}
+            onPress={() => router.push("/(tabs)/change-password")}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Change Password"
+          >
+            <View style={styles.changePasswordLeft}>
+              <SymbolView name="lock.rotation" size={14} tintColor={colors.accent} resizeMode="scaleAspectFit" />
+              <Text style={[styles.infoLabel, { color: colors.textPrimary, flex: 0 }]}>Change Password</Text>
+            </View>
+            <SymbolView name="chevron.right" size={12} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+          </TouchableOpacity>
+          <View style={styles.cardDivider} />
+          <TouchableOpacity
+            style={styles.infoRow}
+            onPress={() => router.push("/(tabs)/change-email")}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Change Email"
+          >
+            <View style={styles.changePasswordLeft}>
+              <SymbolView name="envelope.badge" size={14} tintColor={colors.accent} resizeMode="scaleAspectFit" />
+              <Text style={[styles.infoLabel, { color: colors.textPrimary, flex: 0 }]}>Change Email</Text>
+            </View>
+            <SymbolView name="chevron.right" size={12} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+          </TouchableOpacity>
+          <View style={styles.cardDivider} />
+          <View style={styles.prefRow}>
+            <Text style={styles.prefLabel}>Theme</Text>
+            <View style={styles.segmented}>
+              {(["system", "dark", "light"] as ThemePreference[]).map((opt) => (
+                <TouchableOpacity
+                  key={opt}
+                  style={[styles.segment, theme_preference === opt && styles.segmentActive]}
+                  onPress={() => handlePrefChange("theme_preference", opt)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      theme_preference === opt && styles.segmentTextActive,
+                    ]}
+                  >
+                    {opt.toUpperCase()}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
         </View>
 
         {/* ── System ────────────────────────────────────────────────────────── */}
@@ -1455,7 +1565,10 @@ export default function ProfileScreen() {
                 maxLength={120}
                 placeholder="Detecting…"
                 placeholderTextColor={colors.textMuted}
-                autoCapitalize="words"
+                autoCapitalize="none"
+                autoCorrect={false}
+                spellCheck={false}
+                smartInsertDelete={false}
                 accessibilityLabel="Profile location"
               />
               <TouchableOpacity
@@ -1472,31 +1585,6 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
           </View>
-          <View style={styles.cardDivider} />
-          {/* Theme */}
-          <View style={styles.prefRow}>
-            <Text style={styles.prefLabel}>Theme</Text>
-            <View style={styles.segmented}>
-              {(["system", "dark", "light"] as ThemePreference[]).map((opt) => (
-                <TouchableOpacity
-                  key={opt}
-                  style={[styles.segment, theme_preference === opt && styles.segmentActive]}
-                  onPress={() => handlePrefChange("theme_preference", opt)}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.segmentText,
-                      theme_preference === opt && styles.segmentTextActive,
-                    ]}
-                  >
-                    {opt.toUpperCase()}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-          <View style={styles.cardDivider} />
           {/* Planning Horizon */}
           <View style={styles.prefRow}>
             <Text style={styles.prefLabel}>Plan Horizon</Text>
@@ -1749,7 +1837,6 @@ export default function ProfileScreen() {
             onClose={() => setUserIdModalVisible(false)}
             currentId={profile.custom_user_id}
             canChange={profile.can_change_user_id}
-            userIdChanged={profile.user_id_changed}
             accessToken={accessToken}
           />
           <PersonalInfoModal
@@ -1923,6 +2010,11 @@ function createStyles(colors: ThemeColors) {
       fontSize: 10,
       paddingBottom: spacing.sm,
       fontStyle: "italic",
+    },
+    changePasswordLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.sm,
     },
 
     // Loading
@@ -2266,24 +2358,29 @@ function createStyles(colors: ThemeColors) {
       flex: 1,
       backgroundColor: colors.overlay,
     },
-    modalWrapper: { justifyContent: "flex-end" },
+    modalWrapper: { ...StyleSheet.absoluteFillObject, justifyContent: "flex-end" },
     sheet: {
-      backgroundColor: colors.surface,
+      backgroundColor: colors.glassStrong,
       borderTopLeftRadius: radius.xl,
       borderTopRightRadius: radius.xl,
       borderWidth: 1,
-      borderColor: colors.border,
-      padding: spacing.lg,
+      borderColor: colors.primaryBorder,
+      padding: spacing.lg + 2,
       paddingTop: spacing.md,
       paddingBottom: spacing.xxl,
+      shadowColor: colors.shadow,
+      shadowOpacity: 0.18,
+      shadowRadius: 28,
+      shadowOffset: { width: 0, height: -12 },
+      elevation: 18,
     },
     sheetHandle: {
       width: 40,
       height: 4,
       borderRadius: 2,
-      backgroundColor: colors.border,
+      backgroundColor: colors.secondaryBorder,
       alignSelf: "center",
-      marginBottom: spacing.lg,
+      marginBottom: spacing.lg + 2,
     },
     sheetTitle: {
       ...typography.label,
@@ -2294,7 +2391,7 @@ function createStyles(colors: ThemeColors) {
       ...typography.label,
       color: colors.textMuted,
       marginBottom: spacing.sm,
-      marginTop: spacing.xs,
+      marginTop: spacing.md,
     },
     fieldHint: {
       ...typography.caption,
@@ -2304,15 +2401,28 @@ function createStyles(colors: ThemeColors) {
       marginBottom: spacing.sm,
     },
     input: {
-      backgroundColor: colors.surfaceDark,
-      borderRadius: radius.sm,
+      backgroundColor: colors.glassSubtle,
+      borderRadius: radius.md,
       borderWidth: 1,
-      borderColor: colors.borderDark,
+      borderColor: colors.secondaryBorder,
       color: colors.textPrimary,
       ...typography.body,
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.sm,
+      minHeight: 48,
       marginBottom: spacing.md,
+    },
+    displayNameInput: {
+      marginBottom: spacing.xs,
+    },
+    displayNameHint: {
+      ...typography.caption,
+      color: colors.textMuted,
+      opacity: 0.72,
+      marginTop: 0,
+      marginBottom: spacing.lg,
+      lineHeight: 17,
+      flexShrink: 1,
     },
     inputMultiline: { height: 72, textAlignVertical: "top" },
     formError: { ...typography.caption, color: colors.danger, marginBottom: spacing.sm },

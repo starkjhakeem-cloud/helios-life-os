@@ -116,7 +116,7 @@ Capture the app in this sequence so the flow makes narrative sense.
 - Show multiple priorities and status chips.
 
 ### 07 — New Task Modal
-- File: `docs/screenshots/07-new-task-modal.png`
+- File: `docs/screenshots/07-new-ta<API_KEY>`
 - Show title, priority selector, due date, and goal link controls.
 
 ### 08 — Analytics

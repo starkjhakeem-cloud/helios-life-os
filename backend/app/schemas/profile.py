@@ -30,6 +30,10 @@ class ProfileOut(BaseModel):
     first_name: str | None
     last_name: str | None
     display_name: str | None
+    display_name_change_count: int
+    display_name_changes_remaining: int
+    can_change_display_name: bool
+    display_name_changed_at: str | None
     phone_number: str | None
     date_of_birth: str | None
     address_line_1: str | None
@@ -87,3 +91,43 @@ class UserIdCheckResponse(BaseModel):
     #         "too_long" | "reserved" | "db_error"
     reason: str
     message: str
+
+
+_EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
+
+
+class ChangeEmailRequest(BaseModel):
+    current_password: str = Field(..., min_length=1, max_length=1024)
+    new_email: str = Field(..., min_length=5, max_length=255)
+
+    @field_validator("new_email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        v = v.strip().lower()
+        if not _EMAIL_RE.match(v):
+            raise ValueError("Enter a valid email address.")
+        return v
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(..., min_length=1, max_length=1024)
+    new_password: str = Field(..., min_length=8, max_length=1024)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_strength(cls, v: str) -> str:
+        import re as _re
+        errors: list[str] = []
+        if len(v) < 8:
+            errors.append("at least 8 characters")
+        if not _re.search(r"[A-Z]", v):
+            errors.append("one uppercase letter")
+        if not _re.search(r"[a-z]", v):
+            errors.append("one lowercase letter")
+        if not _re.search(r"\d", v):
+            errors.append("one number")
+        if not _re.search(r"[!@#$%^&*()\-_=+\[\]{};':\"\\|,.<>/?`~]", v):
+            errors.append("one special character")
+        if errors:
+            raise ValueError("Password must contain: " + ", ".join(errors) + ".")
+        return v

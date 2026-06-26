@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -15,6 +15,9 @@ class TaskCreate(BaseModel):
     linked_goal_id: str | None = None
     estimated_duration_minutes: int | None = None
     category: str | None = Field(default=None, max_length=100)
+    source: str = Field(default="manual", max_length=50)
+    source_id: str | None = Field(default=None, max_length=300)
+    source_metadata: dict[str, Any] | None = None
 
 
 class TaskUpdate(BaseModel):
@@ -26,6 +29,9 @@ class TaskUpdate(BaseModel):
     linked_goal_id: str | None = None
     estimated_duration_minutes: int | None = None
     category: str | None = Field(default=None, max_length=100)
+    source: str | None = Field(default=None, max_length=50)
+    source_id: str | None = Field(default=None, max_length=300)
+    source_metadata: dict[str, Any] | None = None
 
 
 class TaskOut(BaseModel):
@@ -42,6 +48,9 @@ class TaskOut(BaseModel):
     scheduled_start: str | None = None
     scheduled_end: str | None = None
     focus_block_id: str | None = None
+    source: str = "manual"
+    source_id: str | None = None
+    source_metadata: dict[str, Any] | None = None
     created_at: str
     updated_at: str
 

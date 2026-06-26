@@ -20,6 +20,10 @@ const DEFAULT_PROFILE: Omit<ProfileOut, "user_id" | "updated_at"> = {
   first_name: null,
   last_name: null,
   display_name: null,
+  display_name_change_count: 0,
+  display_name_changes_remaining: 2,
+  can_change_display_name: true,
+  display_name_changed_at: null,
   phone_number: null,
   date_of_birth: null,
   address_line_1: null,
@@ -43,6 +47,10 @@ type ProfileState = {
   first_name: string | null;
   last_name: string | null;
   display_name: string | null;
+  display_name_change_count: number;
+  display_name_changes_remaining: number;
+  can_change_display_name: boolean;
+  display_name_changed_at: string | null;
   phone_number: string | null;
   date_of_birth: string | null;
   address_line_1: string | null;
@@ -75,6 +83,10 @@ function applyProfile(data: ProfileOut) {
     first_name: data.first_name,
     last_name: data.last_name,
     display_name: data.display_name,
+    display_name_change_count: data.display_name_change_count,
+    display_name_changes_remaining: data.display_name_changes_remaining,
+    can_change_display_name: data.can_change_display_name,
+    display_name_changed_at: data.display_name_changed_at,
     phone_number: data.phone_number,
     date_of_birth: data.date_of_birth,
     address_line_1: data.address_line_1,
@@ -158,6 +170,10 @@ export const useProfileStore = create<ProfileState>()(
         first_name: s.first_name,
         last_name: s.last_name,
         display_name: s.display_name,
+        display_name_change_count: s.display_name_change_count,
+        display_name_changes_remaining: s.display_name_changes_remaining,
+        can_change_display_name: s.can_change_display_name,
+        display_name_changed_at: s.display_name_changed_at,
         phone_number: s.phone_number,
         date_of_birth: s.date_of_birth,
         address_line_1: s.address_line_1,

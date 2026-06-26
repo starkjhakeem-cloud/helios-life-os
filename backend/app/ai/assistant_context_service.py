@@ -133,12 +133,14 @@ _PRIORITY_CAP     = 6
 
 # ── Module-level helpers ────────────────────────────────────────────────────────
 
-def _local_today(user_tz: str = "UTC") -> date:
+def _local_today(user_tz: str | None = None) -> date:
+    if not user_tz:
+        return date.today()
     try:
         from zoneinfo import ZoneInfo
         return datetime.now(ZoneInfo(user_tz)).date()
     except Exception:
-        return datetime.now(timezone.utc).date()
+        return date.today()
 
 
 def infer_context_type(message: str) -> str:
@@ -162,7 +164,7 @@ def infer_context_type(message: str) -> str:
 
 def extract_time_window(
     message: str,
-    user_tz: str = "UTC",
+    user_tz: str | None = None,
 ) -> tuple[date, date] | None:
     """
     Parse a time reference from the message and return (start_date, end_date).
@@ -300,7 +302,7 @@ class AssistantContextService:
 
         # Profile is always fetched first — needed for timezone resolution
         profile_data = self._fetch_profile(user_id)
-        user_tz = profile_data.get("timezone") or "UTC"
+        user_tz = profile_data.get("timezone")
 
         time_window = extract_time_window(message, user_tz)
 

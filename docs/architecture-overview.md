@@ -273,7 +273,7 @@ def get_ai_provider() -> AIProvider:
     return MockAIProvider()
 ```
 
-Switching providers: set `AI_PROVIDER=openai` and `OPENAI_API_KEY=sk-...` in `.env`. No router code changes needed. `OpenAIProvider` is a complete implementation — briefing, plan, and chat all map to real `chat.completions.create` calls with JSON response format. All OpenAI error types (`AuthenticationError`, `RateLimitError`, `APIConnectionError`, `APIStatusError`) are caught and re-raised as `RuntimeError` with user-friendly messages, which the router converts to `502 Bad Gateway`.
+Switching providers: set `AI_PROVIDER=openai` and `OPENAI_API_KEY=<OPENAI_API_KEY>` in `.env`. No router code changes needed. `OpenAIProvider` is a complete implementation — briefing, plan, and chat all map to real `chat.completions.create` calls with JSON response format. All OpenAI error types (`AuthenticationError`, `RateLimitError`, `APIConnectionError`, `APIStatusError`) are caught and re-raised as `RuntimeError` with user-friendly messages, which the router converts to `502 Bad Gateway`.
 
 **Context builder** (`context_builder.py`) queries the authenticated user's goals and tasks and formats them as a structured string injected into the AI prompt when `include_context=True` is passed by the client.
 

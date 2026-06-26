@@ -22,10 +22,14 @@ export default function Button({
   fullWidth = false,
   loading = false,
 }: Props) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const variantStyle = {
     primary:   { backgroundColor: colors.accent,  borderWidth: 0, borderColor: "transparent" },
-    secondary: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+    secondary: {
+      backgroundColor: isDark ? colors.surface : colors.glassSubtle,
+      borderWidth: 1,
+      borderColor: isDark ? colors.border : colors.secondaryBorder,
+    },
     ghost:     { backgroundColor: "transparent",  borderWidth: 1, borderColor: colors.border },
   } as const;
   const labelColor: Record<ButtonVariant, string> = {
@@ -65,6 +69,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm + spacing.xs,
     paddingHorizontal: spacing.lg,
     borderRadius: radius.md,
+    minHeight: 48,
     alignItems: "center",
     justifyContent: "center",
   },

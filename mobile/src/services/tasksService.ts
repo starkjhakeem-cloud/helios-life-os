@@ -10,6 +10,14 @@ export type Task = {
   priority: string;
   due_date: string | null;
   linked_goal_id: string | null;
+  estimated_duration_minutes: number | null;
+  category: string | null;
+  scheduled_start: string | null;
+  scheduled_end: string | null;
+  focus_block_id: string | null;
+  source: string;
+  source_id: string | null;
+  source_metadata: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 };
@@ -25,6 +33,11 @@ export type CreateTaskInput = {
   priority?: string;
   due_date?: string;
   linked_goal_id?: string;
+  estimated_duration_minutes?: number;
+  category?: string;
+  source?: string;
+  source_id?: string;
+  source_metadata?: Record<string, unknown>;
 };
 
 export type UpdateTaskInput = {
@@ -34,6 +47,11 @@ export type UpdateTaskInput = {
   priority?: string;
   due_date?: string;
   linked_goal_id?: string;
+  estimated_duration_minutes?: number;
+  category?: string;
+  source?: string;
+  source_id?: string;
+  source_metadata?: Record<string, unknown>;
 };
 
 const BASE = API_ENDPOINTS.tasks.list;

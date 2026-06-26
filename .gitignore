@@ -13,4 +13,24 @@
 .env
 .env.local
 .env.*.local
+backend/.env
+backend/.env.local
+backend/.env.*.local
+mobile/.env
+mobile/.env.local
+mobile/.env.*.local
+
+# Credentials and private keys
+*.pem
+*.key
+*.p8
+*.p12
+*.jks
+*credentials*
+*secret*
+*token*
+.venv/
+backend/.venv/
+backend/.venv-test/
+backend/seed_personal_data.py
 .claude/

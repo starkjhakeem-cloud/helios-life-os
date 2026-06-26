@@ -22,6 +22,7 @@ def _index_task_memory(db: Session, task: Task) -> None:
     try:
         SemanticMemoryService(db).index_task(task)
     except Exception:
+        db.rollback()
         logger.warning("Semantic task indexing failed.", exc_info=True)
 
 
@@ -29,6 +30,7 @@ def _delete_task_memory(db: Session, user_id: str, task_id: str) -> None:
     try:
         SemanticMemoryService(db).delete_memory(user_id, "task", task_id)
     except Exception:
+        db.rollback()
         logger.warning("Semantic task memory delete failed.", exc_info=True)
 
 
@@ -42,6 +44,14 @@ def _to_out(task: Task) -> TaskOut:
         priority=task.priority,
         due_date=task.due_date,
         linked_goal_id=task.linked_goal_id,
+        estimated_duration_minutes=task.estimated_duration_minutes,
+        category=task.category,
+        scheduled_start=task.scheduled_start,
+        scheduled_end=task.scheduled_end,
+        focus_block_id=task.focus_block_id,
+        source=task.source,
+        source_id=task.source_id,
+        source_metadata=task.source_metadata,
         created_at=task.created_at.isoformat(),
         updated_at=task.updated_at.isoformat(),
     )
@@ -90,6 +100,9 @@ def create_task(
         linked_goal_id=payload.linked_goal_id,
         estimated_duration_minutes=payload.estimated_duration_minutes,
         category=payload.category,
+        source=payload.source,
+        source_id=payload.source_id,
+        source_metadata=payload.source_metadata,
         created_at=now,
         updated_at=now,
     )
@@ -124,11 +137,22 @@ def update_task(
     if payload.due_date is not None:
         task.due_date = payload.due_date
     if payload.linked_goal_id is not None:
+        goal = db.execute(
+            select(Goal).where(Goal.id == payload.linked_goal_id, Goal.user_id == current_user.id)
+        ).scalar_one_or_none()
+        if not goal:
+            raise HTTPException(status_code=404, detail="Goal not found.")
         task.linked_goal_id = payload.linked_goal_id
     if payload.estimated_duration_minutes is not None:
         task.estimated_duration_minutes = payload.estimated_duration_minutes
     if payload.category is not None:
         task.category = payload.category
+    if payload.source is not None:
+        task.source = payload.source
+    if payload.source_id is not None:
+        task.source_id = payload.source_id
+    if payload.source_metadata is not None:
+        task.source_metadata = payload.source_metadata
     task.updated_at = datetime.now(timezone.utc)
 
     db.commit()

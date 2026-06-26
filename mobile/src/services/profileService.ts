@@ -12,6 +12,10 @@ export type ProfileOut = {
   first_name: string | null;
   last_name: string | null;
   display_name: string | null;
+  display_name_change_count: number;
+  display_name_changes_remaining: number;
+  can_change_display_name: boolean;
+  display_name_changed_at: string | null;
   phone_number: string | null;
   date_of_birth: string | null;
   address_line_1: string | null;
@@ -64,4 +68,18 @@ export const profileService = {
 
   updateUserId: (token: string, value: string) =>
     apiClient.patch<ProfileOut>(API_ENDPOINTS.profile.userId, { value }, token),
+
+  changePassword: (token: string, currentPassword: string, newPassword: string) =>
+    apiClient.post<void>(
+      API_ENDPOINTS.profile.changePassword,
+      { current_password: currentPassword, new_password: newPassword },
+      token,
+    ),
+
+  changeEmail: (token: string, currentPassword: string, newEmail: string) =>
+    apiClient.post<void>(
+      API_ENDPOINTS.profile.changeEmail,
+      { current_password: currentPassword, new_email: newEmail },
+      token,
+    ),
 };

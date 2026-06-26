@@ -207,6 +207,10 @@ visible, onClose, onSubmit, isMutating }: AddMemoryModalProps) {
                 : "e.g. I am interested in stoic philosophy and productivity systems"
             }
             placeholderTextColor={colors.textMuted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            spellCheck={false}
+            smartInsertDelete={false}
             multiline
             maxLength={2000}
             autoFocus
@@ -654,25 +658,31 @@ function createStyles(colors: ThemeColors) {
   },
 
   modalWrapper: {
+    ...StyleSheet.absoluteFillObject,
     justifyContent: "flex-end",
   },
 
   sheet: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.glassStrong,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
     borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
+    borderColor: colors.primaryBorder,
+    padding: spacing.lg + 2,
     paddingTop: spacing.md,
     paddingBottom: spacing.xxl,
+    shadowColor: colors.shadow,
+    shadowOpacity: 0.18,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: -12 },
+    elevation: 18,
   },
 
   sheetHandle: {
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: colors.border,
+    backgroundColor: colors.secondaryBorder,
     alignSelf: "center",
     marginBottom: spacing.lg,
   },
@@ -711,14 +721,15 @@ function createStyles(colors: ThemeColors) {
   },
 
   input: {
-    backgroundColor: colors.surfaceDark,
-    borderRadius: radius.sm,
+    backgroundColor: colors.glassSubtle,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.borderDark,
+    borderColor: colors.secondaryBorder,
     color: colors.textPrimary,
     ...typography.body,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+    minHeight: 48,
     marginBottom: spacing.xs,
   },
 

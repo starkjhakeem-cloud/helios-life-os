@@ -33,6 +33,21 @@ export type ThemeColors = {
 
   // Overlay
   overlay: string;
+
+  // Premium material tokens
+  glass: string;
+  glassStrong: string;
+  glassSubtle: string;
+  heroGlass: string;
+  elevatedCard: string;
+  navGlass: string;
+  floatingButton: string;
+  primaryBorder: string;
+  secondaryBorder: string;
+  highlight: string;
+  edgeHighlight: string;
+  shadow: string;
+  ambientShadow: string;
 };
 
 export const darkColors: ThemeColors = {
@@ -63,21 +78,35 @@ export const darkColors: ThemeColors = {
   tabBarInactive: "#9AA8C5",
 
   overlay:       "rgba(0,0,0,0.6)",
+
+  glass:         "rgba(7, 17, 31, 0.91)",
+  glassStrong:   "rgba(10, 20, 39, 0.94)",
+  glassSubtle:   "rgba(5, 10, 24, 0.86)",
+  heroGlass:     "rgba(10, 20, 39, 0.91)",
+  elevatedCard:  "rgba(7, 17, 31, 0.91)",
+  navGlass:      "rgba(6, 17, 33, 0.95)",
+  floatingButton: "rgba(7, 17, 31, 0.90)",
+  primaryBorder: "rgba(92, 120, 170, 0.22)",
+  secondaryBorder: "rgba(38, 52, 82, 0.80)",
+  highlight:     "rgba(255,255,255,0.08)",
+  edgeHighlight: "rgba(255,255,255,0.08)",
+  shadow:        "#000000",
+  ambientShadow: "rgba(0,0,0,0.28)",
 };
 
 export const lightColors: ThemeColors = {
-  background:    "#f0f4ff",
-  surface:       "#ffffff",
-  surfaceDark:   "#e8edf8",
-  surfaceSecondary: "#e8edf8",
-  card:          "#ffffff",
+  background:    "#edf3ff",
+  surface:       "rgba(255,255,255,0.90)",
+  surfaceDark:   "rgba(232,238,250,0.66)",
+  surfaceSecondary: "rgba(244,247,255,0.78)",
+  card:          "rgba(255,255,255,0.88)",
 
-  border:        "#d1daf0",
-  borderDark:    "#bcc7e6",
+  border:        "rgba(193,204,232,0.62)",
+  borderDark:    "rgba(174,188,222,0.50)",
 
   textPrimary:   "#0a0f1e",
-  textSecondary: "#3d4a6b",
-  textMuted:     "#6b7a9e",
+  textSecondary: "#465575",
+  textMuted:     "#7a88a8",
 
   accent:        "#7c3aed",
   accentCyan:    "#0ea5c9",
@@ -87,12 +116,26 @@ export const lightColors: ThemeColors = {
   warning:       "#d97706",
   info:          "#4f46e5",
 
-  tabBar:        "rgba(240, 244, 255, 0.97)",
-  tabBarBorder:  "rgba(145, 168, 197, 0.30)",
+  tabBar:        "rgba(255,255,255,0.66)",
+  tabBarBorder:  "rgba(150, 163, 205, 0.28)",
   tabBarActive:  "#7c3aed",
-  tabBarInactive: "#6b7a9e",
+  tabBarInactive: "#4f5f82",
 
   overlay:       "rgba(0,0,0,0.5)",
+
+  glass:         "rgba(255,255,255,0.84)",
+  glassStrong:   "rgba(255,255,255,0.94)",
+  glassSubtle:   "rgba(248,250,255,0.68)",
+  heroGlass:     "rgba(255,253,250,0.94)",
+  elevatedCard:  "rgba(255,255,255,0.86)",
+  navGlass:      "rgba(255,255,255,0.62)",
+  floatingButton: "rgba(255,255,255,0.78)",
+  primaryBorder: "rgba(255,255,255,0.88)",
+  secondaryBorder: "rgba(170,184,220,0.44)",
+  highlight:     "rgba(255,255,255,0.92)",
+  edgeHighlight: "rgba(255,255,255,0.92)",
+  shadow:        "#64748b",
+  ambientShadow: "rgba(91,111,155,0.18)",
 };
 
 // Static fallback for non-component code (e.g. Zustand stores).

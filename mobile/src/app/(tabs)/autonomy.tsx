@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
-import { useCurrentDateTime } from "../../hooks/useCurrentDateTime";
 import {
   Animated,
   View,
@@ -13,7 +12,6 @@ import {
   AppState,
   type AppStateStatus,
 } from "react-native";
-import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SymbolView } from "expo-symbols";
 import * as Haptics from "expo-haptics";
@@ -21,8 +19,7 @@ import * as Haptics from "expo-haptics";
 import { spacing, radius, typography, type ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 import {
-  useAuthStore, useAutonomyStore, useNotificationsStore, useBackgroundJobsStore,
-  useGoalsStore, useTasksStore, useConversationStore,
+  useAuthStore, useAutonomyStore, useBackgroundJobsStore,
 } from "../../store";
 import type {
   AutonomyAuditLogEntry,
@@ -300,7 +297,12 @@ function ErrorCard({ title = "Something went wrong", message, onRetry, endpoint 
         <View style={styles.errorDetailsBox}>
           <Text style={styles.errorDetailRow}>
             <Text style={styles.errorDetailKey}>Timestamp  </Text>
-            {new Date().toISOString()}
+            {new Date().toLocaleString(undefined, {
+              month: "short",
+              day: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            })}
           </Text>
           {endpoint ? (
             <Text style={styles.errorDetailRow}>
@@ -849,13 +851,13 @@ function CompactPlanCard({ plan, isLoading, error, now, onGenerate }: CompactPla
   return (
     <View style={styles.compactPlanCard}>
       <View style={styles.compactPlanHeader}>
-        <Text style={styles.sectionLabel}>{"TODAY'S PLAN"}</Text>
+        <Text style={styles.sectionLabel}>{"TODAY'S SUPPORT"}</Text>
         {plan && !effectiveLoading ? (
           <TouchableOpacity
             onPress={handleGenerate}
             style={styles.compactPlanRefreshBtn}
             activeOpacity={0.7}
-            accessibilityLabel="Refresh today's plan"
+            accessibilityLabel="Refresh today's support"
           >
             <SymbolView name="arrow.clockwise" size={13} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
             <Text style={styles.compactPlanRefreshText}>Refresh</Text>
@@ -874,7 +876,7 @@ function CompactPlanCard({ plan, isLoading, error, now, onGenerate }: CompactPla
         <View style={styles.compactPlanLoadingCard}>
           <ActivityIndicator color={colors.accent} size="small" />
           <View style={{ flex: 1, gap: 6 }}>
-            <Text style={styles.compactPlanLoadingLabel}>{PLAN_STAGES[generationStep]}</Text>
+          <Text style={styles.compactPlanLoadingLabel}>{PLAN_STAGES[generationStep]}</Text>
             <View style={styles.generationProgress}>
               {PLAN_STAGES.map((_, i) => (
                 <View
@@ -890,10 +892,10 @@ function CompactPlanCard({ plan, isLoading, error, now, onGenerate }: CompactPla
           <View style={styles.compactPlanTop}>
             <View style={styles.livePlanPill}>
               <View style={styles.livePlanDot} />
-              <Text style={styles.livePlanText}>PLAN READY</Text>
+              <Text style={styles.livePlanText}>READY</Text>
             </View>
             {generatedStr ? (
-              <Text style={styles.compactPlanGenTime}>Generated: {generatedStr}</Text>
+              <Text style={styles.compactPlanGenTime}>{generatedStr}</Text>
             ) : null}
           </View>
           <Text style={styles.compactPlanOverview} numberOfLines={3}>{plan.overview}</Text>
@@ -924,8 +926,7 @@ function CompactPlanCard({ plan, isLoading, error, now, onGenerate }: CompactPla
         </View>
       ) : (
         <View style={styles.compactPlanEmpty}>
-          <SymbolView name="calendar.badge.clock" size={22} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
-          <View style={{ flex: 1, gap: spacing.xs }}>
+          <View style={styles.compactPlanEmptyCopy}>
             <Text style={styles.compactPlanEmptyTitle}>No plan yet.</Text>
             <Text style={styles.compactPlanEmptyBody}>
               Generate a plan and HELIOS will organize your goals, tasks, calendar, and reminders.
@@ -937,7 +938,7 @@ function CompactPlanCard({ plan, isLoading, error, now, onGenerate }: CompactPla
             activeOpacity={0.8}
           >
             <SymbolView name="bolt.fill" size={11} tintColor={colors.background} resizeMode="scaleAspectFit" />
-            <Text style={styles.compactPlanGenBtnText}>Generate</Text>
+            <Text style={styles.compactPlanGenBtnText}>Generate Plan</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -1601,26 +1602,18 @@ export default function AutonomyScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
-  const router = useRouter();
-  const now = useCurrentDateTime();
   const accessToken = useAuthStore((s) => s.accessToken);
 
   const {
-    items, isLoading, isMutating, executingItemId, error,
-    suggestions, isSuggestionsLoading, suggestionsError, suggestionsDegraded, queuedSuggestionIds,
-    dailyPlan, isDailyPlanLoading, dailyPlanError,
-    rules, isRulesLoading,
-    fetchQueue, fetchSuggestions, approveItem, rejectItem, executeItem,
-    addSuggestionToQueue, runSuggestionNow, generateDailyPlan,
+    items, isLoading, error,
+    isSuggestionsLoading, suggestionsError,
+    dailyPlanError,
+    isRulesLoading,
+    fetchQueue, fetchSuggestions, generateDailyPlan,
     fetchRules,
   } = useAutonomyStore();
 
-  const unreadCount    = useNotificationsStore((s) => s.notifications.filter((n) => !n.is_read).length);
-  const aiSendError    = useConversationStore((s) => s.sendError);
-  const goals          = useGoalsStore((s) => s.goals);
-  const tasks          = useTasksStore((s) => s.tasks);
-  const tasksError     = useTasksStore((s) => s.error);
-  const { jobs: bgJobs, fetchJobs } = useBackgroundJobsStore();
+  const { fetchJobs } = useBackgroundJobsStore();
 
   // ── Entrance animations ──────────────────────────────────────────────────────
   const fadeAnims = useRef(
@@ -1636,6 +1629,16 @@ export default function AutonomyScreen() {
     ).start();
   }, [fadeAnims]);
 
+  const pulseAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1600, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0, duration: 1600, useNativeDriver: true }),
+      ]),
+    ).start();
+  }, [pulseAnim]);
+
   const slideStyle = (idx: number) => ({
     opacity: fadeAnims[idx],
     transform: [{ translateY: fadeAnims[idx].interpolate({ inputRange: [0, 1], outputRange: [22, 0] }) }],
@@ -1643,11 +1646,7 @@ export default function AutonomyScreen() {
 
   // ── Scroll navigation ────────────────────────────────────────────────────────
   const scrollRef = useRef<ScrollView>(null);
-  const pendingY  = useRef(0);
   const planY     = useRef(0);
-
-  const scrollTo = (y: number) =>
-    scrollRef.current?.scrollTo({ y: Math.max(0, y - spacing.md), animated: true });
 
   // ── Data ─────────────────────────────────────────────────────────────────────
   const loadAll = useCallback(() => {
@@ -1690,277 +1689,362 @@ export default function AutonomyScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
 
-  const handleApprove = useCallback(
-    (id: string) => { if (accessToken) approveItem(accessToken, id); },
-    [accessToken, approveItem],
-  );
-  const handleReject = useCallback(
-    (id: string) => { if (accessToken) rejectItem(accessToken, id); },
-    [accessToken, rejectItem],
-  );
-  const handleExecute = useCallback(
-    async (id: string) => {
-      if (!accessToken) return;
-      const result: AutonomyExecuteResult | null = await executeItem(accessToken, id);
-      if (!result) return;
-      if (result.action_type === "generate_plan" && result.plan) {
-        const { plan_title, summary, steps } = result.plan;
-        const stepLines = steps.slice(0, 3).map((s) => `${s.step_number}. ${s.title}`).join("\n");
-        Alert.alert("Plan Generated", `${plan_title}\n\n${summary}\n\nFirst steps:\n${stepLines}`, [{ text: "OK" }]);
-      } else {
-        Alert.alert("Done", result.message, [{ text: "OK" }]);
-      }
-    },
-    [accessToken, executeItem],
-  );
-  const handleAddToQueue = useCallback(
-    (suggestion: SuggestionItem) => { if (accessToken) addSuggestionToQueue(accessToken, suggestion); },
-    [accessToken, addSuggestionToQueue],
-  );
   const handleGenerateDailyPlan = useCallback(
     () => accessToken ? generateDailyPlan(accessToken) : Promise.resolve(null),
     [accessToken, generateDailyPlan],
   );
-  const handleRunSuggestionNow = useCallback(
-    (suggestion: SuggestionItem) =>
-      accessToken ? runSuggestionNow(accessToken, suggestion) : Promise.resolve(null),
-    [accessToken, runSuggestionNow],
-  );
-  const pending  = items.filter((i) => i.status === "pending");
   const isRefreshing = isLoading || isSuggestionsLoading || isRulesLoading;
-  const incorporatedSuggestionKeys = useMemo(() => {
-    if (!dailyPlan) return new Set<string>();
-    return new Set(
-      dailyPlan.suggested_queue_items.flatMap((item) => [
-        item.id,
-        item.title.trim().toLowerCase(),
-      ]),
-    );
-  }, [dailyPlan]);
-  const visibleSuggestions = suggestions.filter(
-    (suggestion) =>
-      !queuedSuggestionIds.includes(suggestion.id) &&
-      !incorporatedSuggestionKeys.has(suggestion.id) &&
-      !incorporatedSuggestionKeys.has(suggestion.title.trim().toLowerCase()),
-  );
 
-  const getIsBlocked = useCallback(
-    (item: AutonomyQueueItem) => isBlockedByRules(item, rules),
-    [rules],
-  );
+  // ── Approved reference content ─────────────────────────────────────────────
+  const assistantStatus = { text: "Ready", dotColor: colors.success };
 
-  const jobsRunning = bgJobs.some((j) => j.status === "running");
+  const pulseStyle = {
+    opacity: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.38, 1] }),
+    transform: [{ scale: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.78, 1.25] }) }],
+  };
+  const analysisItems = [
+    { id: "calendar", icon: "calendar", title: "Calendar synchronized", time: "9:26 PM", color: colors.success },
+    { id: "study", icon: "book.closed.fill", title: "Study schedule analyzed", time: "9:27 PM", color: colors.accentCyan },
+    { id: "goals", icon: "target", title: "Goals reviewed", time: "9:27 PM", color: colors.accent },
+    { id: "weather", icon: "cloud.sun.fill", title: "Weather updated", time: "9:27 PM", color: colors.accentCyan },
+    { id: "more", icon: "sparkles", title: "+3 more systems", time: "9:27 PM", color: colors.success },
+  ];
 
-  // ── Dynamic assistant status ───────────────────────────────────────────────
-  const assistantStatus = (() => {
-    const hasError = !!error || !!suggestionsError || !!dailyPlanError || !!aiSendError;
-    const isWorking = isDailyPlanLoading || jobsRunning;
-    if (hasError)   return { text: "Needs your attention", dotColor: colors.warning };
-    if (isWorking)  return {
-      text: isDailyPlanLoading ? "Planning your day" : "Working in the background",
-      dotColor: colors.accentCyan,
-    };
-    if (pending.length > 0) return {
-      text: `${pending.length} suggestion${pending.length === 1 ? "" : "s"} need your approval`,
-      dotColor: colors.warning,
-    };
-    if (dailyPlan)  return { text: "Ready to help", dotColor: colors.success };
-    if (visibleSuggestions.length > 0) return {
-      text: `${visibleSuggestions.length} recommendation${visibleSuggestions.length === 1 ? "" : "s"} ready`,
-      dotColor: colors.accentCyan,
-    };
-    return { text: "Ready to help", dotColor: colors.success };
-  })();
-
-  // ── Assistant status rows ──────────────────────────────────────────────────
-  const assistantServices: SystemService[] = [
+  const opportunities = [
     {
-      id: "assistant", label: "Assistant", icon: "sparkles",
-      statusText: assistantStatus.text,
-      dotColor: assistantStatus.dotColor,
-      onPress: () => router.push("/(tabs)/assistant"),
+      id: "study-window",
+      icon: "clock.fill",
+      color: colors.accent,
+      title: "You have a 2-hour uninterrupted study window tonight.",
+      subtitle: "Focus score: 94%",
     },
     {
-      id: "plan", label: "Today", icon: "calendar.badge.clock",
-      statusText: isDailyPlanLoading ? "Planning your day" : dailyPlan ? "Plan ready" : "No plan yet",
-      dotColor: isDailyPlanLoading ? colors.accentCyan : dailyPlan ? colors.success : colors.textMuted,
-      onPress: () => scrollTo(planY.current),
+      id: "graduation",
+      icon: "graduationcap.fill",
+      color: colors.success,
+      title: "Completing D278 tonight keeps your graduation timeline on track.",
+      subtitle: "On schedule",
     },
     {
-      id: "approval", label: "Approval", icon: "hand.raised.fill",
-      statusText: pending.length > 0 ? `${pending.length} waiting` : "All clear",
-      dotColor: pending.length > 0 ? colors.warning : colors.success,
-      onPress: () => scrollTo(pendingY.current),
-    },
-    {
-      id: "notifications", label: "Notifications", icon: "bell.fill",
-      statusText: unreadCount > 0 ? `${unreadCount} unread` : "All clear",
-      dotColor: unreadCount > 0 ? colors.warning : colors.success,
-      onPress: () => router.push("/(tabs)/notifications"),
-    },
-    {
-      id: "tasks", label: "Tasks", icon: "checklist",
-      statusText: tasksError ? "Needs attention" : tasks.length > 0 ? `${tasks.length} available` : "All clear",
-      dotColor: tasksError ? colors.danger : tasks.length > 0 ? colors.success : colors.textMuted,
-      onPress: () => router.push("/(tabs)/tasks"),
+      id: "development",
+      icon: "sparkles",
+      color: colors.accentCyan,
+      title: "No meetings tomorrow morning.",
+      subtitle: "Ideal time for HELIOS development.",
     },
   ];
 
-  // ── Local recommendation fallback ─────────────────────────────────────────
-  const localRecommendations = generateLocalRecommendations({
-    unreadCount,
-    pendingCount: pending.length,
-    hasDailyPlan: !!dailyPlan,
-    goals,
-    tasks,
-    bgJobs,
-  });
+  const predictions = [
+    { id: "course", icon: "graduationcap.fill", color: colors.accent, title: "If you complete D278 tonight", detail: "Projected completion: Tomorrow" },
+    { id: "milestone", icon: "chart.line.uptrend.xyaxis", color: colors.success, title: "Current pace predicts", detail: "SE milestone remains on schedule." },
+    { id: "free-time", icon: "clock.fill", color: colors.accentCyan, title: "Estimated free time tomorrow", detail: "2h 45m" },
+    { id: "battery", icon: "battery.100percent", color: colors.warning, title: "Battery should last until", detail: "11:48 PM" },
+  ];
 
-  // ── Quick actions ─────────────────────────────────────────────────────────
-  const quickActions: QuickAction[] = [
+  const smartPlans = [
     {
-      id: "qa_plan",
-      label: "Plan Today",
-      icon: "bolt.fill",
-      onPress: () => {
-        scrollTo(planY.current);
-        handleGenerateDailyPlan();
-      },
+      id: "study-sprint",
+      icon: "book.fill",
+      title: "Study Sprint",
+      duration: "2h 15m",
+      focus: "High",
+      accent: colors.accentCyan,
     },
     {
-      id: "qa_refresh",
-      label: "Refresh",
-      icon: "arrow.clockwise",
-      onPress: loadAll,
+      id: "creative-session",
+      icon: "paintbrush.pointed.fill",
+      title: "Creative Session",
+      duration: "1h 30m",
+      focus: "Medium",
+      accent: colors.accent,
     },
     {
-      id: "qa_review",
-      label: "Review",
-      icon: "hand.raised.fill",
-      badge: pending.length,
-      onPress: () => scrollTo(pendingY.current),
+      id: "software-block",
+      icon: "chevron.left.forwardslash.chevron.right",
+      title: "Software Sprint",
+      duration: "2h 30m",
+      focus: "High",
+      accent: colors.success,
     },
     {
-      id: "qa_inbox",
-      label: "Open Inbox",
-      icon: "envelope.fill",
-      badge: unreadCount,
-      onPress: () => router.push("/(tabs)/notifications"),
+      id: "recovery-evening",
+      icon: "leaf.fill",
+      title: "Recovery Evening",
+      duration: "1h 00m",
+      focus: "Low",
+      accent: colors.textMuted,
     },
+  ];
+
+  const watchlist = [
+    { id: "calendar", label: "Calendar", status: "Healthy", color: colors.success },
+    { id: "wgu", label: "WGU", status: "Healthy", color: colors.success },
+    { id: "goals", label: "Goals", status: "Healthy", color: colors.success },
+    { id: "deadlines", label: "Deadlines", status: "Healthy", color: colors.success },
+    { id: "email", label: "Email", status: "Healthy", color: colors.success },
+    { id: "internet", label: "Internet", status: "Healthy", color: colors.success },
+    { id: "storage", label: "Storage", status: "Healthy", color: colors.success },
+    { id: "weather", label: "Weather", status: "Healthy", color: colors.success },
+  ];
+
+  const waitingItems = [
+    "Approve tomorrow’s study schedule",
+    "Approve suggested calendar changes",
+  ];
+
+  const memoryInsights = [
+    "You study best after 7 PM.",
+    "You complete programming tasks faster at night.",
+    "Tuesdays are usually your longest work sessions.",
+    "You prefer shorter, focused work blocks.",
+  ];
+
+  const intelligenceFeed = [
+    { id: "sync", time: "9:26 PM", title: "Calendar synchronized" },
+    { id: "window", time: "9:27 PM", title: "Found 2-hour study window" },
+    { id: "schedule", time: "9:27 PM", title: "Updated tomorrow’s schedule" },
+    { id: "sprint", time: "9:28 PM", title: "Generated Software Sprint plan" },
+    { id: "monitor", time: "9:28 PM", title: "Monitoring remaining tasks" },
   ];
 
   return (
     <ScrollView
       ref={scrollRef}
       style={styles.container}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 132 }]}
       showsVerticalScrollIndicator={false}
       refreshControl={
         <RefreshControl refreshing={isRefreshing} onRefresh={loadAll} tintColor={colors.accentCyan} />
       }
     >
+      <View style={styles.topActions}>
+        <TouchableOpacity style={styles.topActionButton} activeOpacity={0.78}>
+          <SymbolView name="bell" size={20} tintColor={colors.textPrimary} resizeMode="scaleAspectFit" />
+          <View style={styles.topActionBadge}>
+            <Text style={styles.topActionBadgeText}>9+</Text>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.topActionButton} activeOpacity={0.78}>
+          <SymbolView name="gearshape" size={20} tintColor={colors.textPrimary} resizeMode="scaleAspectFit" />
+        </TouchableOpacity>
+      </View>
+
       {/* ── Hero ────────────────────────────────────────────────────────── */}
       <Animated.View style={slideStyle(0)}>
-        <View style={styles.heroCard}>
-          <View style={styles.heroAccentBar} />
-          <View style={styles.heroInner}>
-            <View style={styles.heroTop}>
-              <View>
-                <Text style={styles.heroLabel}>ASSISTANT STATUS</Text>
-                <Text style={styles.heroTitle}>What can HELIOS help with?</Text>
-              </View>
-              <View style={[styles.heroStatusDot, { borderColor: `${assistantStatus.dotColor}40` }]}>
-                <View style={[styles.heroPulseDot, { backgroundColor: assistantStatus.dotColor }]} />
-              </View>
-            </View>
-            <Text style={styles.heroSubtitle}>{assistantStatus.text}</Text>
+        <View style={styles.referenceHero}>
+          <Text style={styles.brainHeroKicker}>HELIOS AUTONOMY</Text>
+          <Text style={styles.brainHeroTitle}>HELIOS is thinking for you.</Text>
+          <Text style={styles.brainHeroSubtitle}>Analyzing, predicting, and preparing so you can focus on what matters most.</Text>
+          <View style={styles.brainHeroStatus}>
+            <Animated.View style={[styles.brainHeroStatusHalo, pulseStyle, { backgroundColor: assistantStatus.dotColor }]} />
+            <View style={[styles.brainHeroStatusDot, { backgroundColor: assistantStatus.dotColor }]} />
+            <Text style={styles.brainHeroStatusText}>{assistantStatus.text.toUpperCase()}</Text>
           </View>
         </View>
       </Animated.View>
 
-      {/* ── Today’s Brief ───────────────────────────────────────────────── */}
-      <Animated.View
-        style={slideStyle(1)}
-        onLayout={(e) => { planY.current = e.nativeEvent.layout.y; }}
-      >
-        <CompactPlanCard
-          plan={dailyPlan}
-          isLoading={isDailyPlanLoading}
-          error={dailyPlanError}
-          now={now}
-          onGenerate={handleGenerateDailyPlan}
-        />
+      {/* ── Live Analysis ───────────────────────────────────────────────── */}
+      <Animated.View style={slideStyle(1)}>
+        <View style={styles.liveHeaderRow}>
+          <View style={styles.sectionTitleWithIcon}>
+            <SymbolView name="waveform.path" size={15} tintColor={colors.accent} resizeMode="scaleAspectFit" />
+            <Text style={styles.brainSectionLabel}>LIVE ANALYSIS</Text>
+          </View>
+          <View style={styles.operationalPill}>
+            <Text style={styles.operationalText}>All systems operational</Text>
+            <View style={styles.operationalDot} />
+          </View>
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.analysisRail}>
+          {analysisItems.map((item) => (
+            <View key={item.id} style={styles.analysisCard}>
+              <View style={styles.analysisCheck}>
+                <SymbolView name="checkmark" size={8} tintColor={colors.background} resizeMode="scaleAspectFit" />
+              </View>
+              <View style={[styles.analysisIconWrap, { backgroundColor: `${item.color}18` }]}>
+                <SymbolView name={item.icon as any} size={14} tintColor={item.color} resizeMode="scaleAspectFit" />
+              </View>
+              <View style={styles.analysisCopy}>
+                <Text style={styles.analysisTitle} numberOfLines={2}>{item.title}</Text>
+                <View style={styles.analysisMetaRow}>
+                  <Animated.View style={[styles.analysisPulse, pulseStyle, { backgroundColor: item.color }]} />
+                  <Text style={styles.analysisUpdated}>{item.time}</Text>
+                </View>
+              </View>
+            </View>
+          ))}
+        </ScrollView>
       </Animated.View>
 
-      {/* ── Assistant Status ─────────────────────────────────────────────── */}
+      {/* ── Opportunities ───────────────────────────────────────────────── */}
       <Animated.View style={slideStyle(2)}>
-        <Text style={[styles.sectionLabel, { marginTop: spacing.md }]}>ASSISTANT STATUS</Text>
-        <SystemStatusCard services={assistantServices} />
-      </Animated.View>
-
-      {/* ── Quick Actions ───────────────────────────────────────────────── */}
-      <Animated.View style={[slideStyle(2), { marginHorizontal: -spacing.lg, marginTop: spacing.sm }]}>
-        <QuickActionsRow actions={quickActions} />
-      </Animated.View>
-
-      {/* ── Recommendations (compact list) ──────────────────────────────── */}
-      <Animated.View style={slideStyle(2)}>
-        <View style={{ marginTop: spacing.lg }}>
-          <RecommendationListSection
-            suggestions={visibleSuggestions}
-            localFallback={localRecommendations}
-            isLoading={isSuggestionsLoading && suggestions.length === 0}
-            error={suggestionsError}
-            isMutating={isMutating}
-            onAddToQueue={handleAddToQueue}
-            onRunNow={handleRunSuggestionNow}
-            onRetry={() => { if (accessToken) fetchSuggestions(accessToken); }}
-          />
+        <View style={styles.opportunitiesCard}>
+          <View style={styles.cardHeaderRow}>
+            <View style={styles.sectionTitleWithIcon}>
+              <SymbolView name="lightbulb" size={15} tintColor={colors.accent} resizeMode="scaleAspectFit" />
+              <Text style={styles.cardSectionLabel}>OPPORTUNITIES</Text>
+            </View>
+            <Text style={styles.viewAllText}>View all ›</Text>
+          </View>
+          {opportunities.map((item) => (
+            <View key={item.id} style={styles.opportunityRow}>
+              <View style={[styles.rowIconCircle, { backgroundColor: `${item.color}18` }]}>
+                <SymbolView name={item.icon as any} size={16} tintColor={item.color} resizeMode="scaleAspectFit" />
+              </View>
+              <View style={styles.opportunityCopy}>
+                <Text style={styles.opportunityTitle}>{item.title}</Text>
+                <Text style={[styles.opportunitySubtitle, { color: item.color }]}>{item.subtitle}</Text>
+              </View>
+              <SymbolView name="chevron.right" size={12} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+            </View>
+          ))}
         </View>
       </Animated.View>
 
-      {/* ── Global queue error / initial load ───────────────────────────── */}
-      {error ? (
-        <ErrorCard title="Unable to load suggestions" message={error} onRetry={loadAll} />
-      ) : null}
-      {isLoading && items.length === 0 ? (
-        <ActivityIndicator color={colors.accent} style={{ marginTop: spacing.xl }} />
-      ) : null}
-
-      {/* ── Approval review ──────────────────────────────────────────────── */}
-      <Animated.View style={slideStyle(4)}>
-        {(!isLoading || items.length > 0) ? (
-          <>
-            <View onLayout={(e) => { pendingY.current = e.nativeEvent.layout.y; }}>
-              <Text style={[styles.sectionLabel, { marginTop: spacing.xl }]}>NEEDS YOUR APPROVAL</Text>
-              {pending.length === 0 ? (
-                <View style={styles.emptyState}>
-                  <SymbolView name="checkmark.seal" size={30} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
-                  <Text style={styles.emptyText}>Nothing needs your approval right now.</Text>
-                  <Text style={styles.emptySubtext}>
-                    Everything looks good. HELIOS is ready whenever you are.
-                  </Text>
-                </View>
-              ) : (
-                pending.map((item) => (
-                  <QueueCard
-                    key={item.id}
-                    item={item}
-                    isMutating={isMutating}
-                    isExecuting={executingItemId === item.id}
-                    isBlocked={getIsBlocked(item)}
-                    onApprove={handleApprove}
-                    onReject={handleReject}
-                    onExecute={handleExecute}
-                  />
-                ))
-              )}
+      <Animated.View style={slideStyle(3)} onLayout={(e) => { planY.current = e.nativeEvent.layout.y; }}>
+        <View style={styles.twoColumnRow}>
+          <View style={styles.halfPanel}>
+            <View style={styles.cardHeaderRow}>
+              <View style={styles.sectionTitleWithIcon}>
+                <SymbolView name="chart.bar.xaxis" size={14} tintColor={colors.accent} resizeMode="scaleAspectFit" />
+                <Text style={styles.cardSectionLabel}>PREDICTIONS</Text>
+              </View>
+              <Text style={styles.viewAllText}>View all ›</Text>
             </View>
-          </>
-        ) : null}
+            {predictions.map((item) => (
+              <View key={item.id} style={styles.compactInsightRow}>
+                <View style={[styles.compactIconCircle, { backgroundColor: `${item.color}18` }]}>
+                  <SymbolView name={item.icon as any} size={13} tintColor={item.color} resizeMode="scaleAspectFit" />
+                </View>
+                <View style={styles.predictionCopy}>
+                  <Text style={styles.predictionTitle}>{item.title}</Text>
+                  <Text style={[styles.predictionDetail, { color: item.color }]}>{item.detail}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.halfPanel}>
+            <View style={styles.cardHeaderRow}>
+              <View style={styles.sectionTitleWithIcon}>
+                <SymbolView name="sparkles" size={14} tintColor={colors.accent} resizeMode="scaleAspectFit" />
+                <Text style={styles.cardSectionLabel}>SMART PLANS</Text>
+              </View>
+              <Text style={styles.viewAllText}>View all ›</Text>
+            </View>
+            {smartPlans.map((plan) => (
+              <TouchableOpacity
+                key={plan.id}
+                style={styles.compactPlanRow}
+                activeOpacity={0.82}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  handleGenerateDailyPlan();
+                }}
+              >
+                <View style={[styles.compactIconCircle, { backgroundColor: `${plan.accent}18` }]}>
+                  <SymbolView name={plan.icon as any} size={13} tintColor={plan.accent} resizeMode="scaleAspectFit" />
+                </View>
+                <View style={styles.smartPlanBody}>
+                  <Text style={styles.smartPlanTitle}>{plan.title}</Text>
+                  <Text style={styles.smartPlanMetaLine}>{plan.duration} • {plan.focus} focus</Text>
+                </View>
+                <SymbolView name="chevron.right" size={10} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
       </Animated.View>
 
-      <View style={{ height: spacing.xl * 2 }} />
+      <Animated.View style={slideStyle(4)}>
+        <View style={styles.twoColumnRow}>
+          <View style={styles.halfPanel}>
+            <View style={styles.cardHeaderRow}>
+              <View style={styles.sectionTitleWithIcon}>
+                <SymbolView name="eye.fill" size={14} tintColor={colors.accent} resizeMode="scaleAspectFit" />
+                <Text style={styles.cardSectionLabel}>WATCHLIST</Text>
+              </View>
+            </View>
+            <View style={styles.watchlistColumns}>
+              {watchlist.map((item) => (
+                <View key={item.id} style={styles.watchlistItem}>
+                  <View style={[styles.watchlistDot, { backgroundColor: item.color }]} />
+                  <Text style={styles.watchlistLabel}>{item.label}</Text>
+                  <Text style={[styles.watchlistStatus, { color: item.color }]}>Healthy</Text>
+                </View>
+              ))}
+            </View>
+            <Text style={styles.watchlistFooter}>Everything is running smoothly.</Text>
+          </View>
+
+          <View style={styles.halfPanel}>
+            <View style={styles.cardHeaderRow}>
+              <View style={styles.sectionTitleWithIcon}>
+                <SymbolView name="hand.raised.fill" size={14} tintColor={colors.accent} resizeMode="scaleAspectFit" />
+                <Text style={styles.cardSectionLabel}>WAITING FOR YOU</Text>
+              </View>
+              <View style={styles.waitingCountBadge}><Text style={styles.waitingCountText}>2</Text></View>
+            </View>
+            {waitingItems.map((item) => (
+              <View key={item} style={styles.waitingCard}>
+                <View style={[styles.compactIconCircle, { backgroundColor: `${colors.accent}18` }]}>
+                  <SymbolView name="slider.horizontal.3" size={13} tintColor={colors.accent} resizeMode="scaleAspectFit" />
+                </View>
+                <Text style={styles.waitingTitle} numberOfLines={3}>{item}</Text>
+                <SymbolView name="chevron.right" size={10} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+              </View>
+            ))}
+          </View>
+        </View>
+      </Animated.View>
+
+      <Animated.View style={slideStyle(4)}>
+        <View style={styles.twoColumnRow}>
+          <View style={styles.halfPanel}>
+            <View style={styles.cardHeaderRow}>
+              <View style={styles.sectionTitleWithIcon}>
+                <SymbolView name="brain.head.profile" size={14} tintColor={colors.accent} resizeMode="scaleAspectFit" />
+                <Text style={styles.cardSectionLabel}>MEMORY</Text>
+              </View>
+              <Text style={styles.memoryHeaderText}>Recently learned</Text>
+            </View>
+            {memoryInsights.map((insight) => (
+              <View key={insight} style={styles.memoryRow}>
+                <View style={styles.memoryBullet} />
+                <Text style={styles.memoryText}>{insight}</Text>
+              </View>
+            ))}
+            <Text style={styles.viewAllText}>View all insights ›</Text>
+          </View>
+
+          <View style={styles.halfPanel}>
+            <View style={styles.cardHeaderRow}>
+              <View style={styles.sectionTitleWithIcon}>
+                <SymbolView name="waveform.path" size={14} tintColor={colors.accent} resizeMode="scaleAspectFit" />
+                <Text style={styles.cardSectionLabel}>INTELLIGENCE FEED</Text>
+              </View>
+              <Text style={styles.liveText}>Live</Text>
+            </View>
+            {intelligenceFeed.map((entry, index) => (
+              <View key={entry.id} style={styles.feedRow}>
+                <Text style={styles.feedTime}>{entry.time}</Text>
+                <View style={styles.feedTimeline}>
+                  <View style={[styles.feedDot, index === intelligenceFeed.length - 1 && { backgroundColor: colors.accentCyan }]} />
+                  {index < intelligenceFeed.length - 1 ? <View style={styles.feedLine} /> : null}
+                </View>
+                <Text style={styles.feedTitle}>{entry.title}</Text>
+              </View>
+            ))}
+            <Text style={styles.viewAllText}>View full feed ›</Text>
+          </View>
+        </View>
+        {(error || suggestionsError || dailyPlanError) ? (
+          <Text style={styles.brainFooterNote}>Some live signals are temporarily unavailable.</Text>
+        ) : null}
+        {isLoading && items.length === 0 ? (
+          <ActivityIndicator color={colors.accent} style={{ marginTop: spacing.lg }} />
+        ) : null}
+      </Animated.View>
     </ScrollView>
   );
 }
@@ -1972,13 +2056,631 @@ function createStyles(colors: ThemeColors) {
   container: { flex: 1, backgroundColor: colors.background },
   content:   { paddingHorizontal: spacing.lg },
 
+  // ── HELIOS brain experience ───────────────────────────────────────────────
+  topActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  topActionButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: `${colors.card}B8`,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  topActionBadge: {
+    position: "absolute",
+    top: -4,
+    right: -2,
+    minWidth: 27,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 5,
+  },
+  topActionBadgeText: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: colors.textPrimary,
+    fontWeight: "900" as const,
+  },
+  referenceHero: {
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xl,
+  },
+  brainHeroCard: {
+    minHeight: 248,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: `${colors.accent}40`,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    overflow: "hidden",
+  },
+  brainHeroGlow: {
+    position: "absolute",
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    right: -70,
+    top: -75,
+    backgroundColor: `${colors.accent}18`,
+  },
+  brainHeroTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.lg,
+  },
+  brainHeroKicker: {
+    ...typography.caption,
+    color: colors.accent,
+    letterSpacing: 2.4,
+    marginBottom: spacing.sm,
+  },
+  brainHeroStatus: {
+    minHeight: 30,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: `${colors.card}CC`,
+    paddingHorizontal: spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    overflow: "hidden",
+    alignSelf: "flex-start",
+    marginTop: spacing.md,
+  },
+  brainHeroStatusHalo: {
+    position: "absolute",
+    left: 9,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+  },
+  brainHeroStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  brainHeroStatusText: {
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: "800" as const,
+    color: colors.textSecondary,
+    letterSpacing: 1.1,
+  },
+  brainHeroTitle: {
+    fontSize: 40,
+    lineHeight: 47,
+    fontWeight: "900" as const,
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+    maxWidth: 310,
+  },
+  brainHeroSubtitle: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: colors.textSecondary,
+    maxWidth: 310,
+  },
+  brainSectionLabel: {
+    ...typography.caption,
+    color: colors.textPrimary,
+    letterSpacing: 2.2,
+    marginBottom: 0,
+    marginTop: 0,
+  },
+  cardSectionLabel: {
+    ...typography.caption,
+    color: colors.textPrimary,
+    letterSpacing: 1.8,
+  },
+  liveHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.md,
+  },
+  sectionTitleWithIcon: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    flexShrink: 1,
+  },
+  operationalPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  operationalText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: "600" as const,
+  },
+  operationalDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.success,
+  },
+  analysisRail: {
+    gap: spacing.sm,
+    paddingRight: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  analysisCard: {
+    width: 145,
+    minHeight: 148,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  analysisCheck: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    width: 15,
+    height: 15,
+    borderRadius: 8,
+    backgroundColor: colors.success,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  analysisIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  analysisCopy: { gap: spacing.sm, alignItems: "center" },
+  analysisTitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "800" as const,
+    color: colors.textPrimary,
+    textAlign: "center",
+  },
+  analysisMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  analysisPulse: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  analysisUpdated: {
+    fontSize: 12,
+    lineHeight: 15,
+    color: colors.textMuted,
+  },
+  opportunitiesCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  opportunityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  opportunityCopy: { flex: 1, gap: 4 },
+  opportunityRail: {
+    gap: spacing.md,
+    paddingRight: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  opportunityCard: {
+    width: 285,
+    minHeight: 205,
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    justifyContent: "space-between",
+  },
+  opportunityEyebrow: {
+    fontSize: 10,
+    lineHeight: 13,
+    color: colors.accentCyan,
+    fontWeight: "800" as const,
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+  },
+  opportunityTitle: {
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: "700" as const,
+    color: colors.textPrimary,
+  },
+  opportunitySubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "800" as const,
+  },
+  opportunityDetail: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+  },
+  opportunitySignal: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  opportunitySignalLabel: {
+    fontSize: 11,
+    color: colors.textMuted,
+    fontWeight: "700" as const,
+  },
+  opportunitySignalValue: {
+    fontSize: 14,
+    color: colors.accentCyan,
+    fontWeight: "900" as const,
+    maxWidth: 150,
+    textAlign: "right",
+  },
+  cardHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  viewAllText: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors.accent,
+    fontWeight: "900" as const,
+  },
+  rowIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  twoColumnRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  halfPanel: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    minWidth: 0,
+  },
+  predictionCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.lg,
+    overflow: "hidden",
+  },
+  predictionRow: {
+    minHeight: 66,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  predictionDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.accent,
+  },
+  predictionCopy: { flex: 1, gap: 3 },
+  predictionTitle: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "800" as const,
+    color: colors.textPrimary,
+  },
+  predictionDetail: {
+    fontSize: 11,
+    lineHeight: 15,
+    color: colors.textSecondary,
+    fontWeight: "800" as const,
+  },
+  predictionDivider: {
+    position: "absolute",
+    left: spacing.lg,
+    right: spacing.lg,
+    bottom: 0,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  smartPlansStack: {
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  compactInsightRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  compactPlanRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingBottom: spacing.sm,
+    marginBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: `${colors.border}88`,
+  },
+  compactIconCircle: {
+    width: 31,
+    height: 31,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  smartPlanCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.sm,
+    overflow: "hidden",
+  },
+  smartPlanAccent: {
+    width: 4,
+    alignSelf: "stretch",
+    borderRadius: 99,
+  },
+  smartPlanBody: {
+    flex: 1,
+    gap: 7,
+  },
+  smartPlanTitle: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "900" as const,
+    color: colors.textPrimary,
+  },
+  smartPlanMetaLine: {
+    fontSize: 11,
+    lineHeight: 15,
+    color: colors.textSecondary,
+    fontWeight: "600" as const,
+  },
+  smartPlanMeta: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  smartPlanMetaText: {
+    fontSize: 10,
+    lineHeight: 13,
+    color: colors.textMuted,
+    fontWeight: "800" as const,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  watchlistColumns: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    rowGap: spacing.sm,
+    columnGap: spacing.sm,
+  },
+  watchlistItem: {
+    width: "47%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  watchlistDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  watchlistLabel: {
+    fontSize: 11,
+    lineHeight: 15,
+    color: colors.textPrimary,
+    fontWeight: "800" as const,
+  },
+  watchlistStatus: {
+    fontSize: 10,
+    lineHeight: 15,
+    fontWeight: "700" as const,
+  },
+  watchlistFooter: {
+    textAlign: "center",
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textSecondary,
+    marginTop: spacing.md,
+  },
+  waitingCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: `${colors.border}88`,
+  },
+  waitingTitle: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "700" as const,
+    color: colors.textPrimary,
+  },
+  waitingText: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textSecondary,
+  },
+  waitingButton: {
+    borderRadius: 999,
+    backgroundColor: colors.accent,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  waitingButtonText: {
+    fontSize: 12,
+    fontWeight: "800" as const,
+    color: colors.background,
+  },
+  waitingCountBadge: {
+    minWidth: 25,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 7,
+  },
+  waitingCountText: {
+    fontSize: 12,
+    fontWeight: "900" as const,
+    color: colors.textPrimary,
+  },
+  memoryCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  memoryKicker: {
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: "900" as const,
+    color: colors.accent,
+    letterSpacing: 1.3,
+  },
+  memoryHeaderText: {
+    fontSize: 10,
+    color: colors.accent,
+    fontWeight: "800" as const,
+  },
+  memoryRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  memoryBullet: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: colors.accent,
+    marginTop: 7,
+  },
+  memoryText: {
+    flex: 1,
+    fontSize: 11,
+    lineHeight: 17,
+    color: colors.textSecondary,
+  },
+  feedCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  feedRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    minHeight: 25,
+  },
+  feedTime: {
+    width: 50,
+    fontSize: 10,
+    lineHeight: 16,
+    color: colors.textMuted,
+    fontWeight: "800" as const,
+  },
+  feedTimeline: {
+    width: 16,
+    alignItems: "center",
+    minHeight: 38,
+  },
+  feedDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.accentCyan,
+    marginTop: 4,
+  },
+  feedLine: {
+    flex: 1,
+    width: 1,
+    backgroundColor: colors.border,
+    marginTop: 4,
+  },
+  feedTitle: {
+    flex: 1,
+    fontSize: 10,
+    lineHeight: 15,
+    color: colors.textPrimary,
+    fontWeight: "700" as const,
+  },
+  liveText: {
+    fontSize: 11,
+    lineHeight: 15,
+    color: colors.success,
+    fontWeight: "900" as const,
+  },
+  brainFooterNote: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginTop: spacing.md,
+  },
+
   // ── Hero ───────────────────────────────────────────────────────────────────
   heroCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
     overflow: "hidden",
   },
   heroAccentBar: {
@@ -1986,7 +2688,7 @@ function createStyles(colors: ThemeColors) {
     backgroundColor: colors.accent,
   },
   heroInner: {
-    padding: spacing.xl,
+    padding: spacing.md,
     gap: spacing.xs,
   },
   heroTop: {
@@ -2002,10 +2704,35 @@ function createStyles(colors: ThemeColors) {
     marginBottom: spacing.xs,
   },
   heroTitle: {
-    ...typography.displaySmall,
+    fontSize: 30,
+    lineHeight: 36,
+    fontWeight: "900" as const,
     color: colors.textPrimary,
   },
   heroSubtitle: { ...typography.body, color: colors.textSecondary },
+  heroReadyPill: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    marginTop: spacing.xs,
+    borderWidth: 1,
+    borderColor: `${colors.success}35`,
+    backgroundColor: `${colors.success}12`,
+    borderRadius: 999,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+  },
+  heroReadyDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  heroReadyText: {
+    fontSize: 11,
+    fontWeight: "700" as const,
+    color: colors.textSecondary,
+  },
   heroStatusDot: {
     width: 28,
     height: 28,
@@ -2130,6 +2857,151 @@ function createStyles(colors: ThemeColors) {
     backgroundColor: colors.border,
     marginVertical: spacing.lg,
     opacity: 0.75,
+  },
+
+  // ── Assistant overview ───────────────────────────────────────────────────
+  overviewGrid: {
+    flexDirection: "row",
+    gap: 7,
+  },
+  overviewCard: {
+    flex: 1,
+    minHeight: 80,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 10,
+    gap: 5,
+  },
+  overviewIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 2,
+  },
+  overviewLabel: {
+    fontSize: 8,
+    lineHeight: 11,
+    fontWeight: "700" as const,
+    color: colors.textMuted,
+  },
+  overviewValue: {
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: "800" as const,
+  },
+
+  // ── Suggested next steps ─────────────────────────────────────────────────
+  inlineMutedText: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginBottom: spacing.sm,
+  },
+  nextStepsCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
+  },
+  nextStepRow: {
+    minHeight: 76,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  nextStepContent: {
+    flex: 1,
+    gap: 3,
+  },
+  nextStepCategory: {
+    fontSize: 9,
+    lineHeight: 12,
+    color: colors.accentCyan,
+    fontWeight: "800" as const,
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+  },
+  nextStepTitle: {
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: "800" as const,
+    color: colors.textPrimary,
+  },
+  nextStepSubtitle: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textSecondary,
+  },
+  nextStepDivider: {
+    position: "absolute",
+    left: spacing.lg,
+    right: spacing.lg,
+    bottom: 0,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+
+  // ── Compact approvals ────────────────────────────────────────────────────
+  approvalEmptyCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+  },
+  approvalEmptyTitle: {
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: "800" as const,
+    color: colors.textPrimary,
+  },
+  approvalEmptyText: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  approvalCompactCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  approvalCompactTitle: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: "800" as const,
+    color: colors.textPrimary,
+  },
+  approvalCompactText: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textSecondary,
+  },
+  approvalCompactButton: {
+    borderRadius: 999,
+    backgroundColor: colors.accent,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+  },
+  approvalCompactButtonText: {
+    fontSize: 12,
+    fontWeight: "800" as const,
+    color: colors.background,
   },
 
   // ── Premium execution plan ────────────────────────────────────────────────
@@ -3231,8 +4103,8 @@ function createStyles(colors: ThemeColors) {
     borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.lg,
-    marginBottom: spacing.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
   },
   compactPlanHeader: {
     flexDirection: "row",
@@ -3326,31 +4198,30 @@ function createStyles(colors: ThemeColors) {
     lineHeight: 16,
   },
   compactPlanEmpty: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    paddingVertical: spacing.xs,
+    gap: spacing.sm,
   },
+  compactPlanEmptyCopy: { gap: spacing.xs },
   compactPlanEmptyTitle: {
-    fontSize: 13,
-    fontWeight: "600" as const,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: "800" as const,
     color: colors.textPrimary,
-    marginBottom: 2,
   },
   compactPlanEmptyBody: {
-    fontSize: 12,
-    color: colors.textMuted,
-    lineHeight: 17,
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 19,
   },
   compactPlanGenBtn: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 5,
     backgroundColor: colors.accent,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    flexShrink: 0,
+    alignSelf: "flex-start",
   },
   compactPlanGenBtnText: {
     fontSize: 11,

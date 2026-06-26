@@ -1,7 +1,9 @@
 import { useEffect } from "react";
+import { AppState } from "react-native";
 import { systemService } from "../services/systemService";
-import { reportError } from "../services/errorReporter";
 import { useAppStore } from "../store";
+
+const HEALTH_CHECK_INTERVAL_MS = 15000;
 
 export function useBackendHealth(): void {
   const setSystemStatus = useAppStore((s) => s.setSystemStatus);
@@ -9,18 +11,21 @@ export function useBackendHealth(): void {
 
   useEffect(() => {
     let cancelled = false;
+    let interval: ReturnType<typeof setInterval> | null = null;
 
     async function check(): Promise<void> {
       try {
-        const [health, version] = await Promise.all([
-          systemService.health(),
-          systemService.version(),
-        ]);
+        const health = await systemService.health();
         if (cancelled) return;
         setSystemStatus(health.status === "ok" ? "online" : "degraded");
-        setBackendVersion(version.version);
-      } catch (error) {
-        reportError(error, "Backend health probe failed");
+        systemService.version()
+          .then((version) => {
+            if (!cancelled) setBackendVersion(version.version);
+          })
+          .catch(() => {
+            if (!cancelled) setBackendVersion(null);
+          });
+      } catch {
         if (!cancelled) {
           setSystemStatus("offline");
           setBackendVersion(null);
@@ -29,6 +34,16 @@ export function useBackendHealth(): void {
     }
 
     check();
-    return () => { cancelled = true; };
+
+    interval = setInterval(check, HEALTH_CHECK_INTERVAL_MS);
+    const appStateSub = AppState.addEventListener("change", (state) => {
+      if (state === "active") check();
+    });
+
+    return () => {
+      cancelled = true;
+      if (interval) clearInterval(interval);
+      appStateSub.remove();
+    };
   }, [setSystemStatus, setBackendVersion]);
 }

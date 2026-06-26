@@ -1,383 +1,439 @@
 # HELIOS
 
-> A full-stack iOS productivity app demonstrating complete product engineering: goal tracking, task management, AI-assisted planning, persistent AI memory, multi-agent orchestration, Google integrations architecture, and production-grade infrastructure.
+**HELIOS is an AI-powered personal operating system for goals, tasks, calendars, memory, connected services, and daily decision support.**
 
-**Status:** ✅ V2 Complete — Portfolio-demo ready. All features working. No blockers.
+HELIOS is not another productivity app. It is designed as a life operating system: a unified platform that understands user context, tracks long-running priorities, reasons across calendar and task data, and turns personal information into actionable guidance.
 
-Built mobile-first with **React Native 0.83 / Expo SDK 55** and **FastAPI (Python 3.12)**, HELIOS is a complete, working codebase — not a prototype or design mockup. Every phase ships tested, documented functionality to main. 
-
-**What's included:**
-- JWT authentication with bcrypt hashing
-- PostgreSQL persistence with 13 Alembic migrations
-- 8/8 backend tests passing, 2 mobile test suites passing
-- User-scoped SQL queries preventing cross-user data leakage
-- Docker Compose for local dev (live reload), Dockerfile for production
-- Comprehensive deployment guides for Render / Railway / Fly.io
-- No secrets committed, all environment-driven configuration
-- TypeScript strict mode, Pydantic v2 validation, SQLAlchemy 2.0 ORM
-- Fernet AES-128-CBC token encryption for OAuth credential storage
-- `_STUB` flag pattern for safe incremental real-API activation
-
-**Quick links:**
-- **[V2 Feature Matrix](docs/v2-feature-matrix.md)** — Real vs mock vs stub breakdown
-- **[V2 Demo Guide](docs/v2-demo-guide.md)** — Walkthrough script for portfolio demos
-- **[V2 Completion Report](docs/v2-completion-report.md)** — All phases, bugs fixed, V3 handoff notes
-- **[Google OAuth Checklist](docs/google-oauth-implementation-checklist.md)** — Steps to activate real OAuth
-- **[Portfolio Case Study](PORTFOLIO.md)** — Full technical writeup & design patterns
-- **[Architecture Deep-Dive](docs/architecture-overview.md)** — Database, API, state management
-- **[Deployment Guide](docs/deployment.md)** — Production hosting options
+The project is a full-stack mobile platform built with a React Native / Expo iOS client, a FastAPI backend, PostgreSQL persistence, JWT authentication, encrypted OAuth token storage, semantic memory, daily history, task intelligence, relationship logic, and AI provider orchestration.
 
 ---
 
-## V2 Features
+## Project Overview
 
-V2 adds five capability layers on top of V1. No rewrites, no new repositories — all built incrementally.
+HELIOS exists to solve a common problem in personal productivity software: important context is scattered across apps, and users are left to manually translate goals, schedules, emails, tasks, and reminders into daily action.
 
-### AI Memory (V2.1)
-Persistent user memory stored in PostgreSQL (`ai_memories` table). Four types: `preference`, `important_fact`, `goal_context`, `recurring_interest`. Every AI prompt receives a LONG-TERM MEMORY section. 200-memory soft cap. Full CRUD with type filtering.
+The platform organizes that context into a single user-scoped intelligence layer. HELIOS can summarize the day, surface next best actions, track goal progress, generate task suggestions, retain useful memory, and connect external services such as Google Calendar and Gmail.
 
-### Multi-Agent Orchestration (V2.2–V2.13)
-Five specialized agents (Strategy, Finance, Study, Health, Career) each receive a domain-filtered context package. `POST /agents/orchestrate` calls the AI provider once per selected agent and assembles a unified response with prioritized recommended actions. Conversation history persists to PostgreSQL.
+The long-term vision is a personal operating system that becomes more useful as it learns the user's patterns, priorities, calendar constraints, and goals. The current codebase focuses on private beta readiness: reliable authentication, core data models, mobile workflows, backend contracts, AI context retrieval, and secure integration infrastructure.
 
-### Google Integrations Architecture (V2.14–V2.19)
-Complete integration infrastructure without requiring live Google credentials:
+Target users include:
 
-- **Token storage**: `user_integrations` table with Fernet-encrypted `access_token_encrypted` and `refresh_token_encrypted` columns. Token columns never appear in API responses.
-- **OAuth flow skeleton**: `GET /integrations/google/connect-url`, `POST /integrations/google/exchange`. `_STUB_EXCHANGE=True` validates credentials and writes encrypted placeholder tokens — tests the full encryption + DB-write pipeline without real Google credentials.
-- **Mock sync**: `sync_simulator.run_mock_sync()` writes deterministic fixture records to `calendar_events` and `email_messages` tables.
-- **Google Calendar adapter**: `GoogleCalendarAdapter` with `list_events`, `create_event`, `update_event`, `delete_event`. `_STUB=True` returns fixture events. Token retrieval wired — activated by flipping `_STUB=False`.
-- **Gmail adapter**: `GmailAdapter` with `list_messages`, `get_message`, `mark_as_read`, `archive_message`, `search_messages`. Same pattern. No email sending in V2.
-
-### Sync Simulation Engine
-Deterministic upsert of fixture calendar events and email messages into PostgreSQL. `SyncJob` table tracks sync history per provider. `GET /integrations/sync/status` returns the most recent job per connected provider.
-
-### V2 Mobile Screens
-- **Memory screen** — create/filter/delete AI memories by type
-- **Integrations screen** — connect/disconnect/sync Google Calendar, Gmail, Outlook Calendar, Outlook Mail (all providers support mock connect; Google providers have real OAuth path ready)
+- Individuals managing complex personal, academic, or professional goals
+- Builders and operators who need a unified command center for execution
+- Users who want AI assistance grounded in their actual schedule, tasks, history, and memory
+- Technical reviewers evaluating mobile architecture, backend design, AI systems, and full-stack product engineering
 
 ---
 
-## Table of Contents
+## Current Status
 
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Architecture](#architecture)
-- [Project Structure](#project-structure)
-- [Local Setup](#local-setup)
-- [API Reference](#api-reference)
-- [Deployment](#deployment)
-- [Testing & Quality](#testing--quality)
-- [Portfolio Materials](#portfolio-materials)
-- [Roadmap](#roadmap)
-- [License](#license)
+**Current stage:** Private Beta Development
 
----
+Implemented:
 
-## Features
+- Mobile iOS app with tab-based navigation and authenticated user flows
+- FastAPI backend with PostgreSQL, Alembic migrations, and Docker support
+- JWT authentication, refresh sessions, profile management, username and display-name controls
+- Goals, tasks, calendar events, reminders, notifications, daily history, and settings
+- AI assistant, daily brief engine, agent orchestration, assistant context preview, semantic memory, and task suggestions
+- Google Calendar and Gmail integration architecture, including OAuth flow support, encrypted token storage, sync endpoints, and mock/simulated development paths
+- Relationship logic for next best actions, goal progress, available windows, and task-goal-calendar coordination
+- Autonomy queue, rules, audit log, background jobs, and notifications infrastructure
+- Backend tests and mobile type/lint tooling
 
-### Core User Features
-- **Authentication:** Signup, login, persistent sessions with token revalidation
-- **Goals:** Create, track, and complete multi-month goals with optional target dates
-- **Tasks:** Manage weekly sprints with 4 priority levels, status lifecycle, and optional goal links
-- **Dashboard:** Real-time aggregated metrics (completion rates, active goals, overdue tasks)
-- **Analytics:** Live performance metrics computed per-request from PostgreSQL
-- **AI Planning:** Generate structured execution plans from free-form prompts
-- **AI Assistant:** Conversational chat with follow-up suggestions and recommended actions
-- **Reminders:** Local push notifications with per-user enable/disable
-- **User Preferences:** Theme (light/dark), planning horizon, notification toggles — synced to PostgreSQL
+In active development:
 
-### Technical Features
-- User-scoped SQL queries preventing cross-user data access
-- JWT authentication with bcrypt password hashing
-- Pluggable AI provider (mock default, OpenAI ready)
-- Optimistic state updates with server re-sync
-- Hydration guards preventing UI flashing
-- 15-second HTTP timeout with AbortController
+- Private beta polish and QA
+- Real-world integration hardening
+- Expanded test coverage around mobile flows and AI/context systems
+- Production deployment and monitoring readiness
 
 ---
 
-## Architecture
+## Core Capabilities
 
-```
-┌────────────────────────────────────────────────────────────┐
-│                    HELIOS iOS App                          │
-│              React Native 0.83 / Expo SDK 55               │
-│                                                            │
-│  (auth)          (tabs — 9 screens)                        │
-│  Login ──────►  Home · Analytics · Agents · Assistant      │
-│  Signup          Goals · Tasks · Memory · Integrations     │
-│                  Profile                                   │
-│       │                 │                                   │
-│       └──── Zustand ────┘  13 stores                       │
-│             Stores         auth + settings persisted        │
-│             (AsyncStorage) all others in-memory            │
-│                  │                                          │
-│         fetch + AbortController + 15 s timeout             │
-│         Authorization: Bearer <JWT>                         │
-└──────────────────────┼─────────────────────────────────────┘
-                       │  HTTPS (HTTP in local dev)
-                       ▼
-┌────────────────────────────────────────────────────────────┐
-│               FastAPI Backend (Python 3.12)                │
-│                                                            │
-│  /auth  /goals  /tasks  /analytics  /dashboard             │
-│  /agents  /ai/briefing  /ai/plan  /ai/chat                 │
-│  /ai/actions/execute  /ai/conversations                    │
-│  /reminders  /settings/preferences  /health                │
-│                                                            │
-│  Pydantic v2 validation → SQLAlchemy 2.0 ORM               │
-│                                                            │
-│  ┌──────────────────────────────────────────┐              │
-│  │           AI Provider Layer              │              │
-│  │  AIProvider (abstract base class)        │              │
-│  │    ├── MockAIProvider  ← default         │              │
-│  │    └── OpenAIProvider  ← complete impl    │              │
-│  │  context_builder: injects live user data │              │
-│  └──────────────────────────────────────────┘              │
-└──────────────────────┬─────────────────────────────────────┘
-                       │  SQLAlchemy / psycopg2
-                       ▼
-┌────────────────────────────────────────────────────────────┐
-│              PostgreSQL 16 (Docker volume)                 │
-│                                                            │
-│  users ──< goals ──< tasks                                 │
-│        ──< conversations ──< conversation_messages         │
-│        ──< reminders                                       │
-│        ──< ai_memories                                     │
-│        ──< user_integrations (encrypted OAuth tokens)      │
-│        ──< sync_jobs                                       │
-│        ──< calendar_events  (from sync)                    │
-│        ──< email_messages   (from sync)                    │
-│        ──  user_preferences  (1-to-1)                      │
-│                                                            │
-│  UUID PKs · FK constraints · CASCADE/SET NULL · Alembic    │
-│  13 migrations (001–013)                                   │
-└────────────────────────────────────────────────────────────┘
-```
+### AI Intelligence
 
-All services run locally via Docker Compose. The mobile app communicates with the API over `localhost:8000` in development; the production URL is injected via `EXPO_PUBLIC_API_URL` at EAS Build time.
+HELIOS includes an AI provider manager with fallback support, assistant chat, agent orchestration, context building, semantic memory, daily briefs, and task/action recommendations. AI responses are intended to be grounded in user-scoped application data rather than generic prompts.
+
+### Daily Brief
+
+The Daily Brief system generates a structured summary of the user's day using goals, tasks, calendar data, reminders, history, and assistant context. Briefs can be fetched for today, generated on demand, and retrieved by date.
+
+### Assistant
+
+The Assistant screen provides conversational help with contextual awareness. It connects to persisted conversations, assistant context retrieval, recommended actions, follow-up questions, and AI status handling.
+
+### Goals
+
+Goals track long-running outcomes, target dates, status, linked tasks, progress, and relationship health. Goal detail views connect high-level ambition to daily execution.
+
+### Tasks
+
+Tasks support priority, status, due dates, goal links, scheduling, completion, and task suggestions. The task engine can generate suggestions, accept/reject them, complete tasks, and schedule work into available windows.
+
+### Calendar
+
+The calendar layer manages user events, monthly history, day details, available windows, daily snapshots, and historical notes. Calendar intelligence supports task scheduling and day-level review.
+
+### Memory
+
+HELIOS supports explicit user memory plus semantic memory. Memory entries help the assistant and intelligence systems retain preferences, context, important facts, and recurring interests.
+
+### Connected Services
+
+Connected Services currently center on Google Calendar and Gmail. The backend includes OAuth routes, secure token encryption, integration status, sync, reconnect, disconnect, and simulated sync support for development.
+
+### Automation
+
+Autonomy infrastructure includes a queue of proposed actions, rules, execution endpoints, suggestions, daily plans, and audit logs. The current implementation is designed around reviewable, governable actions rather than silent background execution.
+
+### Notifications
+
+The platform includes notification models, mobile notification permission flows, reminders, read state, and notification list/delete endpoints.
+
+### Authentication and Account Management
+
+Authentication uses JWT access/refresh tokens, bcrypt password hashing, protected routes, profile settings, username management, display-name change limits, email change, and password change flows.
 
 ---
 
-## Tech Stack
+## Screen Overview
 
-### Mobile
-| Layer | Technology | Version |
-|---|---|---|
-| Framework | React Native | 0.83.6 |
-| Runtime | Expo SDK | 55 |
-| Navigation | Expo Router (file-based) | 55 |
-| Language | TypeScript (strict) | 5.9 |
-| State | Zustand | 5.x |
-| Persistence | AsyncStorage | 2.2.0 |
-| HTTP | Native `fetch` + AbortController | — |
-| UI | Custom component library | — |
-| Icons | SF Symbols (`expo-symbols`) | 55 |
+### Home
 
-### Backend
-| Layer | Technology | Version |
-|---|---|---|
-| Framework | FastAPI | 0.115.4 |
-| Language | Python | 3.12 |
-| Validation | Pydantic v2 | 2.9.2 |
-| Config | pydantic-settings | 2.6.1 |
-| ORM | SQLAlchemy | 2.0.36 |
-| Migrations | Alembic | 1.14.0 |
-| Auth | PyJWT (HS256) | 2.9.0 |
-| Passwords | bcrypt | 4.2.1 |
-| Server | Uvicorn | 0.32.0 |
-| Database | PostgreSQL | 16 |
-| Containers | Docker Compose | — |
+Home is the user's daily operating surface. It brings together status, Daily Brief information, recommendations, active priorities, and next-step intelligence. It is designed for quick orientation rather than deep editing.
+
+### Assistant
+
+Assistant is the conversational interface for HELIOS. It supports chat, contextual responses, suggested prompts, recommended actions, conversation history, and AI status messaging.
+
+### Goals
+
+Goals is the strategic planning surface. It shows goal cards, progress signals, linked tasks, goal detail, completion/archiving, and relationship-aware progress data.
+
+### Tasks
+
+Tasks is the execution center. It supports task search, filtering, creation, completion, focus-oriented views, HELIOS-generated suggestions, and task-engine actions.
+
+### Calendar
+
+Calendar organizes events, day state, monthly timeline data, available windows, and selected-day details. It is the scheduling and day-history surface for the app.
+
+### More
+
+More acts as the account, profile, settings, connected services, memory, notifications, diagnostics, and command-center area. It includes profile settings, theme preference, integration access, security settings, and supporting system screens.
 
 ---
 
-## Project Structure
+## AI Architecture
 
-```
-HELIOS/
-├── backend/                    # FastAPI + PostgreSQL API
-│   ├── app/
-│   │   ├── ai/                 # Provider abstraction layer
-│   │   │   ├── base.py         # AIProvider abstract base class
-│   │   │   ├── factory.py      # Provider selection from config
-│   │   │   ├── mock_provider.py
-│   │   │   └── openai_provider.py  # Stub (ready for implementation)
-│   │   ├── core/
-│   │   │   ├── jwt.py          # Token creation + validation
-│   │   │   └── security.py     # bcrypt hashing
-│   │   ├── db/
-│   │   │   ├── base.py         # DeclarativeBase
-│   │   │   └── session.py      # Session factory + get_db dependency
-│   │   ├── dependencies/
-│   │   │   └── auth.py         # get_current_user FastAPI dependency
-│   │   ├── models/             # SQLAlchemy ORM models (user, goal, task, reminder, prefs)
-│   │   ├── routers/            # Route handlers (one file per resource)
-│   │   ├── schemas/            # Pydantic request/response models
-│   │   ├── config.py           # Settings (pydantic-settings, reads .env)
-│   │   └── main.py             # App factory, CORS middleware, exception handlers
-│   ├── alembic/
-│   │   └── versions/           # 001_users → … → 006_user_preferences
-│   ├── docker-compose.yml      # Local development (bind-mount + --reload)
-│   ├── Dockerfile              # Production image (alembic + uvicorn, no --reload)
-│   ├── requirements.txt
-│   └── .env.example            # Environment template — copy to .env
-│
-├── mobile/                     # React Native / Expo app
-│   ├── .env.example            # Expo env variable template
-│   └── src/
-│       ├── app/
-│       │   ├── _layout.tsx     # Root layout — hydration guard + auth routing
-│       │   ├── (auth)/         # Login, Signup screens
-│       │   └── (tabs)/         # Home, Analytics, Agents, Goals, Tasks, Profile
-│       ├── components/         # AgentCard, GoalCard, TaskCard, PlanCard, ...
-│       ├── components/ui/      # Button, Input, Screen, Text primitives
-│       ├── config/
-│       │   └── api.ts          # API_CONFIG (EXPO_PUBLIC_API_URL) + all endpoints
-│       ├── hooks/
-│       │   └── useBackendHealth.ts
-│       ├── services/           # apiClient + per-resource service modules
-│       ├── store/              # Zustand: useAuthStore + 8 data stores
-│       └── theme/
-│           └── theme.ts        # Colors, spacing, radius, typography tokens
-│
-└── docs/
-    ├── deployment.md              # Production deployment guide (Render, Railway, Fly.io)
-    ├── ios-release.md             # TestFlight / App Store release checklist
-    ├── architecture-overview.md   # Deep-dive system and data architecture
-    ├── demo-plan.md               # Screenshot checklist and demo walkthrough script
-    ├── portfolio-summary.md       # Recruiter-facing project summary
-    ├── post-v1-backlog.md         # Prioritized backlog and recommended next phases
-    ├── demo-video-script.md       # 2-min and 5-min video scripts with exact narration
-    ├── recruiter-walkthrough.md   # Non-technical presentation guide and Q&A
-    ├── screenshot-guide.md        # Step-by-step screenshot capture with data seeding
-    └── technical-talking-points.md  # Interview prep: system design, trade-offs, limitations
+HELIOS is built around a layered intelligence model. The mobile app does not directly assemble AI context; it requests backend intelligence contracts that are scoped to the authenticated user.
+
+### AI Provider Manager
+
+The backend includes provider abstraction and manager modules under `backend/app/ai/`. Provider selection is environment-driven, with support for configured providers and fallback behavior. This keeps route handlers independent from a specific AI vendor.
+
+### Daily Brief Engine
+
+The Daily Brief service composes a date-specific summary using task, goal, calendar, reminder, history, and context signals. It exposes endpoints for today's brief, on-demand generation, and date lookup.
+
+### Assistant Context Retrieval
+
+Assistant context retrieval packages user state into a structured preview for assistant workflows. It pulls from application data rather than relying only on the latest chat message.
+
+### Semantic Search and RAG
+
+Semantic memory uses an embedding service and semantic memory model to store and retrieve relevant user context. This supports retrieval-augmented generation patterns for assistant and intelligence workflows.
+
+### Daily Memory Snapshots
+
+Daily snapshots capture user state over time. They provide a historical substrate for trend analysis, day review, and future personalization.
+
+### Persistent Day History
+
+The history service stores day-level data, generated notes, locks, ranges, and monthly timeline information. Calendar and Home surfaces can use this for daily review and retrospective context.
+
+### Next Best Action
+
+Relationship logic evaluates goals, tasks, calendar constraints, and user state to propose next best actions. This powers home recommendations and task intelligence.
+
+### Relationship Engine
+
+The relationship layer connects goals, tasks, calendar events, available time windows, progress, and health signals. It is the coordination layer between strategy and execution.
+
+### Task Intelligence
+
+The task engine generates, deduplicates, accepts, rejects, schedules, and completes task suggestions. Suggestions can originate from Gmail, calendar events, goals, daily brief data, assistant context, and next-best-action logic.
+
+### Goal Intelligence
+
+Goal intelligence computes progress from linked tasks and relationship state. It helps HELIOS reason about whether a goal is moving, blocked, under-supported, or ready for the next action.
+
+### Calendar Intelligence
+
+Calendar intelligence tracks events, available windows, day history, and scheduling constraints. It supports scheduling tasks into realistic time windows rather than treating task management as a standalone list.
+
+### How the Systems Work Together
+
+```mermaid
+flowchart TD
+    Mobile[Mobile App] --> Auth[Authentication]
+    Auth --> API[FastAPI API Layer]
+    API --> AI[AI Provider Manager]
+    API --> Memory[Explicit Memory]
+    API --> Relationship[Relationship Engine]
+    API --> Database[(PostgreSQL)]
+    API --> Google[Google Services]
+    Memory --> Semantic[Semantic Search]
+    Semantic --> AI
+    Database --> DailyBrief[Daily Brief Engine]
+    Database --> Assistant[Assistant Context]
+    Database --> Relationship
+    Google --> Calendar[Calendar Intelligence]
+    Google --> Email[Gmail Signals]
+    Calendar --> Relationship
+    Email --> TaskIntel[Task Intelligence]
+    DailyBrief --> TaskIntel
+    Assistant --> TaskIntel
+    Relationship --> NextBest[Next Best Action]
+    TaskIntel --> Mobile
+    NextBest --> Mobile
 ```
 
 ---
 
-## Features
+## Connected Services
 
-### Implemented
+### Google Calendar
 
-**Authentication**
-- Sign up with name, email, and password (bcrypt hashed, server-side)
-- Login with JWT access token (HS256, configurable expiry)
-- `/auth/me` endpoint for session revalidation on app start
-- Persistent login across restarts via AsyncStorage + Zustand persist
-- Hydration guard prevents flash-to-login during AsyncStorage read
-- Full logout wipes all cached user data across all stores
+Google Calendar support includes OAuth URL generation, token exchange paths, encrypted token storage, sync endpoints, calendar event storage, and mobile connected-service state. Development flows can use mock/simulated connection behavior.
 
-**Goals**
-- Create goals with title, description, status, and optional target date
-- List all goals for the authenticated user
-- Update goal status (`active` → `completed` → `paused`)
-- Delete goals (cascades to unlink associated tasks)
+### Gmail
 
-**Tasks**
-- Create tasks with title, description, status, priority, due date, and optional goal link
-- Four priority levels: `low`, `medium`, `high`, `critical`
-- Three status values: `todo`, `in_progress`, `done`
-- List, update, and delete tasks per user
+Gmail support includes provider integration records, message storage, sync simulation, Gmail adapter code, email list surfaces, and task-suggestion inputs from email content.
 
-**Analytics**
-- Goal metrics: total, completed, active, paused, completion rate
-- Task metrics: total, completed, in-progress, todo, overdue, high-priority
-- All values computed live from PostgreSQL at request time
+### OAuth
 
-**Dashboard**
-- Metric tiles (productivity, focus time, tasks done, energy)
-- AI insight and mission sections
-- All data served from authenticated API endpoint
+The backend includes Google OAuth routes, state handling, callback/deep-link support, reconnect URLs, and token exchange infrastructure.
 
-**Agents**
-- Five AI agent profiles: Strategy, Finance, Study, Health, Career
-- Each profile includes name, role, status, description, and priority
-- Protected endpoint — requires valid JWT
+### Secure Token Storage
 
-**AI Planning and Chat (mock provider)**
-- Daily briefing: summary, priorities, risks, and recommendation
-- Execution plan generator: structured multi-step plan from a text prompt, scoped to a configurable planning horizon
-- Optional goal context: anchor a plan to a specific goal for targeted advice
-- Conversational AI assistant with follow-up questions and action recommendations
-- AI can recommend actions (create task, create goal, update status) and execute them after user confirmation
-- Persistent conversation history: all exchanges stored in PostgreSQL, reloaded on app start
-- Provider abstraction: swap between mock and OpenAI by changing one environment variable
-- Live user context injection: AI sees the user's current goals and tasks when context is enabled
+OAuth access and refresh tokens are encrypted at rest using Fernet symmetric encryption when real tokens are stored. Token fields are not returned in API responses.
 
-**Reminders**
-- Create reminders with a title, optional note, and future date/time
-- Enable and disable individual reminders
-- Local push notifications scheduled via Expo Notifications (no server required)
-- Notification permissions requested safely, with graceful handling for denied state
-- All reminders stored in PostgreSQL and synced to the device on login
+### Synchronization
 
-**User Preferences**
-- Theme preference (system / dark / light) stored per user
-- Default planning horizon (3 / 7 / 14 / 30 days) used as the AI plan default
-- Notification master toggle and reminder-specific toggle
-- All preferences persisted to PostgreSQL and loaded into AsyncStorage on login
-- Optimistic updates: UI reflects changes instantly while the API call runs in the background
+Integration sync endpoints support status inspection, provider sync, per-integration sync, disconnect, reconnect, and deterministic simulated sync for development.
 
-**Settings and Profile**
-- User account info (name, email, member since)
-- System version info from the live backend
-- Notification permission status with in-app request flow
-- Reminders management (create, enable/disable, delete)
-- User preferences panel with segmented pickers and toggles
-- Sign-out with complete state wipe across all stores
+### Future Integrations
 
-### Planned
-
-See [Roadmap](#roadmap).
+Microsoft, Apple, GitHub, and Notion are roadmap integrations. They are not represented as completed production integrations in the current codebase.
 
 ---
 
-## Local Setup
+## System Architecture
+
+```mermaid
+flowchart LR
+    subgraph Mobile["Mobile Client"]
+        Expo["React Native / Expo"]
+        Router["Expo Router"]
+        Stores["Zustand Stores"]
+        Services["Typed Service Modules"]
+    end
+
+    subgraph API["Backend API"]
+        FastAPI["FastAPI Routers"]
+        Auth["JWT Auth + Protected Routes"]
+        RateLimit["Rate Limiting"]
+        AIManager["AI Provider Manager"]
+        ServicesLayer["Domain Services"]
+    end
+
+    subgraph Data["Data Layer"]
+        Postgres[("PostgreSQL")]
+        Alembic["Alembic Migrations"]
+        EncryptedTokens["Encrypted OAuth Tokens"]
+        SemanticMemory["Semantic Memory"]
+    end
+
+    subgraph External["External Services"]
+        GoogleCalendar["Google Calendar"]
+        Gmail["Gmail"]
+        AIProviders["AI Providers"]
+    end
+
+    Expo --> Router
+    Router --> Stores
+    Stores --> Services
+    Services --> FastAPI
+    FastAPI --> Auth
+    FastAPI --> RateLimit
+    FastAPI --> ServicesLayer
+    FastAPI --> AIManager
+    ServicesLayer --> Postgres
+    Alembic --> Postgres
+    ServicesLayer --> EncryptedTokens
+    ServicesLayer --> SemanticMemory
+    ServicesLayer --> GoogleCalendar
+    ServicesLayer --> Gmail
+    AIManager --> AIProviders
+```
+
+---
+
+## Technology Stack
+
+| Area | Technology |
+|---|---|
+| Mobile language | TypeScript |
+| Mobile framework | React Native 0.83, Expo SDK 55 |
+| Navigation | Expo Router, React Navigation |
+| Mobile state | Zustand, AsyncStorage persistence |
+| Mobile UI | Custom component system, Expo Symbols, React Native SVG, Expo Glass Effect |
+| Backend language | Python 3.12.13 |
+| Backend framework | FastAPI, Uvicorn |
+| Validation/config | Pydantic v2, pydantic-settings |
+| Database | PostgreSQL 16, SQLite for selected test runs |
+| ORM/migrations | SQLAlchemy 2.0, Alembic |
+| Authentication | JWT access/refresh tokens, bcrypt password hashing |
+| AI | Provider abstraction, OpenAI package, Anthropic provider module, mock provider for deterministic local/test workflows |
+| Semantic memory | Embedding service, semantic memory tables, retrieval endpoints |
+| OAuth/token security | Google OAuth routes, cryptography/Fernet encrypted token storage |
+| Rate limiting | slowapi |
+| Testing | pytest, pytest-asyncio, pytest-cov, Jest, ts-jest |
+| Containerization | Dockerfile, Docker Compose |
+| Development tooling | Expo CLI, EAS scripts, TypeScript, ESLint |
+
+---
+
+## Repository Structure
+
+```text
+.
+├── backend/                 FastAPI API, SQLAlchemy models, Alembic migrations, Docker config
+├── mobile/                  React Native / Expo application
+├── docs/                    Architecture, deployment, release, demo, operations, and roadmap docs
+├── assets/                  Shared design and branding assets
+├── README.md                Project overview and setup guide
+└── .python-version          Python version pin for backend development
+```
+
+Key backend directories:
+
+```text
+backend/app/ai/              Provider manager, prompts, context services, orchestration
+backend/app/models/          SQLAlchemy models for users, goals, tasks, memory, integrations, history, autonomy
+backend/app/routers/         API route groups
+backend/app/schemas/         Pydantic request/response contracts
+backend/app/services/        Domain services for briefs, memory, Google sync, relationships, task engine
+backend/alembic/versions/    Database migrations
+backend/tests/               Backend pytest suite
+```
+
+Key mobile directories:
+
+```text
+mobile/src/app/              Expo Router screens and layouts
+mobile/src/components/       Feature components and shared UI primitives
+mobile/src/services/         API client and resource-specific service modules
+mobile/src/store/            Zustand stores
+mobile/src/theme/            Theme tokens and theme context
+mobile/src/utils/            Formatting, date input, life area, and suggestion-ranking utilities
+```
+
+---
+
+## Security
+
+Implemented security measures include:
+
+- JWT access and refresh token authentication
+- Protected backend routes using authenticated user dependencies
+- bcrypt password hashing
+- Password change requiring the current password
+- Email change requiring the current password
+- User-scoped database queries for protected resources
+- OAuth token encryption at rest using Fernet
+- No OAuth access or refresh tokens returned in API responses
+- Environment-driven secrets and configuration
+- `.env` files excluded from source control
+- Startup warnings for weak JWT secrets and missing/invalid token encryption keys
+- Request IDs and structured request logging
+- Rate limiting infrastructure through `slowapi`
+- Frontend route guards and session-expiration handling
+
+Security-sensitive values such as JWT secrets, AI provider keys, OAuth client secrets, database URLs, and token encryption keys must be supplied through environment variables or deployment secrets.
+
+---
+
+## API Overview
+
+The backend exposes versioned routes under `/api/v1`.
+
+| API group | Purpose |
+|---|---|
+| `/auth` | Signup, login, refresh, current user, account operations |
+| `/profile` | Profile, username, display name, email change, password change |
+| `/settings` | User preferences and personalization |
+| `/dashboard` | Home/dashboard summary data |
+| `/goals` | Goal list, detail, create, update, delete, linked tasks |
+| `/tasks` | Task list, create, update, delete |
+| `/task-engine` | Suggested tasks, accept/reject, schedule, complete |
+| `/calendar/events` | Calendar event CRUD |
+| `/calendar/daily-snapshots` | Daily calendar/memory snapshots |
+| `/history` | Month timeline, day history, notes, locks, ranges |
+| `/relationships` | Next best action, goal progress, available windows |
+| `/daily-brief` | Today's brief, generate, date lookup |
+| `/ai` | Daily briefing, planning, chat, action execution |
+| `/ai/conversations` | Conversation history |
+| `/assistant/context` | Assistant context preview |
+| `/ai/memory` | Explicit AI memory |
+| `/semantic-memory` | Semantic memory and retrieval |
+| `/agents` | Agent profiles and orchestration |
+| `/integrations` | Integration status, OAuth, sync, reconnect, disconnect |
+| `/email` | Email messages and message operations |
+| `/notifications` | Notification list, read state, deletion |
+| `/autonomy` | Queue, suggestions, daily plan, rules, audit log |
+| `/background-jobs` | Background job management and triggering |
+| `/health`, `/version` | System status and version metadata |
+
+Swagger documentation is available from a running backend at `http://localhost:8000/docs`.
+
+---
+
+## Getting Started
 
 ### Prerequisites
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop) (for backend + database)
-- [Node.js](https://nodejs.org) 20+ and npm
-- [Xcode](https://developer.apple.com/xcode/) (for iOS Simulator)
-- [Expo CLI](https://docs.expo.dev/get-started/installation/): `npm install -g expo-cli`
+- Python 3.12.13
+- Node.js compatible with Expo SDK 55
+- Docker and Docker Compose
+- npm
+- iOS Simulator and Xcode for local iOS development
 
-### 1. Clone and configure
+### Clone
 
 ```bash
-git clone <repo-url>
-cd HELIOS
+git clone <repository-url>
+cd helios-life-os
 ```
 
-### 2. Start the backend
+### Backend
 
 ```bash
 cd backend
 cp .env.example .env
-# Edit .env — set a strong JWT_SECRET_KEY before running
+make up
 ```
 
-Generate a secret:
-```bash
-python3 -c "import secrets; print(secrets.token_hex(32))"
-```
+Backend services:
 
-```bash
-docker compose up --build
-```
+- API: `http://localhost:8000`
+- Swagger: `http://localhost:8000/docs`
+- PostgreSQL: `localhost:5432`
 
-This starts two services:
-- `api` — FastAPI on `localhost:8000` (auto-runs `alembic upgrade head` on startup)
-- `db` — PostgreSQL 16 on `localhost:5432`
-
-Verify the API is healthy:
-```bash
-curl http://localhost:8000/api/v1/health
-# {"status":"ok","service":"HELIOS","timestamp":"..."}
-```
-
-Interactive API docs: [http://localhost:8000/docs](http://localhost:8000/docs)
-
-### 3. Start the mobile app
+### Mobile
 
 ```bash
 cd mobile
@@ -385,404 +441,248 @@ npm install
 npx expo start
 ```
 
-Press `i` to open in iOS Simulator. The app connects to `http://localhost:8000` in development (`__DEV__ === true`).
+Press `i` in the Expo terminal to open iOS Simulator.
 
-> If running on a physical device, update `API_CONFIG.BASE_URL` in `mobile/src/config/api.ts` to your machine's local IP address (e.g., `http://192.168.1.x:8000`).
+In development, the mobile app points to `http://localhost:8000`. Production builds use `EXPO_PUBLIC_API_URL`.
 
 ---
 
 ## Environment Variables
 
-All backend configuration is loaded from `backend/.env`. Copy `backend/.env.example` to get started — the file is excluded from version control.
+### Backend
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `DATABASE_URL` | Yes | `postgresql://helios:helios@localhost:5432/helios` | PostgreSQL connection string — docker-compose sets the `db` hostname automatically |
-| `JWT_SECRET_KEY` | **Yes** | placeholder | HS256 signing key — generate with `secrets.token_hex(32)` |
-| `JWT_ALGORITHM` | No | `HS256` | JWT signing algorithm |
-| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | No | `60` | Token lifetime in minutes |
-| `DEBUG` | No | `false` | Re-raises unhandled exceptions; never `true` in production |
-| `CORS_ORIGINS` | No | `*` | Comma-separated allowed origins — restrict when adding a web frontend |
-| `AI_PROVIDER` | No | `mock` | AI backend: `mock` (no external calls) or `openai` |
-| `OPENAI_API_KEY` | Conditional | — | Required only when `AI_PROVIDER=openai` |
-| `OPENAI_MODEL` | No | `gpt-4o-mini` | Model to use with the OpenAI provider |
+Copy `backend/.env.example` to `backend/.env`.
 
-> `JWT_SECRET_KEY` must be a strong random value in any non-local deployment. Generate one: `python3 -c "import secrets; print(secrets.token_hex(32))"`
-
----
-
-## API Reference
-
-The backend runs on `/api/v1`. All endpoints except `/health` and `/version` require `Authorization: Bearer <token>`.
-
-Interactive documentation is available at **[http://localhost:8000/docs](http://localhost:8000/docs)** (Swagger UI) and **[http://localhost:8000/redoc](http://localhost:8000/redoc)** (ReDoc) when the server is running.
-
-### Endpoints
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `GET` | `/api/v1/health` | No | Service health check |
-| `GET` | `/api/v1/version` | No | Service version info |
-| `POST` | `/api/v1/auth/signup` | No | Register a new user |
-| `POST` | `/api/v1/auth/login` | No | Login, receive JWT |
-| `GET` | `/api/v1/auth/me` | Yes | Validate token, return current user |
-| `DELETE` | `/api/v1/auth/account` | Yes | Permanently delete account and all user data |
-| `GET` | `/api/v1/dashboard/summary` | Yes | Dashboard metrics and sections |
-| `GET` | `/api/v1/goals` | Yes | List goals for current user |
-| `POST` | `/api/v1/goals` | Yes | Create a goal |
-| `PATCH` | `/api/v1/goals/{id}` | Yes | Update a goal |
-| `DELETE` | `/api/v1/goals/{id}` | Yes | Delete a goal |
-| `GET` | `/api/v1/tasks` | Yes | List tasks for current user |
-| `POST` | `/api/v1/tasks` | Yes | Create a task |
-| `PATCH` | `/api/v1/tasks/{id}` | Yes | Update a task |
-| `DELETE` | `/api/v1/tasks/{id}` | Yes | Delete a task |
-| `GET` | `/api/v1/analytics/summary` | Yes | Aggregated goal and task metrics |
-| `GET` | `/api/v1/agents` | Yes | List AI agent profiles |
-| `GET` | `/api/v1/ai/briefing` | Yes | Daily AI briefing |
-| `POST` | `/api/v1/ai/plan` | Yes | Generate an execution plan |
-| `POST` | `/api/v1/ai/chat` | Yes | Conversational AI with action recommendations |
-| `POST` | `/api/v1/ai/actions/execute` | Yes | Execute an AI-recommended action |
-| `GET` | `/api/v1/ai/conversations` | Yes | List saved conversation summaries |
-| `GET` | `/api/v1/reminders` | Yes | List reminders for current user |
-| `POST` | `/api/v1/reminders` | Yes | Create a reminder |
-| `PATCH` | `/api/v1/reminders/{id}` | Yes | Update a reminder |
-| `DELETE` | `/api/v1/reminders/{id}` | Yes | Delete a reminder |
-| `GET` | `/api/v1/settings/preferences` | Yes | Get user preferences (creates defaults on first call) |
-| `PATCH` | `/api/v1/settings/preferences` | Yes | Update user preferences |
-| `GET` | `/api/v1/ai/memory` | Yes | List AI memories (optional `?memory_type=` filter) |
-| `POST` | `/api/v1/ai/memory` | Yes | Store a new AI memory |
-| `DELETE` | `/api/v1/ai/memory/{id}` | Yes | Delete an AI memory |
-| `GET` | `/api/v1/agents/{id}` | Yes | Get agent detail |
-| `GET` | `/api/v1/agents/{id}/context` | Yes | Get domain-filtered context package for an agent |
-| `POST` | `/api/v1/agents/orchestrate` | Yes | Run multi-agent orchestration |
-| `GET` | `/api/v1/integrations` | Yes | List all provider integration rows for current user |
-| `POST` | `/api/v1/integrations/mock-connect` | Yes | Mock-connect a provider (creates DB row, no real OAuth) |
-| `DELETE` | `/api/v1/integrations/{id}` | Yes | Disconnect a provider |
-| `POST` | `/api/v1/integrations/{id}/sync` | Yes | Trigger mock sync for a provider |
-| `GET` | `/api/v1/integrations/sync/status` | Yes | Most-recent sync job per connected provider |
-| `GET` | `/api/v1/integrations/google/connect-url` | Yes | Generate Google OAuth authorization URL |
-| `GET` | `/api/v1/integrations/google/callback` | Yes | OAuth redirect target |
-| `POST` | `/api/v1/integrations/google/exchange` | Yes | Exchange authorization code for tokens (stub mode) |
-
-### Error format
-
-All error responses follow the FastAPI standard:
-
-```json
-{ "detail": "Human-readable message." }
-```
-
-Validation errors (422) include field-level context:
-
-```json
-{
-  "detail": [
-    {
-      "type": "literal_error",
-      "loc": ["body", "priority"],
-      "msg": "Input should be 'low', 'medium', 'high' or 'critical'"
-    }
-  ]
-}
-```
-
----
-
-## AI Architecture
-
-AI responses are abstracted behind a provider interface so the underlying model can be swapped without changing any routing or schema code.
-
-```
-app/ai/
-├── base.py          # AIProvider — abstract base with generate_briefing() and generate_plan()
-├── factory.py       # get_ai_provider() — reads AI_PROVIDER from config, returns instance
-├── mock_provider.py # Deterministic responses for development and testing
-└── openai_provider.py  # Full OpenAI implementation with structured error handling
-```
-
-**Current state:** `AI_PROVIDER=mock` (default). The mock provider returns structured, contextually relevant responses without any external API calls.
-
-**To enable OpenAI:**
-1. Set `AI_PROVIDER=openai` in `.env`
-2. Set `OPENAI_API_KEY=sk-...` in `.env`
-
-That's it. `OpenAIProvider` is a complete implementation covering briefing, planning, and chat — with structured error handling for `AuthenticationError`, `RateLimitError`, `APIConnectionError`, and `APIStatusError`. The `openai` package is already in `requirements.txt`.
-
-The router code in `app/routers/ai.py` does not need to change — it calls `get_ai_provider()` and the factory validates the key and returns the appropriate instance.
-
----
-
-## Security
-
-### Phase 37 audit findings
-
-A full security audit was performed across all backend routes, schemas, auth dependencies, and frontend token handling. The following issues were found and fixed:
-
-| # | Finding | Severity | Status |
-|---|---|---|---|
-| 1 | `POST /tasks` — `linked_goal_id` stored without ownership check | Medium | **Fixed** |
-| 2 | `POST /reminders` — `task_id` and `goal_id` stored without ownership check | Medium | **Fixed** |
-| 3 | AI `execute_action(create_task)` — `linked_goal_id` stored without ownership check | Medium | **Fixed** |
-| 4 | No startup warning when `JWT_SECRET_KEY` is a known weak placeholder | Low | **Fixed** |
-| 5 | `backend/.env` appears in early git history (value was a placeholder `your-secret-here`, not a real secret) | Low | **Documented** |
-
-All other surfaces checked out clean: every route uses `get_current_user`, every DB query filters by `current_user.id`, no password ever appears in a response schema, JWT uses an explicit algorithm allowlist, login gives identical 401 for "not found" vs "wrong password", and logout clears all in-memory state.
-
-**Fix 1–3**: Each of the three creation endpoints now fetches the referenced record with `WHERE id = ? AND user_id = current_user.id` before accepting it. A 404 is returned if the record doesn't exist or belongs to a different user.
-
-**Fix 4**: `main.py` logs a `WARNING` at startup if `JWT_SECRET_KEY` matches any known placeholder. This catches misconfigured deployments without breaking local development.
-
-**Fix 5 (historical .env)**: The committed values were always placeholders (`your-secret-here`), so no real secret was ever exposed. Before a public repository release, purge the history with `git filter-repo --path backend/.env --invert-paths`. See [docs/deployment.md](docs/deployment.md) for instructions.
-
----
-
-### What is correctly hardened
-
-**Secrets**
-- `backend/.env` excluded from version control (`backend/.gitignore`)
-- `backend/.env.example` is the committed template — no real values
-- Startup logs a warning if `JWT_SECRET_KEY` is a weak placeholder
-
-**Authentication**
-- Passwords hashed with bcrypt (random salt, default work factor 12)
-- JWT algorithm explicitly allowlisted (`algorithms=[settings.jwt_algorithm]`) — prevents algorithm-confusion attacks
-- JWT `"type": "access"` claim checked — prevents token type confusion
-- `HTTPBearer(auto_error=False)` returns `401` instead of FastAPI's default `403`
-- Login returns identical `401` for "not found" and "wrong password" — timing-safe via bcrypt constant-time compare
-
-**Authorization**
-- Every endpoint uses `Depends(get_current_user)`
-- Every query filters by `current_user.id` — cross-user data access is not possible at the ORM layer
-- Optional foreign key fields (`linked_goal_id`, `task_id`, `goal_id`) are now validated to belong to `current_user` before being stored
-
-**Input validation**
-- All `status` and `priority` fields use `Pydantic Literal` types — invalid values rejected at the boundary with a 422
-- String fields have `min_length` and `max_length` constraints throughout
-- Email normalised (strip + lowercase) before storage and lookup
-
-**CORS**
-- `allow_credentials=False` — auth is via Bearer token in the `Authorization` header, not cookies
-- `CORS_ORIGINS` is configurable via environment variable (default `*` is safe for a native mobile API)
-- `allow_methods` and `allow_headers` are explicitly scoped
-
-**Session management**
-- `revalidate()` calls `/auth/me` on every app start — expired tokens cleared before any protected screen renders
-- Logout calls `reset()` on all 9 data stores before clearing credentials — no stale user data in memory
-
----
-
-### Known limitations (honest)
-
-| Limitation | Notes |
+| Variable | Purpose |
 |---|---|
-| No refresh tokens | Access tokens expire after 60 minutes; users must re-login |
-| HTTP in local dev | HTTPS is only in effect when deployed behind a TLS-terminating proxy |
-| AsyncStorage is unencrypted | JWT stored in AsyncStorage; not in iOS Keychain or Android Keystore |
-| No email verification | Any email format is accepted at signup |
+| `APP_NAME` | Application name exposed by the API |
+| `API_VERSION` | Version segment for API routes |
+| `VERSION` | Backend service version |
+| `DEBUG` | Re-raise unhandled exceptions in local development |
+| `ENVIRONMENT` | Runtime environment label |
+| `LOG_LEVEL` | Optional logging level override |
+| `HOST` | Uvicorn host |
+| `PORT` | Uvicorn port |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `JWT_SECRET_KEY` | JWT signing secret; must be strong outside local development |
+| `JWT_ALGORITHM` | JWT signing algorithm |
+| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | Access token lifetime |
+| `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | Refresh token lifetime |
+| `CORS_ORIGINS` | Comma-separated allowed origins |
+| `AI_PROVIDER` | Primary AI provider |
+| `AI_PROVIDER_FALLBACK_ORDER` | Provider fallback order |
+| `AI_PROVIDER_TIMEOUT_SECONDS` | AI provider timeout |
+| `AI_PROVIDER_MAX_RETRIES` | AI provider retry count |
+| `OPENAI_API_KEY` | Required for OpenAI-backed generation |
+| `OPENAI_MODEL` | OpenAI generation model |
+| `OPENAI_EMBEDDING_MODEL` | Embedding model for semantic memory |
+| `ANTHROPIC_API_KEY` | Optional secondary provider key |
+| `ANTHROPIC_MODEL` | Secondary provider model identifier |
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
+| `GOOGLE_REDIRECT_URI` | Backend OAuth callback URI |
+| `GOOGLE_OAUTH_APP_REDIRECT_URI` | Mobile deep-link redirect URI |
+| `GOOGLE_SCOPES` | Google OAuth scopes |
+| `TOKEN_ENCRYPTION_KEY` | Fernet key for encrypting OAuth tokens |
+
+### Mobile
+
+Copy `mobile/.env.example` to `mobile/.env` when a local override is needed.
+
+| Variable | Purpose |
+|---|---|
+| `EXPO_PUBLIC_API_URL` | Production API base URL embedded into Expo builds |
+
+---
+
+## Development
+
+### Backend Commands
+
+```bash
+cd backend
+make up          # Build and start API + Postgres
+make migrate     # Run Alembic migrations in the API container
+make test        # Run full backend pytest suite in Docker
+make test-local  # Run local pytest using backend/.venv
+make logs        # Tail backend API logs
+```
+
+Local backend without Docker:
+
+```bash
+cd backend
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt -r requirements-test.txt
+alembic upgrade head
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Use Python 3.12.13. Python 3.14 is not currently supported by the backend dependency stack.
+
+### Mobile Commands
+
+```bash
+cd mobile
+npm install
+npx expo start
+npm run ios
+npx tsc --noEmit
+npm run lint
+npm test
+```
+
+### Migrations
+
+```bash
+cd backend
+alembic upgrade head
+```
+
+The production Docker image also runs `alembic upgrade head` before starting Uvicorn.
 
 ---
 
 ## Testing
 
-### Backend
-Run backend tests from the `backend` folder with `pytest`. The backend test harness uses a temporary SQLite database so local development does not require a PostgreSQL instance.
+### Backend Testing
+
+Recommended reproducible run:
 
 ```bash
 cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt -r requirements-test.txt
-pytest
+make test
 ```
 
-### Mobile
-Run mobile unit tests from the `mobile` folder with Jest.
+Local venv run:
+
+```bash
+cd backend
+PYTHONPATH=. ./.venv/bin/pytest
+```
+
+Targeted example:
+
+```bash
+cd backend
+PYTHONPATH=. ./.venv/bin/pytest tests/test_profile_display_name.py tests/test_profile_user_id.py
+```
+
+### Mobile Testing
 
 ```bash
 cd mobile
-npm install
+npx tsc --noEmit
+npm run lint
 npm test
 ```
 
-## Deployment
+### Manual QA
 
-The full deployment guide is in [docs/deployment.md](docs/deployment.md). This section summarises the key points.
+Manual QA should cover:
 
-### Production readiness
-- `DATABASE_URL` supports local Docker Compose and hosted PostgreSQL services.
-- `JWT_SECRET_KEY` must be set in the environment, never committed.
-- `ENVIRONMENT=production` should be set in production deploys.
-- `CORS_ORIGINS` is configurable through environment variables.
-- `OPENAI_API_KEY` is also environment-based and only required when `AI_PROVIDER=openai`.
-- The backend Dockerfile is production-ready; local development uses `docker-compose.yml` with `--reload`.
+- Signup, login, refresh, logout, and session expiration
+- Home brief and recommendation loading
+- Assistant chat, context preview, and AI unavailable states
+- Goal creation, details, progress, and linked tasks
+- Task creation, completion, scheduling, and suggestions
+- Calendar month/day views and event creation
+- Connected Services status, sync, disconnect, and reconnect states
+- Profile settings, username, display name, email change, password change, and theme switching
+- Light/dark/system theme behavior
+- Network timeout and backend unavailable handling
 
-### Deployment checklist
-- [ ] `DEBUG=false` in production
-- [ ] `CORS_ORIGINS` restricted for browser clients
-- [ ] `JWT_SECRET_KEY` strong and secret
-- [ ] `DATABASE_URL` pointing to managed Postgres
-- [ ] `OPENAI_API_KEY` only if `AI_PROVIDER=openai`
+### Private Beta Testing
 
-### Backend — hosting targets
-
-The backend is a stateless FastAPI container. Any platform that runs Docker works:
-
-| Platform | Notes |
-|---|---|
-| **Render** | Deploy from GitHub, automatic TLS, free PostgreSQL trial |
-| **Railway** | Mono-repo friendly, auto-detects Dockerfile, built-in PostgreSQL plugin |
-| **Fly.io** | CLI-first, `fly launch` from `backend/`, Postgres clusters available |
-
-The `Dockerfile` is production-ready: it copies Alembic migrations into the image and runs `alembic upgrade head` before starting Uvicorn (no `--reload`). The `docker-compose.yml` overrides this for local development only.
-
-### Database
-
-Use a managed PostgreSQL service — never run the database in the same container as the API in production. Recommended options: **Supabase**, **Neon**, **Railway PostgreSQL**, or **Render PostgreSQL**.
-
-### Mobile — Expo / EAS Build
-
-Production iOS/Android builds go through [EAS Build](https://docs.expo.dev/build/introduction/). The production API URL is injected at build time via `EXPO_PUBLIC_API_URL`:
-
-```json
-// eas.json
-{
-  "build": {
-    "production": {
-      "env": { "EXPO_PUBLIC_API_URL": "https://your-api.your-domain.com" }
-    }
-  }
-}
-```
-
-In development (`__DEV__ === true`) the app always connects to `localhost:8000`.
-
-### Pre-deployment checklist
-
-- [ ] Strong `JWT_SECRET_KEY` set in the hosting platform's secret manager
-- [ ] `DATABASE_URL` points to managed PostgreSQL (not localhost)
-- [ ] `DEBUG=false`
-- [ ] Backend reachable over HTTPS before building the EAS binary
-- [ ] `EXPO_PUBLIC_API_URL` set in the EAS build profile
-- [ ] `/api/v1/health` returns 200 on the production URL
+See [docs/private-beta-readiness-checklist.md](docs/private-beta-readiness-checklist.md) and [docs/release-checklist.md](docs/release-checklist.md).
 
 ---
 
 ## Screenshots
 
-> Screenshots will be added once the app reaches visual stability. The sections below will contain simulator captures of each main screen.
+Production screenshot assets are not yet committed as a formal gallery. Use [docs/screenshot-guide.md](docs/screenshot-guide.md) for capture workflow.
 
-| Home Dashboard | Goals | Tasks |
-|---|---|---|
-| _coming soon_ | _coming soon_ | _coming soon_ |
+Planned README screenshot set:
 
-| Analytics | Agents | AI Planner |
-|---|---|---|
-| _coming soon_ | _coming soon_ | _coming soon_ |
-
----
-
-## Testing & Quality
-
-**Backend Tests**
-```bash
-cd backend
-docker compose run --rm api sh -c "python -m pip install pytest --quiet && python -m pytest"
-```
-- 8/8 passing: auth, goals, tasks, analytics, health checks, version endpoint
-- Pydantic v2 validation coverage
-- JWT token creation and validation
-- User-scoped query patterns
-
-**Mobile Tests**
-```bash
-cd mobile
-npm test -- --runInBand
-```
-- 2 test suites, 4/4 passing
-- API client with timeout/error handling
-- Error boundary component
-- Zustand store patterns
-
-**Code Quality**
-- TypeScript strict mode (no `any`, full type coverage)
-- Pydantic schemas validate every request/response
-- SQLAlchemy 2.0 with typed `Mapped[]` columns
-- No secrets in committed code (`.gitignore` verified)
-- All dependencies pinned to specific versions
-
-**Security Audit**
-- Phase 37 audit completed: ownership validation, JWT hardening, password security
-- No known vulnerabilities in dependencies
-- User data scoped by ownership at database and route level
-- See [docs/LIMITATIONS_AND_ROADMAP.md](docs/LIMITATIONS_AND_ROADMAP.md) for full audit trail
-
----
-
-## Portfolio Materials
-
-**For Recruiters & Portfolio Sites:**
-- **[Case Study](PORTFOLIO.md)** — Full technical writeup, design patterns, what this demonstrates
-- **[Marketing Copy](docs/PORTFOLIO_MATERIALS.md)** — Resume bullets, LinkedIn post, recruiter pitch, technical description
-
-**For Interviews:**
-- **[Technical Talking Points](docs/technical-talking-points.md)** — System design Q&A, trade-offs, architecture deep-dive
-- **[Recruiter Walkthrough](docs/recruiter-walkthrough.md)** — Non-technical presentation guide
-
-**For Demo & Presentation:**
-- **[Demo Video Script](docs/demo-video-script.md)** — 2-minute and 5-minute scripts with exact narration
-- **[Screenshot Guide](docs/screenshot-guide.md)** — Data seeding and screenshot capture checklist
-
-**For Deployment:**
-- **[Deployment Guide](docs/deployment.md)** — Production hosting (Render, Railway, Fly.io)
-- **[iOS Release Guide](docs/ios-release.md)** — TestFlight submission checklist
+| Screen | Placeholder |
+|---|---|
+| Home | Daily brief, status, and next best action |
+| Assistant | Context-aware assistant conversation |
+| Goals | Goal progress and linked tasks |
+| Tasks | Task center with HELIOS suggestions |
+| Calendar | Monthly timeline and day detail |
+| Connected Services | Google Calendar and Gmail status |
+| Profile | Account, security, and personalization settings |
 
 ---
 
 ## Roadmap
 
-**Completed (Phases 1–49 + V2.1–V2.21)**
+### Current Focus
 
-- [x] **Phases 1–12** — Project scaffold, design system, navigation shell, backend API foundation, JWT authentication, PostgreSQL database layer
-- [x] **Phase 13** — AI agents tab and protected agent profiles endpoint
-- [x] **Phase 14** — Goals system — full CRUD with PostgreSQL persistence
-- [x] **Phase 15** — Tasks system — CRUD with priority levels, due dates, and goal linking
-- [x] **Phase 16** — Analytics — live aggregation from PostgreSQL at request time
-- [x] **Phase 17** — AI planning — daily briefing and execution plan generator with mock provider
-- [x] **Phase 18** — Auth persistence — AsyncStorage, hydration guard, token revalidation on cold start
-- [x] **Phase 19** — OpenAI provider — abstract base class, factory pattern, complete OpenAI implementation with error handling
-- [x] **Phase 20** — Security hardening — CORS, enum validation, logout state wipe
-- [x] **Phases 21–25** — AI chat/assistant, action recommendations, one-tap action execution
-- [x] **Phase 26** — Persistent AI conversation history — full message storage in PostgreSQL
-- [x] **Phases 27–32** — AI context builder, prompt engineering improvements, conversation management
-- [x] **Phase 33** — Reminders and local notifications — Expo Notifications, per-reminder scheduling
-- [x] **Phase 34** — User preferences system — theme, planning horizon, notification toggles, PostgreSQL persistence
-- [x] **Phase 35** — Deployment readiness — production Dockerfile, CORS configuration, EAS environment variables
-- [x] **Phase 36** — Mobile polish — haptic feedback, input focus states, keyboard chaining, pull-to-refresh, SF Symbol empty states
-- [x] **Phase 37** — Security audit — FK ownership validation, JWT startup warning, known-limitations documentation
-- [x] **Phase 38** — iOS / TestFlight preparation — bundle identifier, build number, EAS build profiles, splash screen
-- [x] **Phase 39** — Portfolio and demo assets — architecture overview, demo plan, portfolio summary
-- [x] **Phase 40** — V1 completion audit — logout store fixes, OpenAI documentation corrected
-- [x] **Phase 41** — Post-V1 backlog — prioritized next phases, difficulty ratings, honest known gaps
-- [x] **Phase 42** — High-priority post-V1 fixes: live dashboard metrics, auth rate limiting, account deletion, AI Alerts UI removed, `openai` pinned
-- [x] **Phase 43** — Portfolio demo execution package: demo video scripts, recruiter walkthrough, screenshot guide, technical interview talking points
-- [x] **Phase 46** — Backend production deployment foundation: environment examples, deployment guides, Docker production image, database strategy
-- [x] **Phase 47** — Mobile release build foundation: EAS build profiles, TestFlight configuration, bundle ID guidance, iOS release checklist
-- [x] **Phase 48** — V1 release-candidate audit: verified all features working, no blockers, tests passing, no secrets committed, documentation accurate
-- [x] **Phase 49** — Portfolio packaging: polished README, case study, marketing materials, resume bullets, LinkedIn post, limitations & roadmap
-- [x] **V2.1** — AI Memory Foundation: `ai_memories` table, CRUD endpoints, memory injection into all AI prompts
-- [x] **V2.2–V2.13** — Context engine, agent context packages, multi-agent orchestration, persistent conversation history
-- [x] **V2.14–V2.17** — Google OAuth architecture: `user_integrations` table, Fernet token encryption, mock connect/disconnect/sync, stub OAuth exchange pipeline
-- [x] **V2.18** — Google Calendar adapter stub: `GoogleCalendarAdapter` with full CRUD methods; `_STUB=True`
-- [x] **V2.19** — Gmail adapter stub: `GmailAdapter` with read-only methods; `_STUB=True`; no email sending
-- [x] **V2.20** — Real integration readiness audit: 10/10 PASS; security, token hygiene, adapter isolation all verified
-- [x] **V2.21** — Google OAuth implementation checklist: 11-section guide covering all pre-activation requirements
+- Private beta QA and bug fixing
+- App-wide mobile polish and accessibility improvements
+- Backend contract stabilization for mobile intelligence wiring
+- Reliable local and Docker-based development workflows
+- Production readiness for deployment, monitoring, and release operations
 
-**Planned (V3)**
+### Next
 
-Real Google OAuth activation (see [docs/google-oauth-implementation-checklist.md](docs/google-oauth-implementation-checklist.md) for the step-by-step guide), real Calendar/Gmail sync, calendar event display in dashboard and AI briefing, email previews in assistant context, Outlook OAuth, vector memory search, token refresh background job.
+- Broader automated mobile coverage
+- More robust integration sync observability
+- Improved AI evaluation and deterministic regression checks
+- Expanded onboarding and first-run personalization
+- Stronger background job scheduling and alerting
+- Production screenshot gallery and beta documentation
+
+### Future Vision
+
+- Microsoft calendar/mail integration
+- Apple Calendar and Reminders integration
+- GitHub and Notion context connectors
+- More advanced proactive planning and safe automation
+- Cross-platform release strategy beyond iOS
+- Team, household, or shared-goal collaboration models
+
+---
+
+## Portfolio Value
+
+HELIOS demonstrates:
+
+- Full-stack product engineering across mobile, backend, database, and infrastructure
+- Production-style API design with protected routes, typed schemas, migrations, and tests
+- Mobile architecture using Expo Router, Zustand stores, typed services, and a custom design system
+- AI system design with provider abstraction, context retrieval, semantic memory, and task intelligence
+- OAuth architecture with secure token storage and integration sync flows
+- Security practices including JWT, bcrypt, encrypted tokens, environment-based secrets, and user isolation
+- System design across goals, tasks, calendars, memory, history, and recommendations
+- Product thinking around daily workflows, private beta readiness, UX polish, and operational reliability
+
+---
+
+## Contributing
+
+Contributions should preserve the architecture already present in the repository:
+
+1. Keep backend behavior user-scoped and covered by tests.
+2. Prefer typed service contracts over ad hoc request handling.
+3. Run backend migrations for schema changes.
+4. Run mobile typecheck and lint before submitting changes.
+5. Keep secrets out of source control.
+6. Document new environment variables, endpoints, and operational requirements.
+
+Useful references:
+
+- [docs/architecture-overview.md](docs/architecture-overview.md)
+- [docs/environment-setup-guide.md](docs/environment-setup-guide.md)
+- [docs/operations-runbook.md](docs/operations-runbook.md)
+- [docs/deployment.md](docs/deployment.md)
 
 ---
 
 ## License
 
-Personal portfolio project. No specific license — feel free to reference the code, but attribution is appreciated if you build on it.
+No repository license file is currently present. Add a license before distributing or accepting external contributions.

@@ -91,7 +91,7 @@ CORS_ORIGINS=*
 
 # AI provider: "mock" requires no external calls; "openai" requires OPENAI_API_KEY
 AI_PROVIDER=mock
-# OPENAI_API_KEY=sk-...
+# OPENAI_API_KEY=<OPENAI_API_KEY>
 # OPENAI_MODEL=gpt-4o-mini
 ```
 

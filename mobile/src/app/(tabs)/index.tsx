@@ -21,13 +21,18 @@ import {
   useAutonomyStore,
   useBackgroundJobsStore,
   useConversationStore,
+  useDailyBriefStore,
   useGoalsStore,
   useIntegrationStore,
   useNotificationsStore,
   useProfileStore,
   useSettingsStore,
+  useTaskEngineStore,
   useTasksStore,
 } from "../../store";
+import type { BackendDailyBrief, BriefErrorCode } from "../../store";
+import { relationshipService, type NextBestAction } from "../../services/relationshipService";
+import type { TaskSuggestion } from "../../services/taskEngineService";
 import { useTheme } from "../../theme/ThemeContext";
 import type { ThemeColors } from "../../theme/theme";
 import {
@@ -191,20 +196,43 @@ export default function HomeScreen() {
   const timeFormat = useSettingsStore((s) => s.time_format);
   const safeGoals = useMemo(() => goals ?? [], [goals]);
   const safeTasks = useMemo(() => tasks ?? [], [tasks]);
+  const taskSuggestions = useTaskEngineStore((s) => s.suggestions);
+  const fetchTaskSuggestions = useTaskEngineStore((s) => s.fetchSuggestions);
+  const generateTaskSuggestions = useTaskEngineStore((s) => s.generateSuggestions);
+  const [nextBestAction, setNextBestAction] = useState<NextBestAction | null>(null);
+
+  const {
+    brief: backendBrief,
+    isLoading: isBriefLoading,
+    isGenerating: isBriefGenerating,
+    error: briefError,
+    fetchToday: fetchTodayBrief,
+    generate: generateBrief,
+  } = useDailyBriefStore();
 
   useEffect(() => {
     if (accessToken) {
       fetchGoals(accessToken);
       fetchTasks(accessToken);
+      fetchTodayBrief(accessToken);
+      fetchTaskSuggestions(accessToken);
+      relationshipService.nextBestAction(accessToken)
+        .then(setNextBestAction)
+        .catch(() => setNextBestAction(null));
     }
-  }, [accessToken, fetchGoals, fetchTasks]);
+  }, [accessToken, fetchGoals, fetchTasks, fetchTaskSuggestions, fetchTodayBrief]);
 
   useFocusEffect(
     useCallback(() => {
       if (!accessToken) return;
       fetchGoals(accessToken);
       fetchTasks(accessToken);
-    }, [accessToken, fetchGoals, fetchTasks]),
+      fetchTaskSuggestions(accessToken);
+      fetchTodayBrief(accessToken);
+      relationshipService.nextBestAction(accessToken)
+        .then(setNextBestAction)
+        .catch(() => setNextBestAction(null));
+    }, [accessToken, fetchGoals, fetchTaskSuggestions, fetchTasks, fetchTodayBrief]),
   );
 
   const openTasks = safeTasks.filter((t) => t.status !== "done").length;
@@ -283,7 +311,10 @@ export default function HomeScreen() {
 
   const dailyBrief    = useMemo(() => generateDailyBrief(intelligenceCtx), [intelligenceCtx]);
   const heroMsg       = useMemo(() => generateHeroMessage(intelligenceCtx), [intelligenceCtx]);
-  const missionItems  = useMemo(() => buildMissionItems(intelligenceCtx), [intelligenceCtx]);
+  const missionItems  = useMemo(
+    () => buildMissionItems(intelligenceCtx, taskSuggestions, nextBestAction),
+    [intelligenceCtx, nextBestAction, taskSuggestions],
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -323,7 +354,21 @@ export default function HomeScreen() {
         />
 
         <Section title="DAILY BRIEF" action="View full briefing  ›" onAction={() => router.push("/(tabs)/assistant")} />
-        <DailyCommand brief={dailyBrief} onPress={() => router.push("/(tabs)/assistant")} />
+        <DailyCommand
+          brief={dailyBrief}
+          backendBrief={backendBrief}
+          isLoadingBrief={isBriefLoading}
+          isGenerating={isBriefGenerating}
+          briefError={briefError}
+          onPress={() => router.push("/(tabs)/assistant")}
+          onRefresh={accessToken ? () => {
+            generateBrief(accessToken);
+            generateTaskSuggestions(accessToken);
+            relationshipService.nextBestAction(accessToken)
+              .then(setNextBestAction)
+              .catch(() => setNextBestAction(null));
+          } : undefined}
+        />
       </ScrollView>
     </View>
   );
@@ -411,6 +456,7 @@ function Hero({
 
   return (
     <View style={s.heroCard}>
+      <View pointerEvents="none" style={s.heroInnerGlow} />
       {/* Left column — greeting, name, date */}
       <View style={s.heroLeft}>
         <Text style={s.heroGreeting}>{greeting}</Text>
@@ -508,11 +554,50 @@ function buildActionLabel(task: HeliosTask, category: string): string {
   return inProgress ? "Continue" : "Open";
 }
 
-function buildMissionItems(ctx: HeliosIntelligenceContext): MissionItem[] {
+function suggestionToMissionItem(suggestion: TaskSuggestion): MissionItem {
+  return {
+    id: `suggestion-${suggestion.id}`,
+    category: "RECOMMENDED",
+    icon: "sparkles",
+    accent: "#22d3ee",
+    title: suggestion.title,
+    reason: suggestion.reason ?? suggestion.description ?? "HELIOS found this from your connected context.",
+    actionLabel: "Review",
+    route: "/(tabs)/tasks",
+  };
+}
+
+function nextBestActionToMissionItem(action: NextBestAction | null): MissionItem | null {
+  if (!action || action.type === "none") return null;
+  return {
+    id: `next-best-${action.linked_task_id ?? action.linked_goal_id ?? action.title}`,
+    category: "NEXT BEST ACTION",
+    icon: action.type === "goal" ? "target" : action.type === "calendar" ? "calendar" : "bolt.fill",
+    accent: "#a855f7",
+    title: action.title,
+    reason: action.reason,
+    actionLabel: action.type === "goal" ? "Open Goals" : "Open Tasks",
+    route: action.type === "goal" ? "/(tabs)/goals" : "/(tabs)/tasks",
+  };
+}
+
+function buildMissionItems(
+  ctx: HeliosIntelligenceContext,
+  suggestions: TaskSuggestion[] = [],
+  nextBestAction: NextBestAction | null = null,
+): MissionItem[] {
+  const backendItems = [
+    nextBestActionToMissionItem(nextBestAction),
+    ...suggestions
+      .filter((suggestion) => suggestion.status === "pending")
+      .slice(0, 4)
+      .map(suggestionToMissionItem),
+  ].filter(Boolean) as MissionItem[];
+
   const resolved = resolveContext(ctx);
   const ranked   = prioritizeTasks(resolved.tasks, resolved.goals, resolved.calendarEvents);
   const open     = ranked.filter((t) => t.status !== "done");
-  return open.slice(0, 5).map((task) => {
+  const localItems = open.slice(0, 5).map((task) => {
     const cat  = categorizeTask(task);
     const meta = CATEGORY_META[cat] ?? CATEGORY_META.general;
     return {
@@ -526,6 +611,15 @@ function buildMissionItems(ctx: HeliosIntelligenceContext): MissionItem[] {
       route:       "/(tabs)/tasks",
     };
   });
+  const seen = new Set<string>();
+  return [...backendItems, ...localItems]
+    .filter((item) => {
+      const key = item.title.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 5);
 }
 
 function getCaughtUpItem(hour: number): MissionItem {
@@ -562,7 +656,10 @@ function FlowCard({
   const s = useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={s.flowCard}>
-      <View style={[s.flowAccentLine, { backgroundColor: item.accent }]} />
+      <View style={s.flowAccentLine}>
+        <View style={[s.flowAccentStart, { backgroundColor: colors.accent }]} />
+        <View style={[s.flowAccentEnd, { backgroundColor: item.accent || colors.accentCyan }]} />
+      </View>
 
       <View style={s.flowCardTop}>
         <View style={s.flowCategoryRow}>
@@ -727,15 +824,48 @@ function TodayFlowStack({
   );
 }
 
-function DailyCommand({ brief, onPress }: { brief: DailyBrief; onPress?: () => void }) {
+type DailyCommandProps = {
+  brief: DailyBrief;
+  backendBrief: BackendDailyBrief | null;
+  isLoadingBrief: boolean;
+  isGenerating: boolean;
+  briefError: BriefErrorCode;
+  onPress?: () => void;
+  onRefresh?: () => void;
+};
+
+function DailyCommand({
+  brief,
+  backendBrief,
+  isLoadingBrief,
+  isGenerating,
+  briefError,
+  onPress,
+  onRefresh,
+}: DailyCommandProps) {
   const { colors } = useTheme();
   const s = useMemo(() => createStyles(colors), [colors]);
+  const router = useRouter();
 
-  const time = new Date(brief.timestamp).toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
+  // Content resolution — backend brief takes priority when available.
+  const bodyText = isGenerating
+    ? "Generating your Daily Brief…"
+    : backendBrief
+      ? (backendBrief.compact_text || backendBrief.summary)
+      : briefError === "no_brief"
+        ? "No briefing generated yet."
+        : briefError === "unavailable"
+          ? "Daily Brief is temporarily unavailable."
+          : briefError === "network"
+            ? "Unable to reach HELIOS right now."
+            : brief.focus;
+
+  // First backend warning, if any (shown only when brief is loaded successfully)
+  const firstWarning =
+    backendBrief && backendBrief.warnings.length > 0 ? backendBrief.warnings[0] : null;
+
+  const showStats = !isGenerating && brief.stats.length > 0;
+  const isBusy = isLoadingBrief || isGenerating;
 
   return (
     <TouchableOpacity
@@ -746,7 +876,10 @@ function DailyCommand({ brief, onPress }: { brief: DailyBrief; onPress?: () => v
       accessibilityRole="button"
       disabled={!onPress}
     >
-      <View style={s.commandLine} />
+      <View style={s.commandLine}>
+        <View style={[s.commandLineStart, { backgroundColor: colors.accent }]} />
+        <View style={[s.commandLineEnd, { backgroundColor: colors.accentCyan }]} />
+      </View>
 
       <View style={s.commandTop}>
         <View style={s.commandTitleWrap}>
@@ -758,35 +891,99 @@ function DailyCommand({ brief, onPress }: { brief: DailyBrief; onPress?: () => v
           />
           <Text style={s.commandTitle}>DAILY BRIEF</Text>
         </View>
-        <Text style={s.commandTime}>{time}</Text>
+
+        {/* Refresh / loading indicator */}
+        {isBusy ? (
+          <React.Fragment>
+            <View style={{ width: 30, height: 30, alignItems: "center", justifyContent: "center" }}>
+              <SymbolView
+                name="arrow.clockwise"
+                size={14}
+                tintColor={`${colors.accentCyan}80`}
+                resizeMode="scaleAspectFit"
+              />
+            </View>
+          </React.Fragment>
+        ) : onRefresh ? (
+          <TouchableOpacity
+            style={s.commandRefreshBtn}
+            onPress={(e) => { e.stopPropagation?.(); onRefresh(); }}
+            activeOpacity={0.7}
+            accessibilityLabel="Refresh Daily Brief"
+            accessibilityRole="button"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <SymbolView
+              name="arrow.clockwise"
+              size={14}
+              tintColor={colors.accentCyan}
+              resizeMode="scaleAspectFit"
+            />
+          </TouchableOpacity>
+        ) : null}
       </View>
 
-      {/* Focus — the main briefing sentence */}
-      <Text style={s.commandBody}>{brief.focus}</Text>
+      {/* Main body */}
+      <Text style={[s.commandBody, !backendBrief && !!briefError && s.commandBodyMuted]}>
+        {bodyText}
+      </Text>
 
-      {/* Stats row */}
-      <View style={s.commandStatsRow}>
-        {brief.stats.map((stat) => (
-          <View key={stat.label} style={s.commandStatItem}>
-            <View style={s.commandStatDot} />
-            <Text style={s.commandStatText}>
-              {stat.value} {stat.label}
-            </Text>
-          </View>
-        ))}
-      </View>
+      {/* Stats row — local data, always accurate */}
+      {showStats && (
+        <View style={s.commandStatsRow}>
+          {brief.stats.map((stat) => (
+            <View key={stat.label} style={s.commandStatItem}>
+              <View style={s.commandStatDot} />
+              <Text style={s.commandStatText}>
+                {stat.value} {stat.label}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
 
-      {/* Recommendation */}
-      <Text style={s.commandRec}>{brief.recommendation}</Text>
+      {/* Warning — full text, tappable to view overdue tasks */}
+      {firstWarning ? (
+        <TouchableOpacity
+          onPress={(e) => {
+            e.stopPropagation?.();
+            router.push({ pathname: "/(tabs)/tasks", params: { filter: "overdue" } } as Parameters<typeof router.push>[0]);
+          }}
+          activeOpacity={0.75}
+          hitSlop={{ top: 4, bottom: 4, left: 4, right: 8 }}
+          accessibilityLabel="View overdue tasks"
+          accessibilityRole="button"
+        >
+          <Text style={s.commandWarning}>{firstWarning}</Text>
+        </TouchableOpacity>
+      ) : null}
+
+      {/* Generate prompt (shown only when no brief exists yet) */}
+      {briefError === "no_brief" && onRefresh ? (
+        <TouchableOpacity
+          onPress={(e) => { e.stopPropagation?.(); onRefresh(); }}
+          activeOpacity={0.75}
+          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+        >
+          <Text style={s.commandGeneratePrompt}>Generate today&apos;s brief  →</Text>
+        </TouchableOpacity>
+      ) : null}
     </TouchableOpacity>
   );
 }
 
 function Background() {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <View style={[StyleSheet.absoluteFillObject, { backgroundColor: colors.background }]} />
+      {!isDark ? (
+        <>
+          <View style={sBackground.topGlow} />
+          <View style={sBackground.midLavender} />
+          <View style={sBackground.bottomBlue} />
+        </>
+      ) : null}
     </View>
   );
 }
@@ -797,11 +994,39 @@ const styles = StyleSheet.create({
   },
 });
 
+const sBackground = StyleSheet.create({
+  topGlow: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: "35%",
+    backgroundColor: "rgba(255,255,255,0.58)",
+  },
+  midLavender: {
+    position: "absolute",
+    top: "24%",
+    left: 0,
+    right: 0,
+    height: "42%",
+    backgroundColor: "rgba(239,232,255,0.34)",
+  },
+  bottomBlue: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: "42%",
+    backgroundColor: "rgba(223,233,249,0.38)",
+  },
+});
+
 function createStyles(colors: ThemeColors) {
+  const isLight = colors.background !== "#020617";
   return StyleSheet.create({
     header: {
       minHeight: 54,
-      marginBottom: 16,
+      marginBottom: isLight ? 18 : 16,
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
@@ -822,15 +1047,15 @@ function createStyles(colors: ThemeColors) {
       width: 44,
       height: 44,
       borderRadius: 22,
-      backgroundColor: `${colors.surface}b8`,
+      backgroundColor: isLight ? colors.floatingButton : `${colors.surface}b8`,
       borderWidth: 1,
-      borderColor: `${colors.textMuted}26`,
+      borderColor: isLight ? colors.primaryBorder : `${colors.textMuted}26`,
       alignItems: "center",
       justifyContent: "center",
-      shadowColor: "#000",
-      shadowOpacity: 0.22,
-      shadowRadius: 10,
-      shadowOffset: { width: 0, height: 8 },
+      shadowColor: isLight ? colors.shadow : "#000",
+      shadowOpacity: isLight ? 0.13 : 0.22,
+      shadowRadius: isLight ? 20 : 10,
+      shadowOffset: { width: 0, height: isLight ? 10 : 8 },
     },
     badge: {
       position: "absolute",
@@ -855,15 +1080,30 @@ function createStyles(colors: ThemeColors) {
     heroCard: {
       width: PAGE,
       borderRadius: 28,
-      marginBottom: 20,
+      marginBottom: isLight ? 23 : 20,
       paddingLeft: 20,
       paddingRight: 20,
       paddingTop: 18,
       paddingBottom: 18,
-      backgroundColor: colors.card,
+      backgroundColor: isLight ? colors.heroGlass : colors.card,
       borderWidth: 1,
-      borderColor: colors.tabBarBorder,
+      borderColor: isLight ? colors.primaryBorder : colors.tabBarBorder,
       overflow: "hidden",
+      shadowColor: isLight ? colors.shadow : "#000",
+      shadowOpacity: isLight ? 0.2 : 0,
+      shadowRadius: isLight ? 34 : 0,
+      shadowOffset: { width: 0, height: isLight ? 20 : 0 },
+      elevation: isLight ? 10 : 0,
+    },
+    heroInnerGlow: {
+      position: "absolute",
+      top: 1,
+      left: 18,
+      right: 18,
+      height: isLight ? 1 : 0,
+      backgroundColor: colors.highlight,
+      borderRadius: 1,
+      opacity: isLight ? 0.8 : 0,
     },
     heroLeft: {
       width: "58%",
@@ -924,7 +1164,7 @@ function createStyles(colors: ThemeColors) {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      marginBottom: 15,
+      marginBottom: isLight ? 17 : 15,
     },
     sectionTitle: {
       color: colors.textPrimary,
@@ -941,7 +1181,7 @@ function createStyles(colors: ThemeColors) {
     // ── Today's Flow ─────────────────────────────────────────────────────────
     flowWrap: {
       gap: 10,
-      marginBottom: 30,
+      marginBottom: isLight ? 34 : 30,
     },
     flowDots: {
       flexDirection: "row",
@@ -960,6 +1200,10 @@ function createStyles(colors: ThemeColors) {
       height: 6,
       borderRadius: 3,
       backgroundColor: colors.accent,
+      shadowColor: colors.accentCyan,
+      shadowOpacity: isLight ? 0.22 : 0,
+      shadowRadius: isLight ? 8 : 0,
+      shadowOffset: { width: 0, height: 0 },
     },
     flowContainer: {
       height: FLOW_CARD_HEIGHT,
@@ -968,19 +1212,19 @@ function createStyles(colors: ThemeColors) {
     },
     flowCard: {
       flex: 1,
-      backgroundColor: colors.card,
+      backgroundColor: isLight ? colors.elevatedCard : colors.card,
       borderRadius: 22,
       borderWidth: 1,
-      borderColor: colors.tabBarBorder,
+      borderColor: isLight ? colors.primaryBorder : colors.tabBarBorder,
       paddingHorizontal: 20,
       paddingTop: 22,
       paddingBottom: 18,
       overflow: "hidden",
       justifyContent: "space-between",
-      shadowColor: "#000",
-      shadowOpacity: 0.14,
-      shadowRadius: 16,
-      shadowOffset: { width: 0, height: 8 },
+      shadowColor: isLight ? colors.shadow : "#000",
+      shadowOpacity: isLight ? 0.13 : 0.14,
+      shadowRadius: isLight ? 26 : 16,
+      shadowOffset: { width: 0, height: isLight ? 15 : 8 },
     },
     flowAccentLine: {
       position: "absolute",
@@ -988,6 +1232,19 @@ function createStyles(colors: ThemeColors) {
       left: 0,
       right: 0,
       height: 2.5,
+      flexDirection: "row",
+      shadowColor: colors.accentCyan,
+      shadowRadius: 10,
+      shadowOpacity: isLight ? 0.28 : 0,
+      shadowOffset: { width: 0, height: 0 },
+    },
+    flowAccentStart: {
+      flex: 1,
+      opacity: isLight ? 0.82 : 1,
+    },
+    flowAccentEnd: {
+      flex: 1,
+      opacity: isLight ? 0.82 : 1,
     },
     flowCardTop: {
       gap: 5,
@@ -1034,17 +1291,17 @@ function createStyles(colors: ThemeColors) {
     command: {
       minHeight: 166,
       borderRadius: 24,
-      backgroundColor: colors.card,
+      backgroundColor: isLight ? colors.glass : colors.card,
       borderWidth: 1,
-      borderColor: colors.tabBarBorder,
+      borderColor: isLight ? colors.primaryBorder : colors.tabBarBorder,
       paddingHorizontal: 20,
       paddingTop: 24,
       paddingBottom: 20,
       overflow: "hidden",
-      shadowColor: colors.accentCyan,
-      shadowOpacity: 0.09,
-      shadowRadius: 16,
-      shadowOffset: { width: 0, height: 10 },
+      shadowColor: isLight ? colors.shadow : colors.accentCyan,
+      shadowOpacity: isLight ? 0.11 : 0.09,
+      shadowRadius: isLight ? 24 : 16,
+      shadowOffset: { width: 0, height: isLight ? 12 : 10 },
     },
     commandLine: {
       position: "absolute",
@@ -1052,10 +1309,18 @@ function createStyles(colors: ThemeColors) {
       left: 0,
       right: 0,
       height: 2.5,
-      backgroundColor: colors.accentCyan,
+      flexDirection: "row",
       shadowColor: colors.accentCyan,
       shadowRadius: 12,
-      shadowOpacity: 1,
+      shadowOpacity: isLight ? 0.55 : 1,
+    },
+    commandLineStart: {
+      flex: 1,
+      opacity: isLight ? 0.82 : 1,
+    },
+    commandLineEnd: {
+      flex: 1,
+      opacity: isLight ? 0.82 : 1,
     },
     commandTop: {
       flexDirection: "row",
@@ -1073,12 +1338,6 @@ function createStyles(colors: ThemeColors) {
       fontSize: 12.5,
       fontWeight: "900",
       letterSpacing: 2.8,
-    },
-    commandTime: {
-      color: colors.textMuted,
-      fontSize: 12.5,
-      fontWeight: "800",
-      letterSpacing: 1.8,
     },
     commandBody: {
       color: colors.textPrimary,
@@ -1117,6 +1376,30 @@ function createStyles(colors: ThemeColors) {
       lineHeight: 19,
       fontWeight: "500",
       fontStyle: "italic",
+    },
+    commandRefreshBtn: {
+      width: 30,
+      height: 30,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    commandBodyMuted: {
+      color: colors.textMuted,
+      fontWeight: "500",
+    },
+    commandWarning: {
+      color: colors.warning,
+      fontSize: 11,
+      fontWeight: "600",
+      lineHeight: 16,
+      marginBottom: 4,
+      opacity: 0.85,
+    },
+    commandGeneratePrompt: {
+      color: colors.accentCyan,
+      fontSize: 13,
+      fontWeight: "700",
+      lineHeight: 19,
     },
   });
 }

@@ -6,10 +6,12 @@ import {
   Image,
   Platform,
   StyleSheet,
+  Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import * as Haptics from "expo-haptics";
+import { useTheme } from "../theme/ThemeContext";
 
 export type CoreState =
   | "idle"
@@ -26,53 +28,65 @@ type Props = {
   state?: CoreState;
   showParticles?: boolean;
   interactive?: boolean;
+  glowInset?: number;
   onPress?: () => void;
   onLongPress?: () => void;
 };
 
-const APPROVED_CORE = require("../../assets/design/branding/helios-energy-core-transparent.png");
+const APPROVED_CORE  = require("../../assets/design/branding/helios-energy-core-transparent.png");
 const APPROVED_WAVES = require("../../assets/design/branding/helios-energy-core-waves.png");
 const ARTWORK_ASPECT_RATIO = 434 / 400;
 const GLOW_INSET = 10;
 
-// ms per full 360° rotation
-const SPIN_SPEED: Record<CoreState, number> = {
-  idle:       9000,
-  thinking:   5000,
-  generating: 4000,
-  listening:  7000,
-  speaking:   5500,
-  attention:  6000,
-  critical:   3500,
-  offline:   14000,
+// ── Per-state speed tables ────────────────────────────────────────────────────
+//
+// OUTER and COUNTER use irrational ratios (√2 ≈ 1.414) so the two rings
+// never fully re-align within any observable timeframe.
+
+const OUTER_SPEED: Record<CoreState, number> = {
+  idle:       26000,
+  thinking:   13500,
+  generating: 10200,
+  listening:  17000,
+  speaking:   14800,
+  attention:  15500,
+  critical:    7800,
+  offline:    42000,
 };
 
-// ms per pulse half-cycle
+const COUNTER_SPEED: Record<CoreState, number> = {
+  idle:       18400,
+  thinking:    9500,
+  generating:  7200,
+  listening:  12000,
+  speaking:   10500,
+  attention:  11000,
+  critical:    5500,
+  offline:    30000,
+};
+
 const PULSE_SPEED: Record<CoreState, number> = {
-  idle:       3000,
-  thinking:   1800,
-  generating: 1500,
-  listening:  2500,
-  speaking:   2000,
-  attention:  2200,
-  critical:   1400,
-  offline:    5000,
+  idle:       4350,   // half-cycle; full breath = 8700ms
+  thinking:   2700,
+  generating: 2250,
+  listening:  3750,
+  speaking:   3000,
+  attention:  3300,
+  critical:   2100,
+  offline:    7500,
 };
 
-// Ring glow breath — ms per half-cycle and [min, max] opacity for the blurred ring twin.
-// Glow twins share the ring's own transform so the bloom stays welded to the path.
 const RING_GLOW_SPEED: Record<CoreState, number> = {
-  idle:        4000,  // slow, steady
-  thinking:    2200,  // energetic
-  generating:  1800,  // most active
-  listening:    700,  // fast ripple reacting to sound
-  speaking:    1900,  // breathing rhythm
-  attention:   2600,
-  critical:    1200,  // intense
-  offline:     6000,  // barely alive
+  idle:        4550,  // half-cycle; full breath = 9100ms
+  thinking:    2500,
+  generating:  2000,
+  listening:   1100,
+  speaking:    2200,
+  attention:   3000,
+  critical:    1500,
+  offline:     7000,
 };
 
-// [resting opacity, peak opacity]
 const RING_GLOW_RANGE: Record<CoreState, [number, number]> = {
   idle:       [0.72, 0.95],
   thinking:   [0.85, 1.00],
@@ -84,98 +98,200 @@ const RING_GLOW_RANGE: Record<CoreState, [number, number]> = {
   offline:    [0.50, 0.65],
 };
 
-function HeliosEnergyCore({
-  size = 142,
-  state = "idle",
-  interactive = true,
-  onPress,
-  onLongPress,
-}: Props) {
-  const artworkHeight = size / ARTWORK_ASPECT_RATIO;
-  const wrapperWidth  = size + GLOW_INSET * 2;
-  const wrapperHeight = artworkHeight + GLOW_INSET * 2;
+// ── Helper: read internal value without subscribing ───────────────────────────
 
-  const spinDuration      = useMemo(() => SPIN_SPEED[state],      [state]);
-  const pulseDuration     = useMemo(() => PULSE_SPEED[state],     [state]);
-  const ringGlowDuration  = useMemo(() => RING_GLOW_SPEED[state], [state]);
-  const ringGlowRange     = useMemo(() => RING_GLOW_RANGE[state], [state]);
+function getVal(v: Animated.Value): number {
+  return (v as unknown as { _value?: number })?._value ?? 0;
+}
 
-  // spin  — continuous 0→1 linear (maps to 0°→360°, no visual snap at loop end)
-  // pulse — 0→1→0 ease-in-out (scale breathe)
-  const spin  = useRef(new Animated.Value(0)).current;
-  const pulse = useRef(new Animated.Value(0)).current;
-  const touch = useRef(new Animated.Value(0)).current;
+// ── Smooth spin restart ───────────────────────────────────────────────────────
+//
+// On state change we must NOT setValue(0). Instead:
+//   1. Let the animation finish its current partial arc (proportional duration).
+//   2. Silently reset to 0 (visually identical — 360° = 0°).
+//   3. Loop at the new speed.
+//
+// On first start we skip the partial-arc step.
 
-  const spinRef  = useRef<Animated.CompositeAnimation | null>(null);
-  const pulseRef = useRef<Animated.CompositeAnimation | null>(null);
+function smartSpin(
+  value: Animated.Value,
+  ref: React.MutableRefObject<Animated.CompositeAnimation | null>,
+  duration: number,
+  first: boolean,
+) {
+  ref.current?.stop();
 
-  // Ring glow — drives the blurred "plasma bloom" twins on each wave layer
-  const ringGlow    = useRef(new Animated.Value(0)).current;
-  const ringGlowRef = useRef<Animated.CompositeAnimation | null>(null);
-
-  useEffect(() => {
-    spinRef.current?.stop();
-    pulseRef.current?.stop();
-    spin.setValue(0);
-    pulse.setValue(0);
-
-    spinRef.current = Animated.loop(
-      Animated.timing(spin, {
+  function loop() {
+    ref.current = Animated.loop(
+      Animated.timing(value, {
         toValue: 1,
-        duration: spinDuration,
+        duration,
         easing: Easing.linear,
         useNativeDriver: true,
       }),
     );
+    ref.current.start();
+  }
 
-    pulseRef.current = Animated.loop(
+  if (first) {
+    loop();
+    return;
+  }
+
+  const v         = getVal(value);
+  const remaining = 1 - v;
+
+  if (remaining < 0.015) {
+    // Already at end of cycle — clean handoff
+    value.setValue(0);
+    loop();
+    return;
+  }
+
+  // Proportional arc to reach exactly 360° (= 0°), then continue at new speed
+  Animated.timing(value, {
+    toValue: 1,
+    duration: remaining * duration,
+    easing: Easing.linear,
+    useNativeDriver: true,
+  }).start(({ finished }) => {
+    if (!finished) return;
+    value.setValue(0); // 360° = 0° — no visual discontinuity
+    loop();
+  });
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
+function HeliosEnergyCore({
+  size = 142,
+  state = "idle",
+  interactive = true,
+  glowInset,
+  onPress,
+  onLongPress,
+}: Props) {
+  const { isDark } = useTheme();
+  const effectiveGlowInset = glowInset ?? GLOW_INSET;
+  const artworkHeight      = size / ARTWORK_ASPECT_RATIO;
+  const wrapperWidth       = size + effectiveGlowInset * 2;
+  const wrapperHeight      = artworkHeight + effectiveGlowInset * 2;
+  const centerSize         = Math.min(size, artworkHeight) * 0.48;
+  const centerHSize        = centerSize * 0.62;
+
+  // ── Animated values ─────────────────────────────────────────────────────────
+  //
+  // All values start at exactly 0. Animated.loop resets each child timing to
+  // its _fromValue (the value at the moment start() was first called). If that
+  // is anything other than 0, the loop snaps back to a non-zero angle on every
+  // restart — a visible stutter every cycle. Starting at 0 means the reset is
+  // 360°→0°, which is visually identical. Desynchronisation comes from the
+  // irrational ratio between OUTER_SPEED and COUNTER_SPEED, not phase offsets.
+
+  const spin1     = useRef(new Animated.Value(0)).current;
+  const spin2     = useRef(new Animated.Value(0)).current;
+  const pulse     = useRef(new Animated.Value(0)).current;
+  const ringGlow  = useRef(new Animated.Value(0)).current;
+  const floatAnim = useRef(new Animated.Value(0)).current;
+  const touch     = useRef(new Animated.Value(0)).current;
+
+  const spin1Ref    = useRef<Animated.CompositeAnimation | null>(null);
+  const spin2Ref    = useRef<Animated.CompositeAnimation | null>(null);
+  const pulseRef    = useRef<Animated.CompositeAnimation | null>(null);
+  const ringGlowRef = useRef<Animated.CompositeAnimation | null>(null);
+  const floatRef    = useRef<Animated.CompositeAnimation | null>(null);
+  const isFirstRun  = useRef(true);
+
+  // ── Float: one permanent loop, independent of state ─────────────────────────
+  //
+  // Duration (31s full cycle) is a non-integer multiple of every other duration,
+  // so float never synchronises with orbital rings or the pulse.
+
+  useEffect(() => {
+    floatRef.current = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, {
+        Animated.timing(floatAnim, {
           toValue: 1,
-          duration: pulseDuration,
-          easing: Easing.inOut(Easing.ease),
+          duration: 15500,
+          easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.timing(pulse, {
+        Animated.timing(floatAnim, {
           toValue: 0,
-          duration: pulseDuration,
-          easing: Easing.inOut(Easing.ease),
+          duration: 15500,
+          easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
       ]),
     );
+    floatRef.current.start();
+    return () => floatRef.current?.stop();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    spinRef.current.start();
-    pulseRef.current.start();
-
-    return () => {
-      spinRef.current?.stop();
-      pulseRef.current?.stop();
-    };
-  }, [spinDuration, pulseDuration, spin, pulse]);
+  // ── Orbital + breath: smooth speed change on state transition ───────────────
 
   useEffect(() => {
+    const first       = isFirstRun.current;
+    isFirstRun.current = false;
+
+    const outerDur   = OUTER_SPEED[state];
+    const counterDur = COUNTER_SPEED[state];
+    const pulseDur   = PULSE_SPEED[state];
+    const glowDur    = RING_GLOW_SPEED[state];
+
+    // Orbital rings: proportional-arc handoff (never setValue(0) mid-cycle)
+    smartSpin(spin1, spin1Ref, outerDur, first);
+    smartSpin(spin2, spin2Ref, counterDur, first);
+
+    // Breath animations: stop and restart from current value — no hard reset.
+    // ease-in-out at the extremes means the transition is imperceptible.
+    pulseRef.current?.stop();
+    pulseRef.current = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: pulseDur,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: pulseDur,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    pulseRef.current.start();
+
     ringGlowRef.current?.stop();
-    ringGlow.setValue(0);
     ringGlowRef.current = Animated.loop(
       Animated.sequence([
         Animated.timing(ringGlow, {
           toValue: 1,
-          duration: ringGlowDuration,
-          easing: Easing.inOut(Easing.ease),
+          duration: glowDur,
+          easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
         Animated.timing(ringGlow, {
           toValue: 0,
-          duration: ringGlowDuration,
-          easing: Easing.inOut(Easing.ease),
+          duration: glowDur,
+          easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
       ]),
     );
     ringGlowRef.current.start();
-    return () => ringGlowRef.current?.stop();
-  }, [ringGlow, ringGlowDuration]);
+
+    return () => {
+      spin1Ref.current?.stop();
+      spin2Ref.current?.stop();
+      pulseRef.current?.stop();
+      ringGlowRef.current?.stop();
+    };
+  }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Touch handlers ───────────────────────────────────────────────────────────
 
   const handlePress = useCallback(() => {
     if (Platform.OS === "ios") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -196,37 +312,51 @@ function HeliosEnergyCore({
     else Alert.alert("HELIOS", "Voice mode coming soon.");
   }, [onLongPress]);
 
-  // Spin: forward rotation for primary wave layer
-  const rotate = spin.interpolate({
-    inputRange:  [0, 1],
-    outputRange: ["0deg", "360deg"],
-  });
-  // Counter-spin: reverse, slightly slower — creates orbital interference pattern
-  const counterRotate = spin.interpolate({
-    inputRange:  [0, 1],
-    outputRange: ["0deg", "-240deg"],
-  });
-  // Scale pulse: gentle breathe
-  const pulseScale = pulse.interpolate({
-    inputRange:  [0, 1],
-    outputRange: [1.0, 1.06],
-  });
-  // Opacity pulse: brightens on inhale
-  const pulseOpacity = pulse.interpolate({
-    inputRange:  [0, 1],
-    outputRange: [0.45, 0.70],
-  });
+  // ── Derived interpolations ───────────────────────────────────────────────────
+  //
+  // Both orbital outputs are exact multiples of 360°, so the loop-restart
+  // visual position (value snaps 1→0) maps identically — no jump.
 
-  // Ring glow twin opacity — re-derived when state changes so range updates
-  const ringGlowOpacity = useMemo(
-    () => ringGlow.interpolate({ inputRange: [0, 1], outputRange: ringGlowRange }),
-    [ringGlow, ringGlowRange],
+  const rotate1 = useMemo(() =>
+    spin1.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] }),
+    [spin1],
   );
 
-  const touchScale = touch.interpolate({
-    inputRange:  [0, 1],
-    outputRange: [1, 1.018],
-  });
+  const rotate2 = useMemo(() =>
+    spin2.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "-360deg"] }),
+    [spin2],
+  );
+
+  // Core breathe: 1.5% scale — perceptible only as a living quality, not motion
+  const pulseScale = useMemo(() =>
+    pulse.interpolate({ inputRange: [0, 1], outputRange: [1.0, 1.015] }),
+    [pulse],
+  );
+
+  // Sharp ring opacity — rises on inhale, dims on exhale
+  const pulseOpacity = useMemo(() =>
+    pulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0.72] }),
+    [pulse],
+  );
+
+  // Ring glow bloom opacity — re-derived when state range changes
+  const ringGlowOpacity = useMemo(() =>
+    ringGlow.interpolate({ inputRange: [0, 1], outputRange: RING_GLOW_RANGE[state] }),
+    [ringGlow, state],
+  );
+
+  // Vertical float: 3px up/down arc — never synchronised with orbital period
+  const floatY = useMemo(() =>
+    floatAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -3] }),
+    [floatAnim],
+  );
+
+  const touchScale = useMemo(() =>
+    touch.interpolate({ inputRange: [0, 1], outputRange: [1, 1.018] }),
+    [touch],
+  );
+
+  // ── Render ───────────────────────────────────────────────────────────────────
 
   const Container = interactive && (onPress || onLongPress) ? TouchableOpacity : View;
   const containerProps = interactive && (onPress || onLongPress)
@@ -259,102 +389,125 @@ function HeliosEnergyCore({
         style={[styles.container, { width: size, height: artworkHeight }]}
         {...containerProps}
       >
+        {/* All layers share the same core transform: touch press + pulse breathe + float.
+            Individual wave layers only carry their own rotation — nothing else. */}
         <Animated.View
           collapsable={false}
           style={[
             styles.artworkFrame,
-            { width: size, height: artworkHeight, transform: [{ scale: touchScale }] },
+            {
+              width: size,
+              height: artworkHeight,
+              transform: [
+                { scale: touchScale },
+                { scale: pulseScale },
+                { translateY: floatY },
+              ],
+            },
           ]}
           pointerEvents="none"
         >
           {/* Static base — H stays perfectly still */}
           <Image
             source={APPROVED_CORE}
-            style={[styles.image, { opacity: 0.92 }]}
+            style={[styles.image, { opacity: isDark ? 0.92 : 0.64 }]}
             resizeMode="contain"
             accessibilityIgnoresInvertColors
           />
 
-          {/* Forward outer bloom — wide spread */}
+          {!isDark && (
+            <View style={styles.lightCenterLayer} pointerEvents="none">
+              <View
+                style={[
+                  styles.lightCenterGlow,
+                  {
+                    width: centerSize * 1.36,
+                    height: centerSize * 1.36,
+                    borderRadius: centerSize * 0.68,
+                  },
+                ]}
+              />
+              <View
+                style={[
+                  styles.lightCenterOuter,
+                  {
+                    width: centerSize * 1.08,
+                    height: centerSize * 1.08,
+                    borderRadius: centerSize * 0.54,
+                  },
+                ]}
+              />
+              <View
+                style={[
+                  styles.lightCenterDisc,
+                  {
+                    width: centerSize,
+                    height: centerSize,
+                    borderRadius: centerSize * 0.5,
+                  },
+                ]}
+              >
+                <View style={styles.lightCenterHighlight} />
+                <View style={styles.lightCenterInnerGlow} />
+                <Text
+                  style={[
+                    styles.lightCenterH,
+                    {
+                      fontSize: centerHSize,
+                      lineHeight: centerHSize * 1.02,
+                    },
+                  ]}
+                >
+                  H
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* ── CW orbital ring — outer bloom ── */}
           <Animated.Image
             source={APPROVED_WAVES}
             blurRadius={20}
-            style={[
-              styles.image,
-              {
-                opacity: ringGlowOpacity,
-                transform: [{ rotate }, { scale: pulseScale }],
-              },
-            ]}
+            style={[styles.image, { opacity: ringGlowOpacity, transform: [{ rotate: rotate1 }] }]}
             resizeMode="contain"
             accessibilityIgnoresInvertColors
           />
-          {/* Forward inner glow — tight halo hugging the path */}
+          {/* ── CW orbital ring — inner glow ── */}
           <Animated.Image
             source={APPROVED_WAVES}
             blurRadius={10}
-            style={[
-              styles.image,
-              {
-                opacity: ringGlowOpacity,
-                transform: [{ rotate }, { scale: pulseScale }],
-              },
-            ]}
+            style={[styles.image, { opacity: ringGlowOpacity, transform: [{ rotate: rotate1 }] }]}
             resizeMode="contain"
             accessibilityIgnoresInvertColors
           />
-          {/* Forward sharp ring */}
+          {/* ── CW orbital ring — sharp edge (opacity tracks pulse) ── */}
           <Animated.Image
             source={APPROVED_WAVES}
-            style={[
-              styles.image,
-              {
-                opacity: pulseOpacity,
-                transform: [{ rotate }, { scale: pulseScale }],
-              },
-            ]}
+            style={[styles.image, { opacity: pulseOpacity, transform: [{ rotate: rotate1 }] }]}
             resizeMode="contain"
             accessibilityIgnoresInvertColors
           />
 
-          {/* Counter outer bloom — wide spread */}
+          {/* ── CCW orbital ring — outer bloom ── */}
           <Animated.Image
             source={APPROVED_WAVES}
             blurRadius={20}
-            style={[
-              styles.image,
-              {
-                opacity: ringGlowOpacity,
-                transform: [{ rotate: counterRotate }],
-              },
-            ]}
+            style={[styles.image, { opacity: ringGlowOpacity, transform: [{ rotate: rotate2 }] }]}
             resizeMode="contain"
             accessibilityIgnoresInvertColors
           />
-          {/* Counter inner glow — tight halo */}
+          {/* ── CCW orbital ring — inner glow ── */}
           <Animated.Image
             source={APPROVED_WAVES}
             blurRadius={10}
-            style={[
-              styles.image,
-              {
-                opacity: ringGlowOpacity,
-                transform: [{ rotate: counterRotate }],
-              },
-            ]}
+            style={[styles.image, { opacity: ringGlowOpacity, transform: [{ rotate: rotate2 }] }]}
             resizeMode="contain"
             accessibilityIgnoresInvertColors
           />
-          {/* Counter sharp ring */}
+          {/* ── CCW orbital ring — sharp edge (static opacity; counterpoint) ── */}
           <Animated.Image
             source={APPROVED_WAVES}
-            style={[
-              styles.image,
-              {
-                opacity: 0.35,
-                transform: [{ rotate: counterRotate }],
-              },
-            ]}
+            style={[styles.image, { opacity: 0.35, transform: [{ rotate: rotate2 }] }]}
             resizeMode="contain"
             accessibilityIgnoresInvertColors
           />
@@ -388,5 +541,68 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     width: "100%",
     height: "100%",
+  },
+  lightCenterLayer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2,
+  },
+  lightCenterGlow: {
+    position: "absolute",
+    backgroundColor: "rgba(255,255,255,0.46)",
+    shadowColor: "#8b5cf6",
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  lightCenterOuter: {
+    position: "absolute",
+    backgroundColor: "rgba(248,245,255,0.78)",
+    borderWidth: 1,
+    borderColor: "rgba(168,85,247,0.24)",
+    shadowColor: "#a78bfa",
+    shadowOpacity: 0.22,
+    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  lightCenterDisc: {
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.96)",
+    borderWidth: 1,
+    borderColor: "rgba(124,58,237,0.42)",
+    shadowColor: "#ffffff",
+    shadowOpacity: 0.68,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  lightCenterHighlight: {
+    position: "absolute",
+    top: "7%",
+    left: "12%",
+    right: "12%",
+    height: "44%",
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.72)",
+  },
+  lightCenterInnerGlow: {
+    position: "absolute",
+    left: "10%",
+    right: "10%",
+    bottom: "8%",
+    height: "46%",
+    borderRadius: 999,
+    backgroundColor: "rgba(221,214,254,0.42)",
+  },
+  lightCenterH: {
+    color: "#7c3aed",
+    fontWeight: "900",
+    letterSpacing: 0,
+    textAlign: "center",
+    textShadowColor: "rgba(124,58,237,0.26)",
+    textShadowRadius: 5,
+    textShadowOffset: { width: 0, height: 0 },
   },
 });

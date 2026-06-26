@@ -160,6 +160,7 @@ export default function NotificationsScreen() {
     markRead,
     markAllRead,
     deleteNotification,
+    deleteAll,
   } = useNotificationsStore();
 
   const load = useCallback(() => {
@@ -184,6 +185,18 @@ export default function NotificationsScreen() {
       ],
     );
   }, [accessToken, markAllRead]);
+
+  const handleDeleteAll = useCallback(() => {
+    if (!accessToken || notifications.length === 0) return;
+    Alert.alert(
+      "Delete All Notifications",
+      `Remove all ${notifications.length} notification${notifications.length !== 1 ? "s" : ""}? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete All", style: "destructive", onPress: () => deleteAll(accessToken) },
+      ],
+    );
+  }, [accessToken, notifications.length, deleteAll]);
 
   const handleDelete = useCallback(
     (id: string) => { if (accessToken) deleteNotification(accessToken, id); },
@@ -232,16 +245,28 @@ export default function NotificationsScreen() {
         <ActivityIndicator color={colors.accent} style={{ marginTop: spacing.xl }} />
       ) : null}
 
-      {/* Mark all read */}
-      {unreadCount > 0 ? (
-        <TouchableOpacity
-          style={[styles.markAllBtn, isMutating && styles.btnDisabled]}
-          onPress={handleMarkAllRead}
-          disabled={isMutating}
-          activeOpacity={0.75}
-        >
-          <Text style={styles.markAllBtnText}>Mark All Read</Text>
-        </TouchableOpacity>
+      {/* Bulk actions */}
+      {notifications.length > 0 ? (
+        <View style={styles.bulkRow}>
+          {unreadCount > 0 ? (
+            <TouchableOpacity
+              style={[styles.markAllBtn, isMutating && styles.btnDisabled]}
+              onPress={handleMarkAllRead}
+              disabled={isMutating}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.markAllBtnText}>Mark All Read</Text>
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity
+            style={[styles.deleteAllBtn, isMutating && styles.btnDisabled]}
+            onPress={handleDeleteAll}
+            disabled={isMutating}
+            activeOpacity={0.75}
+          >
+            <Text style={styles.deleteAllBtnText}>Delete All</Text>
+          </TouchableOpacity>
+        </View>
       ) : null}
 
       {/* Unread section */}
@@ -378,20 +403,37 @@ function createStyles(colors: ThemeColors) {
     lineHeight: 20,
   },
 
+  bulkRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
   markAllBtn: {
-    alignSelf: "flex-end",
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: colors.accent,
-    marginBottom: spacing.md,
   },
   markAllBtnText: {
     fontSize: 11,
     fontWeight: "700" as const,
     letterSpacing: 0.8,
     color: colors.accent,
+  },
+  deleteAllBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.danger,
+  },
+  deleteAllBtnText: {
+    fontSize: 11,
+    fontWeight: "700" as const,
+    letterSpacing: 0.8,
+    color: colors.danger,
   },
 
   card: {

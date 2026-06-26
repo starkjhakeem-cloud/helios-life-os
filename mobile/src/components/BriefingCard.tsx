@@ -113,7 +113,7 @@ export default function BriefingCard({
       <Text style={styles.summary}>{summary}</Text>
 
       {/* ── Priorities ── */}
-      <Text style={styles.sectionLabel}>TODAY'S PRIORITIES</Text>
+      <Text style={styles.sectionLabel}>TODAY&apos;S PRIORITIES</Text>
       {priorities.map((p, i) => (
         <View key={i} style={styles.priorityRow}>
           <View style={styles.priorityDot} />

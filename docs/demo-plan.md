@@ -175,7 +175,7 @@ screenshots/
   06-new-goal-modal.png
   07-tasks-list.png
   08-tasks-empty.png
-  09-new-task-modal.png
+  09-new-ta<API_KEY>
   10-analytics.png
   11-analytics-empty.png
   12-agents.png

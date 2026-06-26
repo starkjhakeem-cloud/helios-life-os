@@ -104,6 +104,9 @@ def _task_out(t: Task) -> dict[str, Any]:
         "scheduled_start":           t.scheduled_start,
         "scheduled_end":             t.scheduled_end,
         "focus_block_id":            t.focus_block_id,
+        "source":                    t.source,
+        "source_id":                 t.source_id,
+        "source_metadata":           t.source_metadata,
         "created_at":                t.created_at.isoformat(),
         "updated_at":                t.updated_at.isoformat(),
     }

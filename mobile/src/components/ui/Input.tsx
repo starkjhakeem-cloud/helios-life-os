@@ -9,11 +9,22 @@ type Props = TextInputProps & {
 };
 
 const Input = forwardRef<TextInput, Props>(function Input(
-  { label, error, style, onFocus, onBlur, ...rest },
+  {
+    label,
+    error,
+    style,
+    onFocus,
+    onBlur,
+    autoCapitalize = "none",
+    autoCorrect = false,
+    spellCheck = false,
+    smartInsertDelete = false,
+    ...rest
+  },
   ref,
 ) {
   const [focused, setFocused] = useState(false);
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
@@ -24,17 +35,26 @@ const Input = forwardRef<TextInput, Props>(function Input(
         style={[
           styles.input,
           {
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
+            backgroundColor: isDark ? colors.surface : colors.glassSubtle,
+            borderColor: isDark ? colors.border : colors.secondaryBorder,
             color: colors.textPrimary,
           },
           focused && styles.inputFocused,
-          focused && { borderColor: colors.accentCyan },
+          focused && {
+            borderColor: colors.accent,
+            shadowColor: colors.accent,
+            shadowOpacity: isDark ? 0 : 0.12,
+            shadowRadius: isDark ? 0 : 10,
+            shadowOffset: { width: 0, height: 4 },
+          },
           error ? styles.inputError : null,
           style,
         ]}
         placeholderTextColor={colors.textMuted}
-        autoCapitalize="none"
+        autoCapitalize={autoCapitalize}
+        autoCorrect={autoCorrect}
+        spellCheck={spellCheck}
+        smartInsertDelete={smartInsertDelete}
         onFocus={(e) => {
           setFocused(true);
           onFocus?.(e);
@@ -62,7 +82,8 @@ function createStyles(colors: ThemeColors) {
   },
   input: {
     borderWidth: 1,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
+    minHeight: 48,
     paddingVertical: spacing.sm + spacing.xs,
     paddingHorizontal: spacing.md,
     ...typography.body,

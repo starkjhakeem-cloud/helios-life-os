@@ -174,7 +174,7 @@ docker compose up --build
 
 ### AI responses look generic
 That's expected — `AI_PROVIDER=mock` is the default. To show real OpenAI responses:
-1. Add `AI_PROVIDER=openai` and `OPENAI_API_KEY=sk-...` to `backend/.env`
+1. Add `AI_PROVIDER=openai` and `OPENAI_API_KEY=<OPENAI_API_KEY>` to `backend/.env`
 2. Restart: `docker compose restart api`
 
 ### Integration sync shows no data change

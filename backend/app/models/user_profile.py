@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -36,6 +36,12 @@ class UserProfile(Base):
     first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     display_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    display_name_change_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    display_name_changed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     phone_number: Mapped[str | None] = mapped_column(String(30), nullable=True)
     date_of_birth: Mapped[str | None] = mapped_column(String(10), nullable=True)  # YYYY-MM-DD
     address_line_1: Mapped[str | None] = mapped_column(String(200), nullable=True)

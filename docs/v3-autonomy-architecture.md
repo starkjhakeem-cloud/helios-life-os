@@ -283,7 +283,7 @@ alerts (
 
 The `dedup_key` constraint prevents the `AlertWorker` from generating duplicate alerts for the same condition. For example:
 
-- `overdue_task:task-abc-123:2026-06-12` — one overdue alert per task per day
+- `overdue_task:ta<API_KEY>:2026-06-12` — one overdue alert per task per day
 - `goal_drift:goal-xyz-456:2026-06-12` — one drift alert per goal per day
 - `deadline_approaching:goal-xyz-456` — one per goal (cleared when target date passes)
 

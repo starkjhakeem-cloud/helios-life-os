@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 import {
   integrationService,
+  type GoogleServiceType,
   type Integration,
   type IntegrationProvider,
   type SyncJobOut,
@@ -12,15 +13,17 @@ type IntegrationState = {
   isLoading: boolean;
   isMutating: boolean;
   error: string | null;
-  // Sync state — keyed by integration_id
   syncResults: Record<string, SyncJobOut>;
-  syncingId: string | null;   // which integration is currently syncing
+  syncingId: string | null;
   syncError: string | null;
+  backendUnavailable: boolean;
   fetchIntegrations: (token: string) => Promise<void>;
   mockConnect: (token: string, provider: IntegrationProvider) => Promise<void>;
   disconnect: (token: string, integrationId: string) => Promise<void>;
+  googleDisconnect: (token: string, serviceType: GoogleServiceType) => Promise<void>;
   fetchSyncStatus: (token: string) => Promise<void>;
   triggerSync: (token: string, integrationId: string) => Promise<void>;
+  reset: () => void;
 };
 
 export const useIntegrationStore = create<IntegrationState>()((set, get) => ({
@@ -31,16 +34,19 @@ export const useIntegrationStore = create<IntegrationState>()((set, get) => ({
   syncResults: {},
   syncingId: null,
   syncError: null,
+  backendUnavailable: false,
 
   fetchIntegrations: async (token) => {
-    set({ isLoading: true, error: null });
+    set({ isLoading: true, error: null, backendUnavailable: false });
     try {
       const data = await integrationService.list(token);
       set({ integrations: data.integrations, isLoading: false });
     } catch (err) {
+      const isNetworkError = err instanceof Error && (err as { status?: number }).status === 0;
       set({
         isLoading: false,
-        error: err instanceof Error ? err.message : "Failed to load integrations.",
+        backendUnavailable: isNetworkError,
+        error: isNetworkError ? null : (err instanceof Error ? err.message : "Failed to load integrations."),
       });
     }
   },
@@ -52,7 +58,7 @@ export const useIntegrationStore = create<IntegrationState>()((set, get) => ({
       set((s) => ({
         isMutating: false,
         integrations: s.integrations.map((i) =>
-          i.provider === provider ? updated : i,
+          i.provider === provider ? { ...i, ...updated } : i,
         ),
       }));
     } catch (err) {
@@ -67,7 +73,6 @@ export const useIntegrationStore = create<IntegrationState>()((set, get) => ({
     set({ isMutating: true, error: null });
     try {
       await integrationService.disconnect(token, integrationId);
-      // Reset local entry to disconnected stub and clear any cached sync result
       set((s) => {
         const { [integrationId]: _, ...remainingResults } = s.syncResults;
         return {
@@ -75,11 +80,34 @@ export const useIntegrationStore = create<IntegrationState>()((set, get) => ({
           syncResults: remainingResults,
           integrations: s.integrations.map((i) =>
             i.id === integrationId
-              ? { ...i, id: null, status: "disconnected", connected_at: null, token_expires_at: null, scopes: [] }
+              ? {
+                  ...i,
+                  id: null,
+                  status: "disconnected" as const,
+                  connected_at: null,
+                  token_expires_at: null,
+                  scopes: [],
+                  requires_reconnect: false,
+                }
               : i,
           ),
         };
       });
+    } catch (err) {
+      set({
+        isMutating: false,
+        error: err instanceof Error ? err.message : "Failed to disconnect integration.",
+      });
+    }
+  },
+
+  googleDisconnect: async (token, serviceType) => {
+    set({ isMutating: true, error: null });
+    try {
+      await integrationService.googleDisconnect(token, serviceType);
+      // Refresh the full list so the UI reflects the backend's new state
+      const data = await integrationService.list(token);
+      set({ isMutating: false, integrations: data.integrations });
     } catch (err) {
       set({
         isMutating: false,
@@ -97,7 +125,7 @@ export const useIntegrationStore = create<IntegrationState>()((set, get) => ({
       }
       set({ syncResults: map });
     } catch {
-      // Non-fatal — sync status is supplementary; don't surface an error
+      // Non-fatal — sync status is supplementary
     }
   },
 
@@ -108,7 +136,6 @@ export const useIntegrationStore = create<IntegrationState>()((set, get) => ({
       set((s) => ({
         syncingId: null,
         syncResults: { ...s.syncResults, [integrationId]: job },
-        // Update last_sync_at on the matching integration entry
         integrations: s.integrations.map((i) =>
           i.id === integrationId
             ? { ...i, last_sync_at: job.completed_at ?? job.started_at }
@@ -122,4 +149,16 @@ export const useIntegrationStore = create<IntegrationState>()((set, get) => ({
       });
     }
   },
+
+  reset: () =>
+    set({
+      integrations: [],
+      isLoading: false,
+      isMutating: false,
+      error: null,
+      syncResults: {},
+      syncingId: null,
+      syncError: null,
+      backendUnavailable: false,
+    }),
 }));

@@ -9,8 +9,10 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.goal import Goal
+from app.models.task import Task
 from app.models.user import User
 from app.schemas.goals import GoalCreate, GoalOut, GoalsResponse, GoalUpdate
+from app.schemas.tasks import TaskOut, TasksResponse
 from app.services.semantic_memory_service import SemanticMemoryService
 
 logger = logging.getLogger(__name__)
@@ -44,6 +46,29 @@ def _to_out(goal: Goal) -> GoalOut:
     )
 
 
+def _task_to_out(task: Task) -> TaskOut:
+    return TaskOut(
+        id=task.id,
+        user_id=task.user_id,
+        title=task.title,
+        description=task.description,
+        status=task.status,
+        priority=task.priority,
+        due_date=task.due_date,
+        linked_goal_id=task.linked_goal_id,
+        estimated_duration_minutes=task.estimated_duration_minutes,
+        category=task.category,
+        scheduled_start=task.scheduled_start,
+        scheduled_end=task.scheduled_end,
+        focus_block_id=task.focus_block_id,
+        source=task.source,
+        source_id=task.source_id,
+        source_metadata=task.source_metadata,
+        created_at=task.created_at.isoformat(),
+        updated_at=task.updated_at.isoformat(),
+    )
+
+
 @router.get("", response_model=GoalsResponse)
 def list_goals(
     current_user: User = Depends(get_current_user),
@@ -53,6 +78,44 @@ def list_goals(
         select(Goal).where(Goal.user_id == current_user.id).order_by(Goal.created_at)
     ).scalars().all()
     return GoalsResponse(goals=[_to_out(g) for g in rows])
+
+
+@router.get("/{goal_id}", response_model=GoalOut)
+def get_goal(
+    goal_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> GoalOut:
+    goal = db.execute(
+        select(Goal).where(Goal.id == goal_id, Goal.user_id == current_user.id)
+    ).scalar_one_or_none()
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found.")
+    return _to_out(goal)
+
+
+@router.get("/{goal_id}/tasks", response_model=TasksResponse)
+def list_goal_tasks(
+    goal_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TasksResponse:
+    goal = db.execute(
+        select(Goal).where(Goal.id == goal_id, Goal.user_id == current_user.id)
+    ).scalar_one_or_none()
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found.")
+
+    rows = (
+        db.execute(
+            select(Task)
+            .where(Task.user_id == current_user.id, Task.linked_goal_id == goal_id)
+            .order_by(Task.created_at)
+        )
+        .scalars()
+        .all()
+    )
+    return TasksResponse(tasks=[_task_to_out(t) for t in rows])
 
 
 @router.post("", response_model=GoalOut, status_code=201)

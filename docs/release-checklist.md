@@ -187,7 +187,7 @@ Run these before touching any environment. They confirm the codebase is in a rel
 - [ ] `docs/v1-launch-report.md` testing status is current (test counts match actual passing tests)
 
 ### Secrets audit
-- [ ] `git grep -r "sk-"` returns no OpenAI API key values in the repository
+- [ ] Secret-key prefix searches return no OpenAI API key values in the repository
 - [ ] `git grep -r "postgresql://" | grep -v ".example"` returns no lines with real credentials
 - [ ] `git grep -r "secrets.token_hex"` appears only in documentation (not hardcoded as a value)
 

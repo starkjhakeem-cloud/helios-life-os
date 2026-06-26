@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from typing import Any
+
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -37,6 +39,11 @@ class Task(Base):
         nullable=True,
         index=True,
     )
+    # Task Engine provenance fields.
+    # source examples: "manual" | "gmail" | "calendar" | "goal" | "daily_brief"
+    source: Mapped[str] = mapped_column(String(50), nullable=False, default="manual")
+    source_id: Mapped[str | None] = mapped_column(String(300), nullable=True, index=True)
+    source_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

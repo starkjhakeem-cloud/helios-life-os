@@ -50,6 +50,7 @@ export default function LoginScreen() {
           onChangeText={(t) => { setEmail(t); setLocalError(null); }}
           placeholder="operator@helios.app"
           keyboardType="email-address"
+          autoCapitalize="none"
           autoComplete="email"
           returnKeyType="next"
           onSubmitEditing={() => passwordRef.current?.focus()}
@@ -62,6 +63,7 @@ export default function LoginScreen() {
           onChangeText={(t) => { setPassword(t); setLocalError(null); }}
           placeholder="••••••••"
           secureTextEntry
+          autoCapitalize="none"
           autoComplete="current-password"
           returnKeyType="done"
           onSubmitEditing={handleLogin}

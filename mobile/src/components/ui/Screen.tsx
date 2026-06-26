@@ -12,7 +12,7 @@ type Props = {
 
 export default function Screen({ children, scroll = false, style }: Props) {
   const insets = useSafeAreaInsets();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
 
   const contentStyle = [
     styles.container,
@@ -27,6 +27,7 @@ export default function Screen({ children, scroll = false, style }: Props) {
         contentContainerStyle={contentStyle}
         showsVerticalScrollIndicator={false}
       >
+        {!isDark ? <LightBackgroundMaterial /> : null}
         {children}
       </ScrollView>
     );
@@ -34,7 +35,18 @@ export default function Screen({ children, scroll = false, style }: Props) {
 
   return (
     <View style={[styles.fill, { backgroundColor: colors.background }, contentStyle]}>
+      {!isDark ? <LightBackgroundMaterial /> : null}
       {children}
+    </View>
+  );
+}
+
+function LightBackgroundMaterial() {
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <View style={[styles.bgTop, { backgroundColor: "rgba(255,255,255,0.55)" }]} />
+      <View style={[styles.bgMid, { backgroundColor: "rgba(237,232,255,0.38)" }]} />
+      <View style={[styles.bgBottom, { backgroundColor: "rgba(222,232,248,0.42)" }]} />
     </View>
   );
 }
@@ -46,5 +58,26 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxl * 2,
+  },
+  bgTop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: "34%",
+  },
+  bgMid: {
+    position: "absolute",
+    top: "28%",
+    left: 0,
+    right: 0,
+    height: "38%",
+  },
+  bgBottom: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: "42%",
   },
 });

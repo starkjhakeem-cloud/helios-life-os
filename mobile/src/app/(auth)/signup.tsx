@@ -52,7 +52,7 @@ export default function SignupScreen() {
           value={name}
           onChangeText={(t) => { setName(t); setLocalError(null); }}
           placeholder="Operator name"
-          autoCapitalize="words"
+          autoCapitalize="none"
           autoComplete="name"
           returnKeyType="next"
           onSubmitEditing={() => emailRef.current?.focus()}
@@ -65,6 +65,7 @@ export default function SignupScreen() {
           onChangeText={(t) => { setEmail(t); setLocalError(null); }}
           placeholder="operator@helios.app"
           keyboardType="email-address"
+          autoCapitalize="none"
           autoComplete="email"
           returnKeyType="next"
           onSubmitEditing={() => passwordRef.current?.focus()}
@@ -77,6 +78,7 @@ export default function SignupScreen() {
           onChangeText={(t) => { setPassword(t); setLocalError(null); }}
           placeholder="Min. 6 characters"
           secureTextEntry
+          autoCapitalize="none"
           autoComplete="new-password"
           returnKeyType="done"
           onSubmitEditing={handleSignup}

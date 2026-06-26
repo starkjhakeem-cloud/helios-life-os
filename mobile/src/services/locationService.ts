@@ -11,6 +11,7 @@
  */
 
 import * as ExpoLocation from "expo-location";
+import * as Device from "expo-device";
 
 // ── US state abbreviation table ───────────────────────────────────────────────
 // expo-location's `region` returns full state names (e.g. "New York").
@@ -52,6 +53,8 @@ export type DetectedLocation = {
   locationLabel: string;
   /** False when the user denied location permission. */
   permissionGranted: boolean;
+  /** User-safe reason when location could not produce a trustworthy city label. */
+  warningCode?: "simulator_default" | "gps_unavailable" | "reverse_geocode_unavailable";
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -92,6 +95,34 @@ function buildLocationLabel(
   return parts.join(", ");
 }
 
+function distanceKm(
+  a: { latitude: number; longitude: number },
+  b: { latitude: number; longitude: number },
+): number {
+  const radiusKm = 6371;
+  const dLat = ((b.latitude - a.latitude) * Math.PI) / 180;
+  const dLon = ((b.longitude - a.longitude) * Math.PI) / 180;
+  const lat1 = (a.latitude * Math.PI) / 180;
+  const lat2 = (b.latitude * Math.PI) / 180;
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * radiusKm * Math.asin(Math.sqrt(h));
+}
+
+function isLikelySimulatorDefault(coords: { latitude: number; longitude: number }): boolean {
+  if (Device.isDevice) return false;
+
+  const simulatorDefaults = [
+    // Common iOS Simulator "San Francisco" / Expo default.
+    { latitude: 37.7749, longitude: -122.4194, radiusKm: 40 },
+    // Common iOS Simulator Apple Park / Cupertino default.
+    { latitude: 37.3349, longitude: -122.009, radiusKm: 18 },
+  ];
+
+  return simulatorDefaults.some((spot) => distanceKm(coords, spot) <= spot.radiusKm);
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
@@ -117,12 +148,24 @@ export async function detectLocation(): Promise<DetectedLocation> {
     // Race GPS against a 10-second timeout to avoid hanging on cold-start.
     const pos = await Promise.race([
       ExpoLocation.getCurrentPositionAsync({
-        accuracy: ExpoLocation.Accuracy.Balanced,
+        accuracy: ExpoLocation.Accuracy.Highest,
       }),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("GPS timeout after 10 s")), 10_000),
+        setTimeout(() => reject(new Error("GPS timeout after 15 s")), 15_000),
       ),
     ]);
+
+    if (isLikelySimulatorDefault(pos.coords)) {
+      return {
+        timezone: deviceTimezone,
+        city: null,
+        state: null,
+        country: null,
+        locationLabel: "",
+        permissionGranted: true,
+        warningCode: "simulator_default",
+      };
+    }
 
     const results = await ExpoLocation.reverseGeocodeAsync({
       latitude: pos.coords.latitude,
@@ -135,6 +178,7 @@ export async function detectLocation(): Promise<DetectedLocation> {
         city: null, state: null, country: null,
         locationLabel: "",
         permissionGranted: true,
+        warningCode: "reverse_geocode_unavailable",
       };
     }
 
@@ -160,6 +204,7 @@ export async function detectLocation(): Promise<DetectedLocation> {
       city: null, state: null, country: null,
       locationLabel: "",
       permissionGranted: true,
+      warningCode: "gps_unavailable",
     };
   }
 }

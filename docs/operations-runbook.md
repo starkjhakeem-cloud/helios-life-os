@@ -310,7 +310,7 @@ Restart the backend after changing the environment variable.
 
 **401 — Invalid API key:**
 - Verify `OPENAI_API_KEY` is set in the environment (not commented out)
-- Confirm the key starts with `sk-`
+- Confirm the key uses the expected OpenAI secret-key prefix
 - Regenerate the key at platform.openai.com if needed
 
 **429 — Rate limit:**

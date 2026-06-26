@@ -43,6 +43,8 @@ export const API_ENDPOINTS = {
   },
   goals: {
     list: "/api/v1/goals",
+    detail: (id: string) => `/api/v1/goals/${id}`,
+    linkedTasks: (id: string) => `/api/v1/goals/${id}/tasks`,
   },
   diagnostics: "/api/v1/health/diagnostics",
   tasks: {
@@ -62,7 +64,11 @@ export const API_ENDPOINTS = {
     mockConnect: "/api/v1/integrations/mock-connect",
     syncStatus: "/api/v1/integrations/sync/status",
     googleConnectUrl: "/api/v1/integrations/google/connect-url",
+    googleAuthUrl: "/api/v1/integrations/google/auth-url",
+    googleReconnectUrl: "/api/v1/integrations/google/reconnect-url",
     googleExchange: "/api/v1/integrations/google/exchange",
+    googleSync: "/api/v1/integrations/google/sync",
+    googleDisconnect: "/api/v1/integrations/google/disconnect",
     disconnect: (id: string) => `/api/v1/integrations/${id}`,
     triggerSync: (id: string) => `/api/v1/integrations/${id}/sync`,
   },
@@ -76,6 +82,11 @@ export const API_ENDPOINTS = {
     base: "/api/v1/background-jobs",
     item: (id: string) => `/api/v1/background-jobs/${id}`,
     trigger: (id: string) => `/api/v1/background-jobs/${id}/trigger`,
+  },
+  dailyBrief: {
+    today:    "/api/v1/daily-brief/today",
+    generate: "/api/v1/daily-brief/generate",
+    byDate:   (date: string) => `/api/v1/daily-brief/${date}`,
   },
   autonomy: {
     queue: "/api/v1/autonomy/queue",
@@ -91,5 +102,31 @@ export const API_ENDPOINTS = {
     base: "/api/v1/profile",
     userIdCheck: "/api/v1/profile/user-id/check",
     userId: "/api/v1/profile/user-id",
+    changePassword: "/api/v1/profile/change-password",
+    changeEmail:    "/api/v1/profile/change-email",
+  },
+  taskEngine: {
+    suggestions:         "/api/v1/task-engine/suggestions",
+    generate:            "/api/v1/task-engine/suggestions/generate",
+    acceptSuggestion:    (id: string) => `/api/v1/task-engine/suggestions/${id}/accept`,
+    rejectSuggestion:    (id: string) => `/api/v1/task-engine/suggestions/${id}/reject`,
+    completeTask:        (id: string) => `/api/v1/task-engine/tasks/${id}/complete`,
+    scheduleTask:        (id: string) => `/api/v1/task-engine/tasks/${id}/schedule`,
+  },
+  relationships: {
+    nextBestAction: "/api/v1/relationships/next-best-action",
+    goalProgress:   (goalId: string) => `/api/v1/relationships/goals/${goalId}/progress`,
+    availableWindows: "/api/v1/relationships/available-windows",
+  },
+  history: {
+    month:       "/api/v1/history/month",
+    range:       "/api/v1/history/range",
+    day:         (date: string) => `/api/v1/history/day/${date}`,
+    generateDay: (date: string) => `/api/v1/history/day/${date}/generate`,
+    lockDay:     (date: string) => `/api/v1/history/day/${date}/lock`,
+    notes:       (date: string) => `/api/v1/history/day/${date}/notes`,
+  },
+  assistantContext: {
+    preview: "/api/v1/assistant/context/preview",
   },
 } as const;

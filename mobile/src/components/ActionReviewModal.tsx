@@ -280,11 +280,16 @@ function createStyles(colors: ThemeColors) {
 
   card: {
     width: "100%",
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
+    backgroundColor: colors.glassStrong,
+    borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
+    borderColor: colors.primaryBorder,
+    padding: spacing.lg + 2,
+    shadowColor: colors.shadow,
+    shadowOpacity: 0.18,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 16 },
+    elevation: 18,
   },
 
   centeredState: {
@@ -406,8 +411,8 @@ function createStyles(colors: ThemeColors) {
   },
 
   previewSection: {
-    backgroundColor: colors.surfaceDark,
-    borderRadius: radius.sm,
+    backgroundColor: colors.glassSubtle,
+    borderRadius: radius.md,
     padding: spacing.sm,
     marginBottom: spacing.md,
     gap: spacing.xs,
