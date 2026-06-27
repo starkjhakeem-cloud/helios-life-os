@@ -8,6 +8,55 @@ The project is a full-stack mobile platform built with a React Native / Expo iOS
 
 ---
 
+## Product Preview
+
+Sanitized V3 screenshots are included in the repository so the product can be evaluated without exposing personal account data.
+
+| Home | Assistant | Goals |
+|---|---|---|
+| ![HELIOS Home screen](screenshots/sanitized/01-home.png) | ![HELIOS Assistant screen](screenshots/sanitized/02-assistant.png) | ![HELIOS Goals screen](screenshots/sanitized/03-goals.png) |
+
+| Tasks | Calendar | Connected Services |
+|---|---|---|
+| ![HELIOS Tasks screen](screenshots/sanitized/04-tasks.png) | ![HELIOS Calendar screen](screenshots/sanitized/05-calendar.png) | ![HELIOS Connected Services screen](screenshots/sanitized/07-connected-services.png) |
+
+| More | Profile | Settings |
+|---|---|---|
+| ![HELIOS More screen](screenshots/sanitized/06-more.png) | ![HELIOS Profile screen](screenshots/sanitized/08-profile.png) | ![HELIOS Settings screen](screenshots/sanitized/10-settings.png) |
+
+---
+
+## Current Capabilities
+
+- AI-powered Daily Briefs and contextual assistant chat
+- Home recommendations and next-best-action intelligence
+- Goal tracking with progress, linked tasks, and relationship health
+- Task creation, completion, scheduling, and HELIOS-generated suggestions
+- Calendar timeline, day details, available windows, and history
+- Google Calendar and Gmail integration architecture with encrypted token storage
+- Semantic memory and retrieval foundation for user-scoped context
+- Profile, theme, display-name, User ID, email, password, and notification settings
+- Secure authentication with JWT, bcrypt password hashing, and protected backend routes
+- Dockerized FastAPI backend with PostgreSQL, Alembic migrations, pytest coverage, and mobile TypeScript/Jest validation
+
+---
+
+## V3 Private Beta Status
+
+**Current stage:** V3 polish and private beta readiness.
+
+The `helios-v3` branch is the current stabilized development branch. It has passed backend pytest, Alembic migration verification, backend compile checks, mobile TypeScript checks, ESLint, and Jest. Remaining release gates before a public beta snapshot are real-device QA, live Google OAuth verification, merging `helios-v3` into `main`, and tagging a beta release.
+
+Helpful readiness docs:
+
+- [Private Beta Readiness Checklist](docs/private-beta-readiness-checklist.md)
+- [Release Checklist](docs/release-checklist.md)
+- [Portfolio Materials](docs/PORTFOLIO_MATERIALS.md)
+- [Known Limitations](docs/final-known-limitations.md)
+- [Screenshot Guide](docs/screenshot-guide.md)
+
+---
+
 ## Project Overview
 
 HELIOS exists to solve a common problem in personal productivity software: important context is scattered across apps, and users are left to manually translate goals, schedules, emails, tasks, and reminders into daily action.
@@ -33,7 +82,7 @@ Implemented:
 
 - Mobile iOS app with tab-based navigation and authenticated user flows
 - FastAPI backend with PostgreSQL, Alembic migrations, and Docker support
-- JWT authentication, refresh sessions, profile management, username and display-name controls
+- JWT authentication, refresh sessions, profile management, User ID, and display-name controls
 - Goals, tasks, calendar events, reminders, notifications, daily history, and settings
 - AI assistant, daily brief engine, agent orchestration, assistant context preview, semantic memory, and task suggestions
 - Google Calendar and Gmail integration architecture, including OAuth flow support, encrypted token storage, sync endpoints, and mock/simulated development paths
@@ -94,7 +143,7 @@ The platform includes notification models, mobile notification permission flows,
 
 ### Authentication and Account Management
 
-Authentication uses JWT access/refresh tokens, bcrypt password hashing, protected routes, profile settings, username management, display-name change limits, email change, and password change flows.
+Authentication uses JWT access/refresh tokens, bcrypt password hashing, protected routes, profile settings, stable User ID display, display-name change limits, email change, and password change flows.
 
 ---
 
@@ -374,7 +423,7 @@ The backend exposes versioned routes under `/api/v1`.
 | API group | Purpose |
 |---|---|
 | `/auth` | Signup, login, refresh, current user, account operations |
-| `/profile` | Profile, username, display name, email change, password change |
+| `/profile` | Profile, User ID, display name, email change, password change |
 | `/settings` | User preferences and personalization |
 | `/dashboard` | Home/dashboard summary data |
 | `/goals` | Goal list, detail, create, update, delete, linked tasks |
@@ -590,7 +639,7 @@ Manual QA should cover:
 - Task creation, completion, scheduling, and suggestions
 - Calendar month/day views and event creation
 - Connected Services status, sync, disconnect, and reconnect states
-- Profile settings, username, display name, email change, password change, and theme switching
+- Profile settings, User ID, display name, email change, password change, and theme switching
 - Light/dark/system theme behavior
 - Network timeout and backend unavailable handling
 
