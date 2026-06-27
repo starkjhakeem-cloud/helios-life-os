@@ -1,9 +1,23 @@
-// Production API URL — set EXPO_PUBLIC_API_URL in your build environment or .env
-// to override the default. Falls back to localhost in development.
-const _prodUrl = process.env.EXPO_PUBLIC_API_URL ?? "https://api.helios.app";
+import * as Device from "expo-device";
+import { Platform } from "react-native";
+
+const _configuredUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+
+function getDevelopmentFallbackUrl(): string | null {
+  if (!__DEV__) return null;
+  if (Platform.OS === "ios" && !Device.isDevice) return "http://localhost:8000";
+  if (Platform.OS === "android" && !Device.isDevice) return "http://10.0.2.2:8000";
+  return null;
+}
+
+const _baseUrl = _configuredUrl || getDevelopmentFallbackUrl();
+const _configurationError = _baseUrl
+  ? null
+  : "EXPO_PUBLIC_API_URL is required for physical devices and production builds.";
 
 export const API_CONFIG = {
-  BASE_URL: __DEV__ ? "http://localhost:8000" : _prodUrl,
+  BASE_URL: _baseUrl ?? "",
+  CONFIGURATION_ERROR: _configurationError,
   // Raised to 15s — AI endpoints (briefing, plan, chat) can take several seconds
   TIMEOUT_MS: 15000,
 } as const;

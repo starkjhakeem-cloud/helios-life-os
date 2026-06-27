@@ -46,7 +46,7 @@ export const useIntegrationStore = create<IntegrationState>()((set, get) => ({
       set({
         isLoading: false,
         backendUnavailable: isNetworkError,
-        error: isNetworkError ? null : (err instanceof Error ? err.message : "Failed to load integrations."),
+        error: err instanceof Error ? err.message : "Failed to load integrations.",
       });
     }
   },

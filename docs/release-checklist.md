@@ -104,7 +104,7 @@ Run these before touching any environment. They confirm the codebase is in a rel
 ### Code
 - [ ] `npx tsc --noEmit` passes with zero errors
 - [ ] No `console.error` calls in application code (only in `errorReporter.ts` which logs conditionally)
-- [ ] No hardcoded API URLs other than the `localhost:8000` fallback in `mobile/src/config/api.ts`
+- [ ] API URL resolution respects `EXPO_PUBLIC_API_URL`; only simulator/emulator fallbacks remain in `mobile/src/config/api.ts`
 - [ ] `mobile/.env.example` is committed and `mobile/.env` is not
 
 ### Navigation and auth

@@ -159,7 +159,7 @@ Before a live demo or recording session:
 ### For full-stack generalists
 - Monorepo structure: `backend/` and `mobile/` are fully independent — no shared code or build steps
 - Production Dockerfile runs Alembic migrations then starts Uvicorn; `docker-compose.yml` overrides CMD for `--reload` in dev
-- `EXPO_PUBLIC_API_URL` is baked into the bundle at EAS Build time — no runtime configuration needed
+- `EXPO_PUBLIC_API_URL` selects the backend for physical devices, staging, and production builds
 
 ---
 

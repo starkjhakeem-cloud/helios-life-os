@@ -648,7 +648,7 @@ export default function IntegrationsScreen() {
           <View style={styles.unavailableCopy}>
             <SymbolView name="wifi.slash" size={13} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
             <Text style={styles.unavailableText}>
-              Connected Services are temporarily unavailable.
+              {error ? friendlyOAuthError(error) : "Connected Services are temporarily unavailable."}
             </Text>
           </View>
           <TouchableOpacity
@@ -699,6 +699,9 @@ export default function IntegrationsScreen() {
 
 function friendlyOAuthError(rawMessage: string): string {
   const lower = rawMessage.toLowerCase();
+  if (lower.includes("backend unavailable") || lower.includes("current api:")) {
+    return rawMessage;
+  }
   if (lower.includes("network") || lower.includes("timed out") || lower.includes("unavailable")) {
     return "Check your internet connection and try again.";
   }

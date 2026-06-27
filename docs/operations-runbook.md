@@ -573,7 +573,7 @@ lsof -i :8000   # Should show the Docker proxy listening
 ```
 
 **Fix — physical device on different network:**
-If using the app on a physical device, the device must be on the same Wi-Fi network as the Mac running Docker. `localhost` on the device does not resolve to the Mac's IP. Update `EXPO_PUBLIC_API_URL` or the `BASE_URL` fallback in `mobile/src/config/api.ts` to the Mac's local IP address.
+If using the app on a physical device, the device must be on the same Wi-Fi network as the Mac running Docker. `localhost` on the device does not resolve to the Mac's IP. Set `EXPO_PUBLIC_API_URL` in `mobile/.env` to the Mac's local IP address, for example `http://192.168.1.110:8000`. Do not edit `mobile/src/config/api.ts` for device switching.
 
 ---
 

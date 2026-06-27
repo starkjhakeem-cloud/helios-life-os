@@ -562,7 +562,18 @@ npx expo start
 
 Press `i` in the Expo terminal to open iOS Simulator.
 
-In development, the mobile app points to `http://localhost:8000`. Production builds use `EXPO_PUBLIC_API_URL`.
+Mobile API URL resolution:
+
+1. `EXPO_PUBLIC_API_URL` is always used when present, in development and production.
+2. iOS Simulator falls back to `http://localhost:8000`.
+3. Android Emulator falls back to `http://10.0.2.2:8000`.
+4. Physical devices and production builds require `EXPO_PUBLIC_API_URL`.
+
+For physical-device LAN testing, copy `mobile/.env.example` to `mobile/.env` and set your Mac's local IP:
+
+```ini
+EXPO_PUBLIC_API_URL=http://192.168.1.110:8000
+```
 
 ---
 
@@ -610,7 +621,7 @@ Copy `mobile/.env.example` to `mobile/.env` when a local override is needed.
 
 | Variable | Purpose |
 |---|---|
-| `EXPO_PUBLIC_API_URL` | Production API base URL embedded into Expo builds |
+| `EXPO_PUBLIC_API_URL` | API base URL embedded into Expo builds; required for physical devices, staging, and production |
 
 ---
 

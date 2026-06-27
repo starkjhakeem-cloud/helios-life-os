@@ -106,6 +106,7 @@ function deriveAIStatus(
 function friendlyError(raw: string | null): string | null {
   if (!raw) return null;
   const lower = raw.toLowerCase();
+  if (lower.includes("backend unavailable") || lower.includes("current api:")) return raw;
   if (/network|fetch|connection|offline|unreachable|failed to/.test(lower))
     return "Unable to reach HELIOS. Check your connection and try again.";
   if (/401|unauthorized|expired|session/.test(lower))

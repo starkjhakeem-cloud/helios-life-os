@@ -132,15 +132,23 @@ cd mobile
 npm install
 ```
 
-No `.env` file is required for local development — the app connects to `http://localhost:8000` automatically when `__DEV__ === true`.
+No `.env` file is required for iOS Simulator local development — the app falls back to `http://localhost:8000` automatically. Android Emulator falls back to `http://10.0.2.2:8000`.
 
-If you need to override the API URL in development (for example, testing against a staging backend):
+`EXPO_PUBLIC_API_URL` always wins when present. Use it for physical devices, LAN testing, staging, production, or any custom backend:
 
 ```bash
 cd mobile
 cp .env.example .env
-# Edit .env:
-# EXPO_PUBLIC_API_URL=https://your-staging-api.example.com
+```
+
+Examples:
+
+```ini
+# Physical phone on the same Wi-Fi as your Mac
+EXPO_PUBLIC_API_URL=http://192.168.1.110:8000
+
+# Staging or production backend
+EXPO_PUBLIC_API_URL=https://your-staging-api.example.com
 ```
 
 ### 5. Start the mobile app
@@ -154,7 +162,9 @@ The `--clear` flag clears the Metro bundler cache. It is recommended on first ru
 
 Press `i` in the Metro terminal to open the app in the iOS Simulator (Xcode must be installed).
 
-**Testing on a physical device:** The device must be on the same Wi-Fi network as your Mac. Find your machine's local IP (`ipconfig getifaddr en0`) and update the `BASE_URL` fallback in `mobile/src/config/api.ts`, or set `EXPO_PUBLIC_API_URL` in `mobile/.env` to `http://<machine-ip>:8000`.
+**Testing on a physical device:** The device must be on the same Wi-Fi network as your Mac. Find your machine's local IP (`ipconfig getifaddr en0`) and set `EXPO_PUBLIC_API_URL` in `mobile/.env` to `http://<machine-ip>:8000`. Do not edit `mobile/src/config/api.ts` for device switching.
+
+**Backend offline or misconfigured:** HELIOS shows `Backend unavailable` with the current API URL so you can immediately confirm whether the app is targeting the simulator fallback, Android emulator fallback, LAN backend, or a production/staging URL.
 
 ### 6. Verify the full stack
 
@@ -298,7 +308,7 @@ psycopg2 and SQLAlchemy pass this through correctly. No code changes are needed.
 
 | Variable | Required | Description |
 |---|---|---|
-| `EXPO_PUBLIC_API_URL` | Yes (non-dev builds) | Full HTTPS URL of the backend API. Baked into the bundle by EAS at build time. In `__DEV__` builds, ignored — app connects to `http://localhost:8000`. |
+| `EXPO_PUBLIC_API_URL` | Yes for physical devices and non-dev builds | Full backend API URL. When present, it is used in development and production. |
 
 ### Variable injection by environment
 
@@ -308,7 +318,7 @@ psycopg2 and SQLAlchemy pass this through correctly. No code changes are needed.
 | `JWT_SECRET_KEY` | `.env` file (local, not committed) | Platform environment | Platform secret manager |
 | `DEBUG` | `.env` file | Platform environment | Platform environment (`false`) |
 | `OPENAI_API_KEY` | `.env` file (optional) | Platform environment | Platform secret manager |
-| `EXPO_PUBLIC_API_URL` | Not set (`localhost:8000` used) | `eas.json` preview profile | `eas.json` production profile |
+| `EXPO_PUBLIC_API_URL` | Optional for simulators/emulators; required for physical-device LAN testing | `eas.json` preview profile | `eas.json` production profile |
 
 ---
 

@@ -326,6 +326,9 @@ function formatApiError(err: unknown): string {
   if (!err || typeof err !== "object") return "Something went wrong. Try again.";
   const e = err as { status?: number; message?: string };
   const message = e.message && !/^HTTP\s+\d+$/.test(e.message) ? e.message : null;
+  if (message?.toLowerCase().includes("backend unavailable") || message?.toLowerCase().includes("current api:")) {
+    return message;
+  }
   if (e.status === 503) return message ?? "Unable to reach HELIOS services. Check your connection.";
   if (e.status === 409) return message ?? "User ID already taken.";
   if (e.status === 422) return message ?? "Invalid User ID format.";

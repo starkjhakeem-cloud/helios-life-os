@@ -37,14 +37,17 @@ describe("apiClient error handling", () => {
     mockedFetch.mockRejectedValue({ name: "AbortError" });
 
     await expect(apiClient.get("/test")).rejects.toMatchObject({
-      message: "Request timed out. Check your connection.",
+      message: expect.stringContaining("Backend unavailable.\nCurrent API:"),
       status: 0,
     });
 
     expect(errorReporter.reportError).toHaveBeenCalledWith(
       expect.any(Error),
       "Network request failed",
-      expect.objectContaining({ originalErrorName: "AbortError" }),
+      expect.objectContaining({
+        currentApi: expect.any(String),
+        originalErrorName: "AbortError",
+      }),
     );
   });
 });

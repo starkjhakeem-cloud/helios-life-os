@@ -36,7 +36,7 @@ PostgreSQL 16 (managed service in production / Docker volume in dev)
 | Backend runtime | Docker Compose (`--reload`) | Docker container (Dockerfile, no `--reload`) |
 | Database | PostgreSQL 16 in Docker (`postgres_data` volume) | Managed PostgreSQL (Render, Railway, Supabase, Neon) |
 | TLS / HTTPS | Not required (localhost only) | TLS-terminating proxy or platform-managed certificate |
-| API URL (mobile) | `http://localhost:8000` (hardcoded in `__DEV__` branch) | `EXPO_PUBLIC_API_URL` (injected at EAS Build time) |
+| API URL (mobile) | `EXPO_PUBLIC_API_URL`, with simulator/emulator fallbacks only | `EXPO_PUBLIC_API_URL` (injected at EAS Build time) |
 | Migrations | Auto-applied on container start (`alembic upgrade head`) | Auto-applied on container start (same Dockerfile) |
 | AI provider | `mock` (no external calls) | `mock` or `openai` (set `AI_PROVIDER` + `OPENAI_API_KEY`) |
 
@@ -90,9 +90,9 @@ All of the following must be in place before a production deployment is attempte
 
 | Variable | Required | Description |
 |---|---|---|
-| `EXPO_PUBLIC_API_URL` | Yes (non-dev builds) | Full HTTPS URL of the deployed backend, e.g. `https://api.helios.io` |
+| `EXPO_PUBLIC_API_URL` | Yes for physical devices and non-dev builds | Full backend URL, e.g. `http://192.168.1.110:8000` for LAN testing or `https://api.helios.io` for deployed environments |
 
-In `__DEV__` builds, the app ignores `EXPO_PUBLIC_API_URL` and connects to `http://localhost:8000`. Set this in `eas.json` for staging and production build profiles.
+`EXPO_PUBLIC_API_URL` is respected in development and production. If it is not set, iOS Simulator falls back to `http://localhost:8000` and Android Emulator falls back to `http://10.0.2.2:8000`; physical devices and production builds must set the variable.
 
 ---
 

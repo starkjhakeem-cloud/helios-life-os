@@ -88,11 +88,17 @@ async function parseApiError(response: Response): Promise<ApiError> {
 function wrapNetworkError(err: unknown): ApiError {
   if (err instanceof ApiError) return err;
   const name = (err as { name?: string }).name;
-  const result =
-    name === "AbortError"
-      ? new ApiError("Request timed out. Check your connection.", 0)
-      : new ApiError("Network unavailable. Check your connection.", 0);
-  reportError(result, "Network request failed", { originalErrorName: name });
+  const currentApi = API_CONFIG.BASE_URL || "Not configured";
+  const detail = API_CONFIG.CONFIGURATION_ERROR
+    ? ` ${API_CONFIG.CONFIGURATION_ERROR}`
+    : name === "AbortError"
+      ? " Request timed out."
+      : " Check your connection.";
+  const result = new ApiError(`Backend unavailable.\nCurrent API: ${currentApi}.${detail}`, 0);
+  reportError(result, "Network request failed", {
+    currentApi,
+    originalErrorName: name,
+  });
   return result;
 }
 
@@ -108,6 +114,12 @@ async function makeFetch(
   token: string | undefined,
   body?: unknown,
 ): Promise<Response> {
+  if (API_CONFIG.CONFIGURATION_ERROR) {
+    throw new ApiError(
+      `Backend unavailable.\nCurrent API: Not configured. ${API_CONFIG.CONFIGURATION_ERROR}`,
+      0,
+    );
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT_MS);
   try {
@@ -219,6 +231,12 @@ async function del(endpoint: string, token?: string): Promise<void> {
  * Used only for the /auth/refresh endpoint itself to avoid recursive refresh loops.
  */
 async function postRaw<T>(endpoint: string, body: unknown): Promise<T> {
+  if (API_CONFIG.CONFIGURATION_ERROR) {
+    throw new ApiError(
+      `Backend unavailable.\nCurrent API: Not configured. ${API_CONFIG.CONFIGURATION_ERROR}`,
+      0,
+    );
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT_MS);
   try {

@@ -15,7 +15,35 @@ npx expo start
 
 Press `i` to open in iOS Simulator. The app expects the HELIOS backend running on `localhost:8000` — see the [backend README](../backend/README.md) for setup instructions.
 
-> Running on a physical device? Update `BASE_URL` in `src/config/api.ts` to your machine's local IP address.
+> Running on a physical device? Set `EXPO_PUBLIC_API_URL` in `mobile/.env` to your machine's LAN address, for example `http://192.168.1.110:8000`. Do not edit source code for device switching.
+
+## API URL Resolution
+
+HELIOS resolves the backend URL in this order:
+
+1. `EXPO_PUBLIC_API_URL`, when present, is always used in development and production.
+2. iOS Simulator falls back to `http://localhost:8000`.
+3. Android Emulator falls back to `http://10.0.2.2:8000`.
+4. Physical devices and production builds without `EXPO_PUBLIC_API_URL` show a clear configuration error.
+
+Local physical-device setup:
+
+```bash
+cp .env.example .env
+ipconfig getifaddr en0
+```
+
+Set the result in `mobile/.env`:
+
+```ini
+EXPO_PUBLIC_API_URL=http://<your-mac-lan-ip>:8000
+```
+
+Restart Expo after changing `.env`:
+
+```bash
+npx expo start --clear
+```
 
 ---
 
@@ -113,9 +141,9 @@ On every app start:
 
 `services/apiClient.ts` provides `get`, `post`, `patch`, and `del` methods. Each:
 - Attaches `Authorization: Bearer <token>` when a token is provided
-- Uses `AbortController` with a 5-second timeout (`API_CONFIG.TIMEOUT_MS`)
+- Uses `AbortController` with a 15-second timeout (`API_CONFIG.TIMEOUT_MS`)
 - Parses FastAPI error responses (both string `detail` and array `detail` formats)
-- Converts `AbortError` → "Request timed out" and `TypeError` → "Network error"
+- Converts backend reachability failures into a frontend-safe message that includes the current API URL
 
 ---
 

@@ -226,6 +226,9 @@ function formatRelativeTime(iso: string, now: Date): string {
 
 function mapToFriendlyError(raw: string): string {
   const lower = raw.toLowerCase();
+  if (lower.includes("backend unavailable") || lower.includes("current api:")) {
+    return raw;
+  }
   if (lower.includes("internal server error") || lower.includes("500")) {
     return "HELIOS couldn't reach the service. This is a temporary issue.";
   }
