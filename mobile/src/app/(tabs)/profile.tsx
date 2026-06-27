@@ -32,6 +32,7 @@ import {
   SessionExpiredError,
   type ReminderOut,
   type ThemePreference,
+  type TimeFormat,
   type JobType,
   type AssistantNamePreference,
   type AssistantTone,
@@ -66,6 +67,11 @@ const AI_NAME_OPTIONS: { value: AssistantNamePreference; label: string }[] = [
   { value: "display_name", label: "Display" },
   { value: "preferred_name", label: "Preferred" },
   { value: "first_name", label: "First" },
+];
+
+const TIME_FORMAT_OPTIONS: { value: TimeFormat; label: string }[] = [
+  { value: "12h", label: "12 HR" },
+  { value: "24h", label: "24 HR" },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -762,7 +768,6 @@ function PersonalizationModal({ visible, onClose, accessToken }: Personalization
     primary_location,
     work_focus,
     daily_brief_time,
-    time_format,
     important_life_areas,
     isSaving,
     updatePreferences,
@@ -775,7 +780,6 @@ function PersonalizationModal({ visible, onClose, accessToken }: Personalization
     primary_location: primary_location ?? "",
     work_focus: work_focus ?? "",
     daily_brief_time: daily_brief_time,
-    time_format: time_format,
     important_life_areas: [...important_life_areas],
   });
   const [formError, setFormError] = useState<string | null>(null);
@@ -790,7 +794,6 @@ function PersonalizationModal({ visible, onClose, accessToken }: Personalization
         primary_location: primary_location ?? "",
         work_focus: work_focus ?? "",
         daily_brief_time: daily_brief_time,
-        time_format: time_format,
         important_life_areas: [...important_life_areas],
       });
       setFormError(null);
@@ -825,7 +828,6 @@ function PersonalizationModal({ visible, onClose, accessToken }: Personalization
         primary_location: draft.primary_location.trim() || null,
         work_focus: draft.work_focus.trim() || null,
         daily_brief_time: draft.daily_brief_time,
-        time_format: draft.time_format,
         important_life_areas: draft.important_life_areas as LifeArea[],
       });
       setSuccess(true);
@@ -959,28 +961,6 @@ function PersonalizationModal({ visible, onClose, accessToken }: Personalization
               maxLength={5}
               keyboardType="numbers-and-punctuation"
             />
-
-            {/* Time Format */}
-            <Text style={styles.fieldLabel}>TIME FORMAT</Text>
-            <View style={[styles.segmented, { marginBottom: spacing.md, alignSelf: "flex-start" }]}>
-              {(["12h", "24h"] as const).map((fmt) => (
-                <TouchableOpacity
-                  key={fmt}
-                  style={[styles.segment, draft.time_format === fmt && styles.segmentActive]}
-                  onPress={() => setDraft((d) => ({ ...d, time_format: fmt }))}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.segmentText,
-                      draft.time_format === fmt && styles.segmentTextActive,
-                    ]}
-                  >
-                    {fmt.toUpperCase()}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
 
             {/* Important Life Areas */}
             <Text style={styles.fieldLabel}>IMPORTANT LIFE AREAS</Text>
@@ -1267,7 +1247,6 @@ export default function ProfileScreen() {
   if (primary_location) personalizationSummary.push({ label: "Primary Location", value: primary_location });
   if (work_focus) personalizationSummary.push({ label: "Work Focus", value: work_focus });
   if (daily_brief_time) personalizationSummary.push({ label: "Daily Brief", value: daily_brief_time });
-  personalizationSummary.push({ label: "Time Format", value: time_format });
   if (important_life_areas.length > 0) {
     const labels = important_life_areas.map((a) => LIFE_AREA_OPTIONS.find((o) => o.value === a)?.label ?? a);
     personalizationSummary.push({ label: "Life Areas", value: labels.join(", ") });
@@ -1444,6 +1423,32 @@ export default function ProfileScreen() {
               <InfoRow label="API Version" value={version.helios_version ?? "HELIOS 2.6"} />
               <View style={styles.cardDivider} />
               <InfoRow label="Service" value={version.service} />
+              <View style={styles.cardDivider} />
+              <View style={styles.prefRow}>
+                <Text style={styles.prefLabel}>Time Format</Text>
+                <View style={styles.segmented}>
+                  {TIME_FORMAT_OPTIONS.map((opt) => (
+                    <TouchableOpacity
+                      key={opt.value}
+                      style={[styles.segment, time_format === opt.value && styles.segmentActive]}
+                      onPress={() => handlePrefChange("time_format", opt.value)}
+                      activeOpacity={0.7}
+                      disabled={prefsSaving}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Use ${opt.label} time`}
+                    >
+                      <Text
+                        style={[
+                          styles.segmentText,
+                          time_format === opt.value && styles.segmentTextActive,
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
             </>
           ) : (
             <View style={styles.loadingRow}>

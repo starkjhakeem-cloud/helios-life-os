@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { SymbolView } from "expo-symbols";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { radius, spacing, typography, type ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
@@ -33,6 +34,7 @@ export default function DateTimeField({
   disabled = false,
 }: Props) {
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [open, setOpen] = useState(false);
   const [androidStep, setAndroidStep] = useState<"date" | "time">("date");
@@ -96,24 +98,42 @@ export default function DateTimeField({
       </TouchableOpacity>
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      {open ? (
+      {open && Platform.OS === "android" ? (
         <View style={styles.pickerWrap}>
           <DateTimePicker
             value={pickerValue}
-            mode={Platform.OS === "android" ? (androidStep as "date" | "time") : mode}
-            display={Platform.OS === "ios" ? "spinner" : "default"}
+            mode={androidStep as "date" | "time"}
+            display="default"
             minimumDate={minimumDate}
             maximumDate={maximumDate}
             accentColor={colors.accent}
             themeVariant={isDark ? "dark" : "light"}
             onChange={handlePickerChange}
           />
-          {Platform.OS === "ios" ? (
-            <TouchableOpacity style={styles.doneButton} onPress={() => setOpen(false)} activeOpacity={0.75}>
-              <Text style={styles.doneText}>DONE</Text>
-            </TouchableOpacity>
-          ) : null}
         </View>
+      ) : null}
+
+      {Platform.OS === "ios" ? (
+        <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+          <View style={styles.modalOverlay}>
+            <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setOpen(false)} />
+            <View style={[styles.iosPickerCard, { marginBottom: insets.bottom + spacing.lg }]}>
+              <DateTimePicker
+                value={pickerValue}
+                mode={mode}
+                display="spinner"
+                minimumDate={minimumDate}
+                maximumDate={maximumDate}
+                accentColor={colors.accent}
+                themeVariant={isDark ? "dark" : "light"}
+                onChange={handlePickerChange}
+              />
+              <TouchableOpacity style={styles.doneButton} onPress={() => setOpen(false)} activeOpacity={0.75}>
+                <Text style={styles.doneText}>DONE</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       ) : null}
     </View>
   );
@@ -161,6 +181,25 @@ function createStyles(colors: ThemeColors) {
       backgroundColor: colors.glassSubtle,
       overflow: "hidden",
       paddingVertical: spacing.xs,
+    },
+    modalOverlay: {
+      flex: 1,
+      justifyContent: "center",
+      paddingHorizontal: spacing.lg,
+      backgroundColor: colors.overlay,
+    },
+    iosPickerCard: {
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.primaryBorder,
+      backgroundColor: colors.glassStrong,
+      overflow: "hidden",
+      paddingTop: spacing.xs,
+      shadowColor: colors.shadow,
+      shadowOpacity: 0.22,
+      shadowRadius: 28,
+      shadowOffset: { width: 0, height: 16 },
+      elevation: 20,
     },
     doneButton: {
       alignSelf: "flex-end",

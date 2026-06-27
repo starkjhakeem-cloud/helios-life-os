@@ -312,7 +312,7 @@ export default function HomeScreen() {
           styles.content,
           {
             paddingTop: insets.top + 20,
-            paddingBottom: insets.bottom + 188,
+            paddingBottom: insets.bottom + 224,
           },
         ]}
       >
