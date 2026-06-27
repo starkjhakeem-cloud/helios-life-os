@@ -12,17 +12,44 @@ The project is a full-stack mobile platform built with a React Native / Expo iOS
 
 Sanitized V3 screenshots are included in the repository so the product can be evaluated without exposing personal account data.
 
-| Home | Assistant | Goals |
-|---|---|---|
-| ![HELIOS Home screen](screenshots/sanitized/01-home.png) | ![HELIOS Assistant screen](screenshots/sanitized/02-assistant.png) | ![HELIOS Goals screen](screenshots/sanitized/03-goals.png) |
-
-| Tasks | Calendar | Connected Services |
-|---|---|---|
-| ![HELIOS Tasks screen](screenshots/sanitized/04-tasks.png) | ![HELIOS Calendar screen](screenshots/sanitized/05-calendar.png) | ![HELIOS Connected Services screen](screenshots/sanitized/07-connected-services.png) |
-
-| More | Profile | Settings |
-|---|---|---|
-| ![HELIOS More screen](screenshots/sanitized/06-more.png) | ![HELIOS Profile screen](screenshots/sanitized/08-profile.png) | ![HELIOS Settings screen](screenshots/sanitized/10-settings.png) |
+<table>
+  <tr>
+    <th>Home</th>
+    <th>Assistant</th>
+    <th>Goals</th>
+  </tr>
+  <tr>
+    <td><img src="screenshots/sanitized/01-home.png" alt="HELIOS Home screen" width="240" /></td>
+    <td><img src="screenshots/sanitized/02-assistant.png" alt="HELIOS Assistant screen" width="240" /></td>
+    <td><img src="screenshots/sanitized/03-goals.png" alt="HELIOS Goals screen" width="240" /></td>
+  </tr>
+  <tr>
+    <th>Tasks</th>
+    <th>Calendar</th>
+    <th>More</th>
+  </tr>
+  <tr>
+    <td><img src="screenshots/sanitized/04-tasks.png" alt="HELIOS Tasks screen" width="240" /></td>
+    <td><img src="screenshots/sanitized/05-calendar.png" alt="HELIOS Calendar screen" width="240" /></td>
+    <td><img src="screenshots/sanitized/06-more.png" alt="HELIOS More screen" width="240" /></td>
+  </tr>
+  <tr>
+    <th>Connected Services</th>
+    <th>Profile</th>
+    <th>Settings</th>
+  </tr>
+  <tr>
+    <td><img src="screenshots/sanitized/07-connected-services.png" alt="HELIOS Connected Services screen" width="240" /></td>
+    <td><img src="screenshots/sanitized/08-profile.png" alt="HELIOS Profile screen" width="240" /></td>
+    <td><img src="screenshots/sanitized/10-settings.png" alt="HELIOS Settings screen" width="240" /></td>
+  </tr>
+  <tr>
+    <th colspan="3">Notifications</th>
+  </tr>
+  <tr>
+    <td colspan="3" align="center"><img src="screenshots/sanitized/09-notifications.png" alt="HELIOS Notifications screen" width="240" /></td>
+  </tr>
+</table>
 
 ---
 
