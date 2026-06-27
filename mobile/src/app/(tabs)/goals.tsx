@@ -26,11 +26,13 @@ import * as Haptics from "expo-haptics";
 
 import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
+import DateTimeField from "../../components/ui/DateTimeField";
 import { spacing, radius, typography, type ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 import { useAuthStore, useGoalsStore, useTasksStore } from "../../store";
 import type { Goal } from "../../services/goalsService";
 import type { Task } from "../../services/tasksService";
+import { formatBackendDate, parseDateTimeInput } from "../../utils/dateInput";
 import { isActiveGoalStatus } from "../../utils/homeFormatting";
 import { LIFE_AREAS, assignLifeArea, type LifeAreaId, type LifeAreaDef } from "../../utils/lifeAreas";
 
@@ -295,7 +297,7 @@ export default function GoalsScreen() {
     <>
       <FlatList
         style={{ backgroundColor: colors.background }}
-        contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 106 }]}
+        contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 160 }]}
         data={visibleGoals}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
@@ -370,7 +372,13 @@ export default function GoalsScreen() {
             <Text style={styles.sheetTitle}>{editingGoal ? "EDIT GOAL" : "NEW GOAL"}</Text>
             <Input label="GOAL TITLE" placeholder="e.g. Launch HELIOS" value={form.title} onChangeText={(t) => setForm((f) => ({ ...f, title: t }))} error={formError ?? undefined} autoFocus />
             <Input label="DESCRIPTION" placeholder="What does success look like?" value={form.description} onChangeText={(t) => setForm((f) => ({ ...f, description: t }))} multiline style={styles.multiline} autoCapitalize="sentences" />
-            <Input label="TARGET DATE" placeholder="e.g. 2027-06-01" value={form.target_date} onChangeText={(t) => setForm((f) => ({ ...f, target_date: t }))} autoCapitalize="none" />
+            <DateTimeField
+              label="TARGET DATE"
+              mode="date"
+              placeholder="Select target date"
+              value={form.target_date ? parseDateTimeInput(form.target_date) : null}
+              onChange={(date) => setForm((f) => ({ ...f, target_date: date ? formatBackendDate(date) : "" }))}
+            />
             <View style={styles.sheetActions}>
               <Button label="CANCEL" variant="secondary" onPress={closeModal} />
               <Button label={editingGoal ? "SAVE" : "CREATE"} onPress={handleSubmit} loading={isMutating} />

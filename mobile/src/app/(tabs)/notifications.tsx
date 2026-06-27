@@ -209,7 +209,7 @@ export default function NotificationsScreen() {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 160 }]}
       showsVerticalScrollIndicator={false}
       refreshControl={
         <RefreshControl refreshing={isLoading} onRefresh={load} tintColor={colors.accent} />

@@ -64,7 +64,7 @@ export default function MoreScreen() {
   return (
     <ScrollView
       style={{ backgroundColor: colors.background }}
-      contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + 106 }]}
+      contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + 160 }]}
       showsVerticalScrollIndicator={false}
     >
       <MoreHeroCard colors={colors} styles={styles} integrations={integrations} />

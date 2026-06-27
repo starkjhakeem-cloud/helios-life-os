@@ -256,7 +256,7 @@ export default function LifeAreaScreen() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 106 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 160 }]}
         showsVerticalScrollIndicator={false}
       >
         {/* ── Hero ──────────────────────────────────────────────────────── */}

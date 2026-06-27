@@ -613,7 +613,7 @@ export default function IntegrationsScreen() {
       showsVerticalScrollIndicator={false}
       contentContainerStyle={[
         styles.container,
-        { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 106 },
+        { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 160 },
       ]}
       refreshControl={
         <RefreshControl refreshing={isLoading} onRefresh={load} tintColor={colors.accentCyan} />

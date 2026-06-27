@@ -638,7 +638,7 @@ export default function CalendarScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.container,
-          { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 116 },
+          { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 160 },
         ]}
         refreshControl={
           <RefreshControl refreshing={isLoading} onRefresh={onRefresh} tintColor={colors.accentCyan} />
