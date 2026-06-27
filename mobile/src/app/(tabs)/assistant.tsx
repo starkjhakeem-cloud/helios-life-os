@@ -62,6 +62,15 @@ const AI_STATUS_CONFIG: Record<AIStatus, { label: string; color: string }> = {
 
 type AttachmentType = "image" | "pdf" | "voice" | "file";
 
+// ── Message delivery status ───────────────────────────────────────────────────
+// Future states: "sending" | "failed" | "retry" | "synced"
+type MessageStatus = "sent";
+
+function MessageStatusIcon({ status, colors }: { status: MessageStatus; colors: ThemeColors }) {
+  const icons: Record<MessageStatus, string> = { sent: "✓" };
+  return <Text style={{ fontSize: 11, color: colors.textMuted, marginLeft: 3 }}>{icons[status]}</Text>;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatTime(iso: string) {
@@ -323,7 +332,10 @@ function UserBubble({ message, colors }: { message: ChatMessage; colors: ThemeCo
       <View style={s.userBubble}>
         <Text style={s.userText}>{message.content}</Text>
       </View>
-      <Text style={s.msgTimestamp}>{formatTime(message.timestamp)} ✓✓</Text>
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <Text style={s.msgTimestamp}>{formatTime(message.timestamp)}</Text>
+        <MessageStatusIcon status="sent" colors={colors} />
+      </View>
     </View>
   );
 }
