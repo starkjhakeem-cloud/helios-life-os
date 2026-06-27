@@ -2,7 +2,7 @@ import type { HeliosCalendarEvent, HeliosGoal, HeliosTask } from "./types";
 
 // ── Category patterns ─────────────────────────────────────────────────────────
 // Used to classify tasks by life area so priority bonuses can be applied.
-// Order reflects Mr. Stark's stated life priorities.
+// Order reflects the current product demo's priority model.
 
 const WGU_RE     = /\bd278\b|wgu|study session|objective assessment|scripting|programming foundations|d\s*278/i;
 const HELIOS_RE  = /helios|home screen|hero card|goals.*(redesign|screen)|calendar.*(redesign|screen)|task center|daily brief|energy core|commit.*git|git.*commit|push.*github|github.*push/i;

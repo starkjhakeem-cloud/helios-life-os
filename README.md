@@ -10,7 +10,9 @@ The project is a full-stack mobile platform built with a React Native / Expo iOS
 
 ## Product Preview
 
-Sanitized V3 screenshots are included in the repository so the product can be evaluated without exposing personal account data.
+Sanitized V3 screenshots are included in the repository so the product can be evaluated without exposing personal account data. The screenshots use a dummy account (`Alex Demo`) and include both dark and light mode captures.
+
+### Dark Mode
 
 <table>
   <tr>
@@ -48,6 +50,47 @@ Sanitized V3 screenshots are included in the repository so the product can be ev
   </tr>
   <tr>
     <td colspan="3" align="center"><img src="screenshots/sanitized/09-notifications.png" alt="HELIOS Notifications screen" width="240" /></td>
+  </tr>
+</table>
+
+### Light Mode
+
+<table>
+  <tr>
+    <th>Home</th>
+    <th>Assistant</th>
+    <th>Goals</th>
+  </tr>
+  <tr>
+    <td><img src="screenshots/sanitized-light/01-home.png" alt="HELIOS Home screen in light mode" width="240" /></td>
+    <td><img src="screenshots/sanitized-light/02-assistant.png" alt="HELIOS Assistant screen in light mode" width="240" /></td>
+    <td><img src="screenshots/sanitized-light/03-goals.png" alt="HELIOS Goals screen in light mode" width="240" /></td>
+  </tr>
+  <tr>
+    <th>Tasks</th>
+    <th>Calendar</th>
+    <th>More</th>
+  </tr>
+  <tr>
+    <td><img src="screenshots/sanitized-light/04-tasks.png" alt="HELIOS Tasks screen in light mode" width="240" /></td>
+    <td><img src="screenshots/sanitized-light/05-calendar.png" alt="HELIOS Calendar screen in light mode" width="240" /></td>
+    <td><img src="screenshots/sanitized-light/06-more.png" alt="HELIOS More screen in light mode" width="240" /></td>
+  </tr>
+  <tr>
+    <th>Connected Services</th>
+    <th>Profile</th>
+    <th>Settings</th>
+  </tr>
+  <tr>
+    <td><img src="screenshots/sanitized-light/07-connected-services.png" alt="HELIOS Connected Services screen in light mode" width="240" /></td>
+    <td><img src="screenshots/sanitized-light/08-profile.png" alt="HELIOS Profile screen in light mode" width="240" /></td>
+    <td><img src="screenshots/sanitized-light/10-settings.png" alt="HELIOS Settings screen in light mode" width="240" /></td>
+  </tr>
+  <tr>
+    <th colspan="3">Notifications</th>
+  </tr>
+  <tr>
+    <td colspan="3" align="center"><img src="screenshots/sanitized-light/09-notifications.png" alt="HELIOS Notifications screen in light mode" width="240" /></td>
   </tr>
 </table>
 

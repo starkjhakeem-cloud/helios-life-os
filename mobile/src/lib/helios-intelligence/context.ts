@@ -8,145 +8,77 @@ import type {
 
 // ── Demo context ──────────────────────────────────────────────────────────────
 // Used as a fallback when real store data has not yet loaded.
-// Reflects Mr. Stark's actual priorities as of June 2026.
+// Uses neutral placeholder data so public demo states never expose personal context.
 
 const TODAY = new Date().toISOString().split("T")[0];
 
 export const DEMO_CONTEXT: HeliosIntelligenceContext = {
   profile: {
-    name: "Mr. Stark",
-    location: "New York, NY",
-    timezone: "America/New_York",
+    name: "Alex Demo",
+    location: "Austin, TX",
+    timezone: "America/Chicago",
   },
   goals: [
     {
       id: "g1",
-      title: "Launch HELIOS",
+      title: "Launch HELIOS Beta",
       status: "active",
       description:
-        "Build and ship HELIOS OS. Current milestone: Home screen polish → Goals redesign → Calendar redesign → Beta launch.",
+        "Prepare a polished private beta with clean onboarding, stable integrations, and clear demo materials.",
     },
     {
       id: "g2",
-      title: "Graduate from WGU",
+      title: "Build Portfolio Case Study",
       status: "active",
       description:
-        "Current course: D278 – Scripting and Programming Foundations. Next step: pass the OA.",
+        "Turn HELIOS into a recruiter-ready product story with screenshots, architecture notes, and a concise walkthrough.",
     },
     {
       id: "g3",
-      title: "Build Software Engineering Portfolio",
+      title: "Improve Weekly Health Rhythm",
       status: "active",
-      description:
-        "Production-quality projects, improved GitHub, resume preparation, job applications.",
+      description: "Keep a steady workout and sleep routine while finishing the beta sprint.",
     },
     {
       id: "g4",
-      title: "Publish Gravewood Book One",
-      status: "planning",
-      description:
-        "Original fiction universe. Worldbuilding complete. Chapter writing in progress.",
-    },
-    {
-      id: "g5",
-      title: "Expand Creative Portfolio",
+      title: "Plan Product Launch Content",
       status: "active",
       description:
-        "Photography, fashion design, animation, music production, character design.",
-    },
-    {
-      id: "g6",
-      title: "Improve Health & Fitness",
-      status: "active",
-      description: "Consistent workouts, improved nutrition, increased endurance.",
-    },
-    {
-      id: "g7",
-      title: "Build Financial Independence",
-      status: "active",
-      description: "Long-term: sustainable income through software, HELIOS, and creative work.",
+        "Draft a landing-page narrative, demo script, and launch checklist for early testers.",
     },
   ],
   tasks: [
     {
       id: "t1",
-      title: "Complete a D278 study session",
-      status: "todo",
-      priority: "high",
-      dueDate: TODAY,
-      linkedGoalId: "g2",
-    },
-    {
-      id: "t2",
-      title: "Review D278 OA preparation materials",
-      status: "todo",
-      priority: "medium",
-      dueDate: TODAY,
-      linkedGoalId: "g2",
-    },
-    {
-      id: "t3",
-      title: "Finish Hero Card refinement",
+      title: "Review Home and Assistant flows",
       status: "in_progress",
       priority: "high",
       dueDate: TODAY,
       linkedGoalId: "g1",
     },
     {
-      id: "t4",
-      title: "Review Home screen UI end-to-end",
+      id: "t2",
+      title: "Capture final README screenshots",
       status: "todo",
       priority: "high",
       dueDate: TODAY,
-      linkedGoalId: "g1",
+      linkedGoalId: "g2",
     },
     {
-      id: "t5",
-      title: "Push latest HELIOS commits to GitHub",
+      id: "t3",
+      title: "Draft beta tester checklist",
       status: "todo",
       priority: "medium",
       dueDate: TODAY,
       linkedGoalId: "g1",
     },
     {
-      id: "t6",
-      title: "Begin Goals screen redesign",
-      status: "todo",
-      priority: "high",
-      dueDate: TODAY,
-      linkedGoalId: "g1",
-    },
-    {
-      id: "t7",
-      title: "Edit one photography image",
-      status: "todo",
-      priority: "low",
-      dueDate: TODAY,
-      linkedGoalId: "g5",
-    },
-    {
-      id: "t8",
-      title: "Write additional Gravewood content",
-      status: "todo",
-      priority: "low",
-      dueDate: TODAY,
-      linkedGoalId: "g4",
-    },
-    {
-      id: "t9",
-      title: "Review GitHub repository structure",
+      id: "t4",
+      title: "Schedule recovery workout",
       status: "todo",
       priority: "medium",
       dueDate: TODAY,
       linkedGoalId: "g3",
-    },
-    {
-      id: "t10",
-      title: "Workout session",
-      status: "todo",
-      priority: "medium",
-      dueDate: TODAY,
-      linkedGoalId: "g6",
     },
   ],
   calendarEvents: [],

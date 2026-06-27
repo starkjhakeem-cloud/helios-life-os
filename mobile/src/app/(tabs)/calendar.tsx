@@ -23,7 +23,7 @@ import Input from "../../components/ui/Input";
 import DateTimeField from "../../components/ui/DateTimeField";
 import { radius, spacing, typography, type ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
-import { useAuthStore, useCalendarStore, useTasksStore } from "../../store";
+import { useAuthStore, useCalendarStore, useProfileStore, useTasksStore } from "../../store";
 import type { CalendarEvent, CalendarEventCreate } from "../../store";
 import type { Task } from "../../services/tasksService";
 import { historyService } from "../../services/historyService";
@@ -195,11 +195,11 @@ function formatLongDuration(minutes: number): string {
   return `${h} ${h === 1 ? "hour" : "hours"} ${m} minutes`;
 }
 
-function getGreeting(date: Date): string {
+function getGreeting(date: Date, name: string): string {
   const hour = date.getHours();
-  if (hour < 12) return "Good morning, Mr. Stark.";
-  if (hour < 17) return "Good afternoon, Mr. Stark.";
-  return "Good evening, Mr. Stark.";
+  if (hour < 12) return `Good morning, ${name}.`;
+  if (hour < 17) return `Good afternoon, ${name}.`;
+  return `Good evening, ${name}.`;
 }
 
 function sourceLabel(source: CalendarEvent["source"]): string {
@@ -262,6 +262,10 @@ export default function CalendarScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const accessToken = useAuthStore((s) => s.accessToken);
+  const authUserName = useAuthStore((s) => s.user?.name);
+  const profileDisplayName = useProfileStore((s) => s.display_name);
+  const profileFirstName = useProfileStore((s) => s.first_name);
+  const calendarName = profileDisplayName ?? profileFirstName ?? authUserName ?? "there";
   const { events, isLoading, isMutating, error, fetchEvents, createEvent, updateEvent, deleteEvent } = useCalendarStore();
   const { tasks, fetchTasks } = useTasksStore();
 
@@ -658,7 +662,7 @@ export default function CalendarScreen() {
               ? (dayHistory?.summary ?? "A preserved snapshot of what happened that day.")
               : selectedMode === "future"
                 ? "A planning view for what HELIOS can help prepare."
-                : getGreeting(new Date())}
+                : getGreeting(new Date(), calendarName)}
           </Text>
           <Text style={styles.summaryTitle}>
             {selectedMode === "past" ? "Day Summary" : selectedMode === "future" ? "Planned Summary" : "Today's Summary"}
