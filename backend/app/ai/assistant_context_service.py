@@ -443,7 +443,19 @@ class AssistantContextService:
         # User profile
         profile = context.get("user_profile") or {}
         if profile:
-            name = profile.get("preferred_name") or profile.get("name") or "User"
+            _pref = profile.get("assistant_name_preference") or "display_name"
+            if _pref == "preferred_name" and profile.get("preferred_name"):
+                name = profile["preferred_name"]
+            elif _pref == "first_name" and profile.get("first_name"):
+                name = profile["first_name"]
+            else:
+                name = (
+                    profile.get("display_name")
+                    or profile.get("preferred_name")
+                    or profile.get("first_name")
+                    or profile.get("name")
+                    or "User"
+                )
             lines = [f"OPERATOR: {name}"]
             if profile.get("timezone"):
                 lines.append(f"TIMEZONE: {profile['timezone']}")
@@ -655,12 +667,15 @@ class AssistantContextService:
                 or None
             )
             result["name"] = full_name
+            result["display_name"] = profile.display_name
+            result["first_name"] = profile.first_name
             result["timezone"] = profile.timezone or "UTC"
             result["location"] = ", ".join(
                 filter(None, [profile.city, profile.state])
             ) or None
         if prefs:
             result["preferred_name"] = prefs.preferred_name
+            result["assistant_name_preference"] = prefs.assistant_name_preference or "display_name"
             if not result.get("location"):
                 result["location"] = prefs.primary_location or prefs.location or None
             result["work_focus"] = prefs.work_focus
