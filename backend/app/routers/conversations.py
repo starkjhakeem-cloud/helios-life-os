@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.ai.assistant_context_service import AssistantContextService
 from app.ai.factory import get_ai_provider
+from app.ai.name_resolver import resolve_ai_name
 from app.ai.types import HeliosAIError
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
@@ -240,7 +241,7 @@ def send_message(
     try:
         ai_resp = get_ai_provider().generate_chat_reply(
             message=payload.message,
-            user_name=current_user.name,
+            user_name=resolve_ai_name(current_user, db),
             context_type=effective_context_type,
             user_context=user_context,
             history=history,

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.ai.assistant_context_service import AssistantContextService
 from app.ai.context_service import ContextScope, build_context
 from app.ai.factory import get_ai_provider
+from app.ai.name_resolver import resolve_ai_name
 from app.ai.types import HeliosAIError
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
@@ -31,41 +32,6 @@ from app.schemas.ai import (
 router = APIRouter()
 
 
-def _resolve_ai_name(user: User, db: Session) -> str:
-    """
-    Returns the name HELIOS uses when addressing this user in AI responses.
-
-    Priority: assistant_name_preference → preferred_name → display_name → first_name → user.name
-    'custom' is reserved for a future phase.
-    """
-    from app.models.user_preferences import UserPreferences
-    from app.models.user_profile import UserProfile
-
-    prefs = db.execute(
-        select(UserPreferences).where(UserPreferences.user_id == user.id)
-    ).scalar_one_or_none()
-
-    profile = db.execute(
-        select(UserProfile).where(UserProfile.user_id == user.id)
-    ).scalar_one_or_none()
-
-    preference = (getattr(prefs, "assistant_name_preference", None) or "display_name")
-
-    if preference == "preferred_name" and prefs and prefs.preferred_name:
-        return prefs.preferred_name
-    if preference == "first_name" and profile and profile.first_name:
-        return profile.first_name
-
-    # Default: display_name, then fall through the full chain
-    if profile and profile.display_name:
-        return profile.display_name
-    if prefs and prefs.preferred_name:
-        return prefs.preferred_name
-    if profile and profile.first_name:
-        return profile.first_name
-    return user.name
-
-
 def _ai_error_detail(exc: RuntimeError) -> str | dict:
     if isinstance(exc, HeliosAIError):
         return exc.public_detail()
@@ -81,11 +47,11 @@ def get_daily_briefing(
         ContextScope.DAILY_BRIEFING,
         user_id=current_user.id,
         db=db,
-        user_name=_resolve_ai_name(current_user, db),
+        user_name=resolve_ai_name(current_user, db),
     )
     try:
         briefing = get_ai_provider().generate_briefing(
-            user_name=_resolve_ai_name(current_user, db),
+            user_name=resolve_ai_name(current_user, db),
             user_context=ctx.text,
         )
         briefing.context_sources = ctx.sources
@@ -115,7 +81,7 @@ def generate_plan(
         ContextScope.PLANNING,
         user_id=current_user.id,
         db=db,
-        user_name=_resolve_ai_name(current_user, db),
+        user_name=resolve_ai_name(current_user, db),
     )
 
     try:
@@ -123,7 +89,7 @@ def generate_plan(
             prompt=payload.prompt,
             horizon=payload.planning_horizon_days,
             goal_title=goal_title,
-            user_name=_resolve_ai_name(current_user, db),
+            user_name=resolve_ai_name(current_user, db),
             user_context=planning_ctx.text,
         )
     except RuntimeError as exc:
@@ -148,7 +114,7 @@ def chat(
     try:
         return get_ai_provider().generate_chat_reply(
             message=payload.message,
-            user_name=_resolve_ai_name(current_user, db),
+            user_name=resolve_ai_name(current_user, db),
             context_type=effective_context_type,
             user_context=user_context,
         )

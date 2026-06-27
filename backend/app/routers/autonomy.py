@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.ai.context_service import ContextScope, build_context
 from app.ai.factory import get_ai_provider
+from app.ai.name_resolver import resolve_ai_name
 from app.ai.types import HeliosAIError
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
@@ -217,7 +218,7 @@ def get_suggestions(
             ContextScope.PLANNING,
             user_id=current_user.id,
             db=db,
-            user_name=current_user.name,
+            user_name=resolve_ai_name(current_user, db),
         )
         user_context = planning_ctx.text
         logger.info(
@@ -237,7 +238,7 @@ def get_suggestions(
     suggestions: list = []
     try:
         suggestions = get_ai_provider().generate_suggestions(
-            user_name=current_user.name,
+            user_name=resolve_ai_name(current_user, db),
             user_context=user_context,
         )
         # OpenAI suggestions currently share the local rule-based suggestion
@@ -270,7 +271,7 @@ def get_suggestions(
             current_user.id,
             degraded,
         )
-        suggestions = _local_fallback_suggestions(current_user.name)
+        suggestions = _local_fallback_suggestions(resolve_ai_name(current_user, db))
 
     trimmed = suggestions[:limit]
 
@@ -329,12 +330,12 @@ def generate_daily_plan(
         ContextScope.PLANNING,
         user_id=current_user.id,
         db=db,
-        user_name=current_user.name,
+        user_name=resolve_ai_name(current_user, db),
     )
 
     try:
         plan = get_ai_provider().generate_daily_plan(
-            user_name=current_user.name,
+            user_name=resolve_ai_name(current_user, db),
             plan_date=plan_date,
             user_context=planning_ctx.text,
         )
@@ -959,7 +960,7 @@ def execute_queue_item(
             ContextScope.PLANNING,
             user_id=current_user.id,
             db=db,
-            user_name=current_user.name,
+            user_name=resolve_ai_name(current_user, db),
         )
 
         try:
@@ -967,7 +968,7 @@ def execute_queue_item(
                 prompt=plan_data.prompt,
                 horizon=plan_data.planning_horizon_days,
                 goal_title=goal_title,
-                user_name=current_user.name,
+                user_name=resolve_ai_name(current_user, db),
                 user_context=planning_ctx.text,
             )
         except RuntimeError as exc:

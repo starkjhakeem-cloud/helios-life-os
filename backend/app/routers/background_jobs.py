@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.ai.context_service import ContextScope, build_context
 from app.ai.factory import get_ai_provider
+from app.ai.name_resolver import resolve_ai_name
 from app.ai.types import HeliosAIError
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
@@ -92,10 +93,10 @@ def _run_daily_briefing(
         ContextScope.DAILY_BRIEFING,
         user_id=current_user.id,
         db=db,
-        user_name=current_user.name,
+        user_name=resolve_ai_name(current_user, db),
     )
     briefing = get_ai_provider().generate_briefing(
-        user_name=current_user.name,
+        user_name=resolve_ai_name(current_user, db),
         user_context=ctx.text,
     )
     summary = briefing.summary[:120] + "…" if len(briefing.summary) > 120 else briefing.summary
@@ -121,10 +122,10 @@ def _run_proactive_scan(
         ContextScope.PLANNING,
         user_id=current_user.id,
         db=db,
-        user_name=current_user.name,
+        user_name=resolve_ai_name(current_user, db),
     )
     suggestions = get_ai_provider().generate_suggestions(
-        user_name=current_user.name,
+        user_name=resolve_ai_name(current_user, db),
         user_context=planning_ctx.text,
     )
     items_created = 0

@@ -3,6 +3,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.ai.agent_context import build_agent_context
+from app.ai.name_resolver import resolve_ai_name
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.goal import Goal
@@ -291,7 +292,7 @@ def orchestrate(
         agents=participating,
         context_scope=payload.context_scope,
         user_id=current_user.id,
-        user_name=current_user.name,
+        user_name=resolve_ai_name(current_user, db),
         db=db,
     )
 
