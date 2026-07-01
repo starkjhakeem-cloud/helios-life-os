@@ -15,6 +15,7 @@ from app.dependencies.auth import get_current_user
 from app.models.conversation import Conversation, ConversationMessage
 from app.models.user import User
 from app.schemas.conversations import (
+    ClientClockContext,
     ConversationDetail,
     ConversationSummary,
     MessageRequest,
@@ -45,6 +46,31 @@ def _parse_meta(raw: str | None) -> dict:
         return json.loads(raw)
     except (json.JSONDecodeError, ValueError):
         return {"suggested_actions": [], "follow_up_questions": [], "recommended_actions": [], "provider": None}
+
+
+def _format_client_clock(clock: ClientClockContext | None) -> str | None:
+    if not clock:
+        return None
+
+    lines = ["LIVE CLOCK:"]
+    lines.append(f"  CURRENT TIME: {clock.current_time}")
+
+    if clock.timezone:
+        lines.append(f"  TIMEZONE: {clock.timezone}")
+    if clock.source:
+        lines.append(f"  SOURCE: {clock.source}")
+    if clock.sync_status:
+        lines.append(f"  SYNC STATUS: {clock.sync_status}")
+    if clock.latency_ms is not None:
+        lines.append(f"  SYNC LATENCY: {clock.latency_ms} ms")
+    if clock.device_time:
+        lines.append(f"  DEVICE TIME: {clock.device_time}")
+    if clock.last_synced_at:
+        lines.append(f"  LAST SYNCED AT: {clock.last_synced_at}")
+    if clock.time_format:
+        lines.append(f"  USER TIME FORMAT: {clock.time_format}")
+
+    return "\n".join(lines)
 
 
 def _to_stored(msg: ConversationMessage) -> StoredMessage:
@@ -236,6 +262,9 @@ def send_message(
     )
     user_context: str | None = _svc.summarize_context_for_prompt(_ctx) or None
     effective_context_type = _ctx["retrieval_metadata"]["context_type"]
+    clock_context = _format_client_clock(payload.client_clock)
+    if clock_context:
+        user_context = f"{clock_context}\n\n{user_context}" if user_context else clock_context
 
     # Generate AI reply, passing conversation history for multi-turn coherence
     try:

@@ -30,10 +30,23 @@ class ConversationDetail(BaseModel):
     updated_at: str
 
 
+class ClientClockContext(BaseModel):
+    current_time: str
+    device_time: str | None = None
+    source: str | None = None
+    sync_status: str | None = None
+    timezone: str | None = None
+    time_format: str | None = None
+    offset_ms: int | None = None
+    latency_ms: int | None = None
+    last_synced_at: str | None = None
+
+
 class MessageRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
     context_type: str | None = None
     include_context: bool = False
+    client_clock: ClientClockContext | None = None
 
 
 class MessageResponse(BaseModel):

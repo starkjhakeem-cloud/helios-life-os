@@ -17,7 +17,6 @@ import type { SFSymbol } from "sf-symbols-typescript";
 
 import HeliosEnergyCore, { type CoreState } from "../../components/HeliosEnergyCore";
 import {
-  useAppStore,
   useAuthStore,
   useAutonomyStore,
   useBackgroundJobsStore,
@@ -37,13 +36,11 @@ import type { TaskSuggestion } from "../../services/taskEngineService";
 import { useTheme } from "../../theme/ThemeContext";
 import type { ThemeColors } from "../../theme/theme";
 import {
-  formatClockSyncStatus,
   formatHeroDate,
-  formatHeroLiveTime,
-  formatHeroLocationLabel,
+  formatHeroTimeLocation,
   getTimeBasedGreeting,
 } from "../../utils/homeFormatting";
-import { useConnectedClock } from "../../hooks/useCurrentDateTime";
+import { useCurrentDateTime } from "../../hooks/useCurrentDateTime";
 import {
   buildIntelligenceContext,
   categorizeTask,
@@ -164,8 +161,7 @@ export default function HomeScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const clock = useConnectedClock();
-  const now = clock.now;
+  const now = useCurrentDateTime();
   const accessToken = useAuthStore((s) => s.accessToken);
   const authUserName = useAuthStore((s) => s.user?.name ?? "Operator");
   const profileDisplayName = useProfileStore((s) => s.display_name);
@@ -185,7 +181,6 @@ export default function HomeScreen() {
   const aiSendError = useConversationStore((s) => s.sendError);
   const location = useSettingsStore((s) => s.location);
   const timeFormat = useSettingsStore((s) => s.time_format);
-  const systemConnectionStatus = useAppStore((s) => s.systemStatus);
   const safeGoals = useMemo(() => goals ?? [], [goals]);
   const safeTasks = useMemo(() => tasks ?? [], [tasks]);
   const taskSuggestions = useTaskEngineStore((s) => s.suggestions);
@@ -269,9 +264,7 @@ export default function HomeScreen() {
 
   const greeting = getTimeBasedGreeting(now);
   const dateStr = formatHeroDate(now);
-  const liveTimeStr = formatHeroLiveTime(now, timeFormat);
-  const locationStr = formatHeroLocationLabel(location);
-  const clockStatusStr = formatClockSyncStatus(clock.syncStatus, clock.latencyMs);
+  const timeLocationStr = formatHeroTimeLocation(now, location, timeFormat);
 
   const displayName = userName;
 
@@ -332,10 +325,7 @@ export default function HomeScreen() {
           greeting={greeting}
           userName={displayName}
           dateStr={dateStr}
-          liveTimeStr={liveTimeStr}
-          locationStr={locationStr}
-          clockStatusStr={clockStatusStr}
-          clockIsLive={clock.isLive && systemConnectionStatus !== "offline"}
+          timeLocationStr={timeLocationStr}
           systemStatus={systemStatus}
           onPressStatus={onPressStatus}
           assistantMessage={`${heroMsg.primary}\n${heroMsg.secondary}`}
@@ -434,10 +424,7 @@ function Hero({
   greeting,
   userName,
   dateStr,
-  liveTimeStr,
-  locationStr,
-  clockStatusStr,
-  clockIsLive,
+  timeLocationStr,
   systemStatus,
   onPressStatus,
   assistantMessage,
@@ -445,10 +432,7 @@ function Hero({
   greeting: string;
   userName: string;
   dateStr: string;
-  liveTimeStr: string;
-  locationStr: string;
-  clockStatusStr: string;
-  clockIsLive: boolean;
+  timeLocationStr: string;
   systemStatus: SystemStatus;
   onPressStatus: (() => void) | null;
   assistantMessage: string;
@@ -465,19 +449,7 @@ function Hero({
         <Text style={s.heroName} numberOfLines={2}>{userName}</Text>
         <View style={s.heroDateBlock}>
           <Text style={s.heroDate}>{dateStr}</Text>
-          <Text style={s.heroClockTime}>{liveTimeStr}</Text>
-          <View style={s.heroClockMetaRow}>
-            <View
-              style={[
-                s.heroClockDot,
-                { backgroundColor: clockIsLive ? colors.success : colors.warning },
-              ]}
-            />
-            <Text style={s.heroClockMetaText} numberOfLines={1}>
-              {clockStatusStr}
-            </Text>
-          </View>
-          <Text style={s.heroTimeLocation} numberOfLines={1}>{locationStr}</Text>
+          <Text style={s.heroTimeLocation}>{timeLocationStr}</Text>
         </View>
       </View>
 
@@ -1210,36 +1182,7 @@ function createStyles(colors: ThemeColors) {
       fontWeight: "700",
     },
     heroDateBlock: {
-      gap: 3,
-    },
-    heroClockTime: {
-      color: colors.textPrimary,
-      fontSize: 22,
-      lineHeight: 27,
-      fontWeight: "900",
-      letterSpacing: 0,
-    },
-    heroClockMetaRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 6,
-      minHeight: 16,
-    },
-    heroClockDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-      shadowColor: colors.accentCyan,
-      shadowOpacity: isLight ? 0.2 : 0.35,
-      shadowRadius: 6,
-      shadowOffset: { width: 0, height: 0 },
-    },
-    heroClockMetaText: {
-      color: colors.textSecondary,
-      fontSize: 11,
-      lineHeight: 15,
-      fontWeight: "800",
-      letterSpacing: 0.4,
+      gap: 1,
     },
     heroTimeLocation: {
       color: colors.textMuted,

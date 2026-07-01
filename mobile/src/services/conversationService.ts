@@ -32,10 +32,23 @@ export type ConversationDetail = {
   updated_at: string;
 };
 
+export type ClientClockContext = {
+  current_time: string;
+  device_time: string;
+  source: "server" | "device";
+  sync_status: "checking" | "live" | "offline";
+  timezone?: string | null;
+  time_format?: "12h" | "24h";
+  offset_ms?: number;
+  latency_ms?: number | null;
+  last_synced_at?: string | null;
+};
+
 export type MessageRequest = {
   message: string;
   context_type?: string;
   include_context?: boolean;
+  client_clock?: ClientClockContext;
 };
 
 export type MessageResponse = {

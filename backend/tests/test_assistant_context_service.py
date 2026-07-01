@@ -26,6 +26,8 @@ from app.ai.assistant_context_service import (
     extract_time_window,
     infer_context_type,
 )
+from app.routers.conversations import _format_client_clock
+from app.schemas.conversations import ClientClockContext
 from app.models.calendar import CalendarEvent
 from app.models.conversation import Conversation, ConversationMessage
 from app.models.daily_history import DailyHistory
@@ -703,3 +705,25 @@ def test_conversations_send_message_still_works(client: TestClient):
     body = msg_resp.json()
     assert "assistant_message" in body
     assert body["assistant_message"]["role"] == "assistant"
+
+
+def test_client_clock_context_formats_for_prompt():
+    text = _format_client_clock(
+        ClientClockContext(
+            current_time="2026-07-01T19:55:00.000Z",
+            device_time="2026-07-01T19:54:59.900Z",
+            source="server",
+            sync_status="live",
+            timezone="America/New_York",
+            time_format="12h",
+            latency_ms=42,
+            last_synced_at="2026-07-01T19:54:59.950Z",
+        )
+    )
+
+    assert text is not None
+    assert "LIVE CLOCK:" in text
+    assert "CURRENT TIME: 2026-07-01T19:55:00.000Z" in text
+    assert "TIMEZONE: America/New_York" in text
+    assert "SYNC STATUS: live" in text
+    assert "SYNC LATENCY: 42 ms" in text

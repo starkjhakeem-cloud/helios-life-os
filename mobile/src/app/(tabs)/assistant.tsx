@@ -28,6 +28,8 @@ import type { RecommendedAction } from "../../store/useAIStore";
 import { radius, spacing, type ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 import HeliosEnergyCore from "../../components/HeliosEnergyCore";
+import { getConnectedClockSnapshot } from "../../hooks/useCurrentDateTime";
+import { getDeviceTimezone } from "../../services/locationService";
 
 // Pill row height + float offset + visual buffer (device-agnostic part).
 // Add insets.bottom at runtime for the safe-area portion.
@@ -801,8 +803,10 @@ export default function AssistantScreen() {
   // The home hero card always uses display_name; this chain is AI-conversation only.
   const assistantNamePref = useSettingsStore((s) => s.assistant_name_preference ?? "display_name");
   const preferredName     = useSettingsStore((s) => s.preferred_name);
+  const timeFormat        = useSettingsStore((s) => s.time_format);
   const profileDispName   = useProfileStore((s) => s.display_name);
   const profileFirstName  = useProfileStore((s) => s.first_name);
+  const profileTimezone   = useProfileStore((s) => s.timezone);
   const authUserName      = useAuthStore((s) => s.user?.name ?? null);
 
   const displayName = (() => {
@@ -873,9 +877,34 @@ export default function AssistantScreen() {
         if (!useConversationStore.getState().currentConversationId) return;
       }
 
-      await sendMessage(accessToken, { message: trimmed, include_context: contextMode });
+      const clock = getConnectedClockSnapshot();
+      await sendMessage(accessToken, {
+        message: trimmed,
+        include_context: contextMode,
+        client_clock: {
+          current_time: clock.now.toISOString(),
+          device_time: clock.deviceNow.toISOString(),
+          source: clock.source,
+          sync_status: clock.syncStatus,
+          timezone: profileTimezone || getDeviceTimezone(),
+          time_format: timeFormat,
+          offset_ms: Math.round(clock.offsetMs),
+          latency_ms: clock.latencyMs,
+          last_synced_at: clock.lastSyncedAt?.toISOString() ?? null,
+        },
+      });
     },
-    [accessToken, isSending, isInitializing, currentConversationId, contextMode, initializeConversation, sendMessage],
+    [
+      accessToken,
+      isSending,
+      isInitializing,
+      currentConversationId,
+      contextMode,
+      initializeConversation,
+      profileTimezone,
+      sendMessage,
+      timeFormat,
+    ],
   );
 
   const handleSend    = useCallback(() => sendText(input), [input, sendText]);

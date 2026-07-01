@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { ApiError } from "../services/apiClient";
 import {
   conversationService,
+  type ClientClockContext,
   type ConversationSummary,
   type StoredMessage,
 } from "../services/conversationService";
@@ -50,7 +51,12 @@ type ConversationState = {
   fetchConversations: (token: string) => Promise<void>;
   sendMessage: (
     token: string,
-    req: { message: string; include_context?: boolean; context_type?: string }
+    req: {
+      message: string;
+      include_context?: boolean;
+      context_type?: string;
+      client_clock?: ClientClockContext;
+    }
   ) => Promise<void>;
   reset: () => void;
 };
@@ -188,6 +194,7 @@ export const useConversationStore = create<ConversationState>()((set, get) => ({
         message: req.message,
         include_context: req.include_context,
         context_type: req.context_type,
+        client_clock: req.client_clock,
       });
 
       const assistantMsg = storedToChat(resp.assistant_message);

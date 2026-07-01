@@ -1,19 +1,16 @@
 import {
   formatActiveGoalsSubtitle,
-  formatClockSyncStatus,
   formatSafeDashboardMetricValue,
   formatSafeMetricNumber,
   formatSafeMetricPercent,
   formatHeroDate,
-  formatHeroLiveTime,
-  formatHeroLocationLabel,
   formatHeroTimeLocation,
   getTimeBasedGreeting,
   isActiveGoalStatus,
 } from "../homeFormatting";
 
-function localDate(hour: number, minute = 0, second = 0): Date {
-  return new Date(2026, 5, 22, hour, minute, second);
+function localDate(hour: number, minute = 0): Date {
+  return new Date(2026, 5, 22, hour, minute);
 }
 
 describe("getTimeBasedGreeting", () => {
@@ -104,30 +101,9 @@ describe("Home hero date formatting", () => {
     );
   });
 
-  it("formats live clock time with seconds", () => {
-    expect(formatHeroLiveTime(localDate(18, 5, 9))).toBe("6:05:09 PM");
-  });
-
-  it("formats location labels independently from time", () => {
-    expect(formatHeroLocationLabel("  Chicago  ")).toBe("Chicago");
-    expect(formatHeroLocationLabel("")).toBe("New York");
-  });
-
   it("defaults safely to New York", () => {
     expect(formatHeroTimeLocation(localDate(18, 5), "")).toBe(
       "6:05 PM • New York",
     );
-  });
-});
-
-describe("Clock sync formatting", () => {
-  it("shows latency for live backend clock sync", () => {
-    expect(formatClockSyncStatus("live", 42)).toBe("Live sync • 42 ms");
-    expect(formatClockSyncStatus("live", 1249)).toBe("Live sync • 1.2 s");
-  });
-
-  it("uses clear fallback labels while connecting or offline", () => {
-    expect(formatClockSyncStatus("checking", null)).toBe("Connecting clock");
-    expect(formatClockSyncStatus("offline", null)).toBe("Device time");
   });
 });

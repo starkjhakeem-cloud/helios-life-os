@@ -31,6 +31,8 @@ export type ConnectedClock = {
   lastSyncedAt: Date | null;
 };
 
+export type ConnectedClockSnapshot = ConnectedClock;
+
 export function useCurrentDateTime(): Date {
   const [now, setNow] = useState<Date>(() => new Date());
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -107,5 +109,23 @@ export function useConnectedClock(): ConnectedClock {
     offsetMs: clockOffsetMs,
     latencyMs: clockLatencyMs,
     lastSyncedAt,
+  };
+}
+
+export function getConnectedClockSnapshot(): ConnectedClockSnapshot {
+  const state = useAppStore.getState();
+  const deviceNow = new Date();
+  const isLive = state.clockStatus === "live";
+  const now = new Date(deviceNow.getTime() + (isLive ? state.clockOffsetMs : 0));
+
+  return {
+    now,
+    deviceNow,
+    source: isLive ? "server" : "device",
+    syncStatus: state.clockStatus,
+    isLive,
+    offsetMs: state.clockOffsetMs,
+    latencyMs: state.clockLatencyMs,
+    lastSyncedAt: state.clockSyncedAtMs ? new Date(state.clockSyncedAtMs) : null,
   };
 }
