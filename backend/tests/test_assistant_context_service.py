@@ -503,6 +503,7 @@ def test_summarize_context_for_prompt_produces_output(db: Session):
 
     assert isinstance(prompt, str)
     assert len(prompt) > 0
+    assert "LIVE CLOCK:" in prompt
     assert "Jake" in prompt or "Software Engineering" in prompt or "HELIOS V3" in prompt or "Write tests" in prompt
 
 
@@ -514,8 +515,9 @@ def test_summarize_context_empty_returns_empty_string(db: Session):
     ctx = svc.build_context_for_message(u.id, "Hi", context_type="tasks")
     prompt = svc.summarize_context_for_prompt(ctx)
 
-    # No profile, no tasks, no goals — prompt should be empty string
-    assert prompt == "" or isinstance(prompt, str)
+    # Even when no personal records exist, HELIOS should still have live time.
+    assert "LIVE CLOCK:" in prompt
+    assert "CURRENT TIME:" in prompt
 
 
 def test_context_type_routing_email_vs_goals(db: Session):
@@ -707,6 +709,38 @@ def test_conversations_send_message_still_works(client: TestClient):
     assert body["assistant_message"]["role"] == "assistant"
 
 
+def test_conversations_time_question_uses_live_clock(client: TestClient):
+    token = _signup(client, email=f"clock_{uuid.uuid4().hex[:6]}@test.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    create_resp = client.post("/api/v1/ai/conversations", headers=headers)
+    assert create_resp.status_code == 201
+    conv_id = create_resp.json()["id"]
+
+    msg_resp = client.post(
+        f"/api/v1/ai/conversations/{conv_id}/messages",
+        json={
+            "message": "What time is it?",
+            "include_context": True,
+            "client_clock": {
+                "current_time": "2026-07-01T20:37:00.000Z",
+                "device_time": "2026-07-01T20:37:00.000Z",
+                "source": "server",
+                "sync_status": "live",
+                "timezone": "America/New_York",
+                "latency_ms": 42,
+            },
+        },
+        headers=headers,
+    )
+    assert msg_resp.status_code == 200
+    reply = msg_resp.json()["assistant_message"]["content"]
+
+    assert "4:37" in reply or "20:37" in reply
+    assert "don't have access" not in reply.lower()
+    assert "cannot connect" not in reply.lower()
+
+
 def test_client_clock_context_formats_for_prompt():
     text = _format_client_clock(
         ClientClockContext(
@@ -724,6 +758,7 @@ def test_client_clock_context_formats_for_prompt():
     assert text is not None
     assert "LIVE CLOCK:" in text
     assert "CURRENT TIME: 2026-07-01T19:55:00.000Z" in text
+    assert "LOCAL TIME:" in text
     assert "TIMEZONE: America/New_York" in text
     assert "SYNC STATUS: live" in text
     assert "SYNC LATENCY: 42 ms" in text

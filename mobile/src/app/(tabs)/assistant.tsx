@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Animated,
   FlatList,
-  KeyboardAvoidingView,
+  Keyboard,
+  type KeyboardEvent,
   Modal,
   Platform,
   ScrollView,
@@ -836,6 +837,7 @@ export default function AssistantScreen() {
   const [contextMode]                       = useState(true);
   const [historyVisible, setHistoryVisible] = useState(false);
   const [expandedMsgId, setExpandedMsgId]   = useState<string | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const listRef         = useRef<FlatList<ChatMessage>>(null);
   const isAtBottomRef   = useRef(true);
 
@@ -858,6 +860,24 @@ export default function AssistantScreen() {
   useEffect(() => {
     if (historyVisible && accessToken) fetchConversations(accessToken);
   }, [accessToken, fetchConversations, historyVisible]);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+    const onShow = (event: KeyboardEvent) => {
+      setKeyboardHeight(Math.max(0, event.endCoordinates.height));
+    };
+    const onHide = () => setKeyboardHeight(0);
+
+    const showSub = Keyboard.addListener(showEvent, onShow);
+    const hideSub = Keyboard.addListener(hideEvent, onHide);
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const handleScroll = useCallback((e: any) => {
     const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
@@ -950,12 +970,11 @@ export default function AssistantScreen() {
     aiStatus === "thinking" ? "Thinking" :
     aiStatus === "connecting" ? "Connecting" : "Thinking";
 
+  const composerBottom = keyboardHeight > 0 ? keyboardHeight + 8 : navClearance;
+  const listBottomPadding = keyboardHeight > 0 ? 8 : 16;
+
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? navClearance : 0}
-    >
+    <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
       <AssistantHeader
         aiStatus={aiStatus}
         onHistoryPress={() => setHistoryVisible(true)}
@@ -993,7 +1012,7 @@ export default function AssistantScreen() {
         keyExtractor={keyExtractor}
         renderItem={renderItem}
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 16, gap: 20 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: listBottomPadding, gap: 20 }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         onScroll={handleScroll}
@@ -1011,7 +1030,7 @@ export default function AssistantScreen() {
       ) : null}
 
       {/* Composer */}
-      <View style={{ marginBottom: navClearance }}>
+      <View style={{ marginBottom: composerBottom }}>
         <MessageComposer
           value={input}
           onChange={setInput}
@@ -1030,7 +1049,7 @@ export default function AssistantScreen() {
         onSelect={handleSelect}
         onNew={handleNewConv}
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

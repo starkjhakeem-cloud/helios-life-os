@@ -1,6 +1,7 @@
 import json
 import uuid
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
@@ -48,6 +49,25 @@ def _parse_meta(raw: str | None) -> dict:
         return {"suggested_actions": [], "follow_up_questions": [], "recommended_actions": [], "provider": None}
 
 
+def _format_local_time(value: str, timezone_name: str | None) -> str | None:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+
+    try:
+        local = parsed.astimezone(ZoneInfo(timezone_name)) if timezone_name else parsed.astimezone()
+    except Exception:
+        local = parsed.astimezone(timezone.utc)
+
+    time_label = local.strftime("%I:%M:%S %p").lstrip("0")
+    tz_label = local.tzname() or timezone_name or "local"
+    return f"{local.strftime('%A, %B')} {local.day}, {local.year} at {time_label} {tz_label}"
+
+
 def _format_client_clock(clock: ClientClockContext | None) -> str | None:
     if not clock:
         return None
@@ -55,6 +75,9 @@ def _format_client_clock(clock: ClientClockContext | None) -> str | None:
     lines = ["LIVE CLOCK:"]
     lines.append(f"  CURRENT TIME: {clock.current_time}")
 
+    local_time = _format_local_time(clock.current_time, clock.timezone)
+    if local_time:
+        lines.append(f"  LOCAL TIME: {local_time}")
     if clock.timezone:
         lines.append(f"  TIMEZONE: {clock.timezone}")
     if clock.source:

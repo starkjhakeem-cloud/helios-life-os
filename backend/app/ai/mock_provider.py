@@ -1,3 +1,4 @@
+import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from time import perf_counter
@@ -24,6 +25,21 @@ def _detect_intent(message: str) -> str:
     if any(word in text for word in ("email", "inbox", "message")):
         return "email"
     return "general"
+
+
+def _extract_live_clock_reply(user_context: str | None) -> str | None:
+    if not user_context or "LIVE CLOCK:" not in user_context:
+        return None
+
+    local_match = re.search(r"LOCAL TIME:\s*(.+)", user_context)
+    if local_match:
+        return f"It is {local_match.group(1).strip()}."
+
+    current_match = re.search(r"CURRENT TIME:\s*(.+)", user_context)
+    if current_match:
+        return f"It is {current_match.group(1).strip()}."
+
+    return None
 
 
 class MockAIProvider(AIProvider):
@@ -381,12 +397,21 @@ class MockAIProvider(AIProvider):
     ) -> ChatResponse:
         _ = history
         intent = context_type or _detect_intent(message)
+        wants_time = any(phrase in (message or "").lower() for phrase in (
+            "what time",
+            "current time",
+            "time is it",
+            "what date",
+            "today's date",
+            "what day",
+        ))
+        clock_reply = _extract_live_clock_reply(user_context) if wants_time else None
         context_note = (
             "Context mode active — I used your current HELIOS context to shape this response."
             if user_context
             else "Context mode inactive — connect live context for more precise guidance."
         )
-        reply = (
+        reply = clock_reply or (
             f"{context_note}\n\n"
             f"{user_name}, I can help with {intent}. "
             f"Your request was: {message.strip() or 'No message provided.'}"

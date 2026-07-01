@@ -22,6 +22,7 @@ import json
 import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -137,10 +138,53 @@ def _local_today(user_tz: str | None = None) -> date:
     if not user_tz:
         return date.today()
     try:
-        from zoneinfo import ZoneInfo
         return datetime.now(ZoneInfo(user_tz)).date()
     except Exception:
         return date.today()
+
+
+def _parse_iso_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _format_local_clock(value: str | None, user_tz: str | None) -> str | None:
+    parsed = _parse_iso_datetime(value)
+    if not parsed:
+        return None
+
+    try:
+        local = parsed.astimezone(ZoneInfo(user_tz)) if user_tz else parsed.astimezone()
+    except Exception:
+        local = parsed.astimezone(timezone.utc)
+
+    time_label = local.strftime("%I:%M:%S %p").lstrip("0")
+    tz_label = local.tzname() or user_tz or "local"
+    return f"{local.strftime('%A, %B')} {local.day}, {local.year} at {time_label} {tz_label}"
+
+
+def _format_live_clock_context(generated_at: str | None, user_tz: str | None) -> str:
+    current_time = generated_at or datetime.now(timezone.utc).isoformat()
+    lines = [
+        "LIVE CLOCK:",
+        f"  CURRENT TIME: {current_time}",
+    ]
+
+    local_time = _format_local_clock(current_time, user_tz)
+    if local_time:
+        lines.append(f"  LOCAL TIME: {local_time}")
+    if user_tz:
+        lines.append(f"  TIMEZONE: {user_tz}")
+    lines.append("  SOURCE: backend server clock")
+    lines.append("  SYNC STATUS: live")
+    return "\n".join(lines)
 
 
 def infer_context_type(message: str) -> str:
@@ -440,8 +484,16 @@ class AssistantContextService:
         """
         parts: list[str] = []
 
-        # User profile
+        metadata = context.get("retrieval_metadata") or {}
         profile = context.get("user_profile") or {}
+        parts.append(
+            _format_live_clock_context(
+                metadata.get("generated_at"),
+                profile.get("timezone"),
+            )
+        )
+
+        # User profile
         if profile:
             _pref = profile.get("assistant_name_preference") or "display_name"
             if _pref == "preferred_name" and profile.get("preferred_name"):
