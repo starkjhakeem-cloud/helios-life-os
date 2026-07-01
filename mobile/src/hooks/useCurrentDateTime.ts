@@ -12,10 +12,24 @@
  * Usage:
  *   const now = useCurrentDateTime();
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
+import { useAppStore, type ClockSyncStatus } from "../store";
 
 const TICK_MS = 1_000; // 1 second — accurate to the minute change within 1 s
+
+export type ConnectedClockSource = "server" | "device";
+
+export type ConnectedClock = {
+  now: Date;
+  deviceNow: Date;
+  source: ConnectedClockSource;
+  syncStatus: ClockSyncStatus;
+  isLive: boolean;
+  offsetMs: number;
+  latencyMs: number | null;
+  lastSyncedAt: Date | null;
+};
 
 export function useCurrentDateTime(): Date {
   const [now, setNow] = useState<Date>(() => new Date());
@@ -64,4 +78,34 @@ export function useCurrentDateTime(): Date {
   }, []);
 
   return now;
+}
+
+export function useConnectedClock(): ConnectedClock {
+  const deviceNow = useCurrentDateTime();
+  const clockStatus = useAppStore((s) => s.clockStatus);
+  const clockOffsetMs = useAppStore((s) => s.clockOffsetMs);
+  const clockLatencyMs = useAppStore((s) => s.clockLatencyMs);
+  const clockSyncedAtMs = useAppStore((s) => s.clockSyncedAtMs);
+  const isLive = clockStatus === "live";
+
+  const now = useMemo(
+    () => new Date(deviceNow.getTime() + (isLive ? clockOffsetMs : 0)),
+    [clockOffsetMs, deviceNow, isLive],
+  );
+
+  const lastSyncedAt = useMemo(
+    () => (clockSyncedAtMs ? new Date(clockSyncedAtMs) : null),
+    [clockSyncedAtMs],
+  );
+
+  return {
+    now,
+    deviceNow,
+    source: isLive ? "server" : "device",
+    syncStatus: clockStatus,
+    isLive,
+    offsetMs: clockOffsetMs,
+    latencyMs: clockLatencyMs,
+    lastSyncedAt,
+  };
 }

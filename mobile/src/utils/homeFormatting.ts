@@ -1,4 +1,5 @@
 const DEFAULT_LOCATION = "New York";
+type ClockDisplayStatus = "checking" | "live" | "offline";
 
 export function getTimeBasedGreeting(date: Date): string {
   const hour = date.getHours();
@@ -25,15 +26,49 @@ export function formatHeroTime(date: Date, timeFormat: "12h" | "24h" = "12h"): s
   });
 }
 
+export function formatHeroLiveTime(date: Date, timeFormat: "12h" | "24h" = "12h"): string {
+  return date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: timeFormat === "12h",
+  });
+}
+
+export function formatHeroLocationLabel(location?: string | null): string {
+  return location?.trim() || DEFAULT_LOCATION;
+}
+
 export function formatHeroTimeLocation(
   date: Date,
   location?: string | null,
   timeFormat: "12h" | "24h" = "12h",
 ): string {
   const time = formatHeroTime(date, timeFormat);
-  const locationLabel = location?.trim() || DEFAULT_LOCATION;
+  const locationLabel = formatHeroLocationLabel(location);
 
   return `${time} • ${locationLabel}`;
+}
+
+export function formatClockSyncStatus(
+  status: ClockDisplayStatus,
+  latencyMs: number | null | undefined,
+): string {
+  if (status === "live") {
+    if (typeof latencyMs !== "number" || !Number.isFinite(latencyMs)) {
+      return "Live sync";
+    }
+
+    if (latencyMs < 1000) {
+      return `Live sync • ${Math.max(0, Math.round(latencyMs))} ms`;
+    }
+
+    return `Live sync • ${(latencyMs / 1000).toFixed(1)} s`;
+  }
+
+  if (status === "checking") return "Connecting clock";
+
+  return "Device time";
 }
 
 export function formatActiveGoalsSubtitle(activeGoals: number): string {

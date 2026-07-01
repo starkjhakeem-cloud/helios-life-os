@@ -8,6 +8,8 @@ const HEALTH_CHECK_INTERVAL_MS = 15000;
 export function useBackendHealth(): void {
   const setSystemStatus = useAppStore((s) => s.setSystemStatus);
   const setBackendVersion = useAppStore((s) => s.setBackendVersion);
+  const setClockSync = useAppStore((s) => s.setClockSync);
+  const setClockOffline = useAppStore((s) => s.setClockOffline);
 
   useEffect(() => {
     let cancelled = false;
@@ -15,9 +17,16 @@ export function useBackendHealth(): void {
 
     async function check(): Promise<void> {
       try {
+        const startedAtMs = Date.now();
         const health = await systemService.health();
+        const receivedAtMs = Date.now();
         if (cancelled) return;
         setSystemStatus(health.status === "ok" ? "online" : "degraded");
+        setClockSync({
+          serverTimestamp: health.timestamp,
+          receivedAtMs,
+          latencyMs: receivedAtMs - startedAtMs,
+        });
         systemService.version()
           .then((version) => {
             if (!cancelled) setBackendVersion(version.version);
@@ -29,6 +38,7 @@ export function useBackendHealth(): void {
         if (!cancelled) {
           setSystemStatus("offline");
           setBackendVersion(null);
+          setClockOffline();
         }
       }
     }
@@ -45,5 +55,5 @@ export function useBackendHealth(): void {
       if (interval) clearInterval(interval);
       appStateSub.remove();
     };
-  }, [setSystemStatus, setBackendVersion]);
+  }, [setSystemStatus, setBackendVersion, setClockSync, setClockOffline]);
 }
