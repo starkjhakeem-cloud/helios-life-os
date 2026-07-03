@@ -1,13 +1,13 @@
 import { getLaunchExperiencePlan } from "../src/components/launchExperienceTiming";
 
 describe("launch experience timing", () => {
-  it("keeps the standard wake sequence visible without feeling long", () => {
+  it("keeps the standard wake sequence deliberate without becoming a long intro", () => {
     const plan = getLaunchExperiencePlan(false);
 
     expect(plan.wakeMs).toBeGreaterThanOrEqual(100);
     expect(plan.wakeMs).toBeLessThanOrEqual(150);
-    expect(plan.totalDurationMs).toBeGreaterThanOrEqual(1900);
-    expect(plan.totalDurationMs).toBeLessThanOrEqual(2000);
+    expect(plan.totalDurationMs).toBeGreaterThanOrEqual(2900);
+    expect(plan.totalDurationMs).toBeLessThanOrEqual(3100);
     expect(plan.pulseDelayMs).toBeGreaterThan(plan.identityFadeMs);
     expect(plan.shouldPulse).toBe(true);
     expect(plan.shouldHaptic).toBe(true);

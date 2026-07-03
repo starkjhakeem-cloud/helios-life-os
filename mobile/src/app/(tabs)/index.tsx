@@ -1255,7 +1255,7 @@ function createStyles(colors: ThemeColors) {
       justifyContent: "center",
     },
     heroBottom: {
-      marginTop: 12,
+      marginTop: 28,
     },
     assistantMessage: {
       color: colors.textMuted,
