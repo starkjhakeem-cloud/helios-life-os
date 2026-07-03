@@ -10,33 +10,38 @@ Built with Expo SDK 55, Expo Router v4 file-based navigation, TypeScript strict 
 
 ```bash
 npm install
+cp .env.example .env
 npx expo start
 ```
 
-Press `i` to open in iOS Simulator. The app expects the HELIOS backend running on `localhost:8000` — see the [backend README](../backend/README.md) for setup instructions.
+Press `i` to open in iOS Simulator. The app expects `EXPO_PUBLIC_API_URL` to point to the HELIOS backend — see the [backend README](../backend/README.md) for setup instructions.
 
-> Running on a physical device? Set `EXPO_PUBLIC_API_URL` in `mobile/.env` to your machine's LAN address, for example `http://192.168.1.110:8000`. Do not edit source code for device switching.
+Simulator:
 
-## API URL Resolution
-
-HELIOS resolves the backend URL in this order:
-
-1. `EXPO_PUBLIC_API_URL`, when present, is always used in development and production.
-2. iOS Simulator falls back to `http://localhost:8000`.
-3. Android Emulator falls back to `http://10.0.2.2:8000`.
-4. Physical devices and production builds without `EXPO_PUBLIC_API_URL` show a clear configuration error.
-
-Local physical-device setup:
-
-```bash
-cp .env.example .env
-ipconfig getifaddr en0
+```ini
+EXPO_PUBLIC_API_URL=http://localhost:8000
 ```
 
-Set the result in `mobile/.env`:
+Physical device:
 
 ```ini
 EXPO_PUBLIC_API_URL=http://<your-mac-lan-ip>:8000
+```
+
+## API URL Resolution
+
+HELIOS uses one source of truth:
+
+```ini
+EXPO_PUBLIC_API_URL=<backend-url>
+```
+
+There is no automatic backend URL discovery. This keeps native iOS development builds, Expo builds, physical devices, and production builds deterministic.
+
+To find your Mac's LAN IP for physical-device testing:
+
+```bash
+ipconfig getifaddr en0
 ```
 
 Restart Expo after changing `.env`:

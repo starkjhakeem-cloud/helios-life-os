@@ -587,8 +587,8 @@ export default function TasksScreen() {
             )}
 
             <View style={styles.sheetActions}>
-              <Button label="CANCEL" variant="secondary" onPress={closeModal} />
-              <Button label="CREATE" onPress={handleCreate} loading={isMutating} />
+              <Button label="Cancel" variant="secondary" onPress={closeModal} />
+              <Button label="Create" onPress={handleCreate} loading={isMutating} />
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -1131,7 +1131,7 @@ function createStyles(colors: ThemeColors) {
       fontWeight: "800" as const,
       color: colors.textPrimary,
       marginTop: 2,
-      letterSpacing: -0.3,
+      letterSpacing: 0,
     },
     focusBadge: {
       flexDirection: "row",

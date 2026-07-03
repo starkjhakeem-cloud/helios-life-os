@@ -2,9 +2,30 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-MemoryType = Literal["preference", "important_fact", "goal_context", "recurring_interest"]
+MemoryType = Literal[
+    "preference",
+    "goal_context",
+    "important_fact",
+    "relationship",
+    "project",
+    "routine",
+    "interest",
+    "constraint",
+    # Legacy value kept so existing memories and clients continue to work.
+    "recurring_interest",
+]
 
-VALID_MEMORY_TYPES: set[str] = {"preference", "important_fact", "goal_context", "recurring_interest"}
+VALID_MEMORY_TYPES: set[str] = {
+    "preference",
+    "goal_context",
+    "important_fact",
+    "relationship",
+    "project",
+    "routine",
+    "interest",
+    "constraint",
+    "recurring_interest",
+}
 
 
 class MemoryCreate(BaseModel):

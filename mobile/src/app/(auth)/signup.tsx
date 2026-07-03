@@ -40,7 +40,7 @@ export default function SignupScreen() {
     <Screen style={styles.screen}>
       <View style={styles.header}>
         <Text variant="label" color={colors.accentCyan}>HELIOS</Text>
-        <Text variant="displaySmall" style={styles.centered}>CREATE ACCOUNT</Text>
+        <Text variant="displaySmall" style={styles.centered}>Create Account</Text>
         <Text variant="body" color={colors.textMuted} style={styles.centered}>
           Register your operator profile
         </Text>
@@ -87,7 +87,7 @@ export default function SignupScreen() {
           <Text variant="caption" color={colors.danger}>{displayError}</Text>
         ) : null}
         <Button
-          label="CREATE ACCOUNT"
+          label="Create Account"
           onPress={handleSignup}
           fullWidth
           loading={isLoading}

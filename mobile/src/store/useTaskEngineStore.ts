@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { ApiError } from "../services/apiClient";
 import {
   type AcceptSuggestionRequest,
+  type HeliosRecommendation,
   type ScheduleTaskRequest,
   type TaskSuggestion,
   taskEngineService,
@@ -12,6 +13,7 @@ import {
 
 type TaskEngineState = {
   suggestions: TaskSuggestion[];
+  recommendations: HeliosRecommendation[];
   isLoading: boolean;
   isGenerating: boolean;
   error: string | null;
@@ -31,6 +33,7 @@ type TaskEngineState = {
 
 export const useTaskEngineStore = create<TaskEngineState>()((set, get) => ({
   suggestions: [],
+  recommendations: [],
   isLoading: false,
   isGenerating: false,
   error: null,
@@ -41,7 +44,7 @@ export const useTaskEngineStore = create<TaskEngineState>()((set, get) => ({
       const data = await taskEngineService.getSuggestions(token);
       // Only show pending suggestions
       const pending = data.suggestions.filter((s) => s.status === "pending");
-      set({ suggestions: pending, isLoading: false });
+      set({ suggestions: pending, recommendations: data.recommendations ?? [], isLoading: false });
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Couldn't load suggestions.";
       set({ error: msg, isLoading: false });
@@ -53,7 +56,7 @@ export const useTaskEngineStore = create<TaskEngineState>()((set, get) => ({
     try {
       const data = await taskEngineService.generateSuggestions(token, 5);
       const pending = data.suggestions.filter((s) => s.status === "pending");
-      set({ suggestions: pending, isGenerating: false });
+      set({ suggestions: pending, recommendations: data.recommendations ?? [], isGenerating: false });
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Couldn't generate suggestions.";
       set({ error: msg, isGenerating: false });
@@ -107,5 +110,5 @@ export const useTaskEngineStore = create<TaskEngineState>()((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
-  reset: () => set({ suggestions: [], isLoading: false, isGenerating: false, error: null }),
+  reset: () => set({ suggestions: [], recommendations: [], isLoading: false, isGenerating: false, error: null }),
 }));

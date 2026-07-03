@@ -373,10 +373,12 @@ export default function TabsLayout() {
       <Tabs.Screen name="developer-options"     options={{ href: null, title: "Developer Options" }} />
       <Tabs.Screen name="audit-log"             options={{ href: null, title: "Audit Log" }} />
       <Tabs.Screen name="email"                 options={{ href: null, title: "Email" }} />
+      <Tabs.Screen name="about-helios"          options={{ href: null, title: "About HELIOS" }} />
       <Tabs.Screen name="memory"                options={{ href: null, title: "Memory" }} />
       <Tabs.Screen name="notifications"         options={{ href: null, title: "Queue" }} />
       <Tabs.Screen name="profile"               options={{ href: null, title: "Profile" }} />
       <Tabs.Screen name="integrations"          options={{ href: null, title: "Integrations" }} />
+      <Tabs.Screen name="privacy-security"      options={{ href: null, title: "Privacy & Security" }} />
       <Tabs.Screen name="life-area"             options={{ href: null, title: "Life Area" }} />
       <Tabs.Screen name="change-password"       options={{ href: null, title: "Change Password" }} />
       <Tabs.Screen name="change-email"          options={{ href: null, title: "Change Email" }} />

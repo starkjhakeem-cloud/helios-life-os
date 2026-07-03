@@ -168,6 +168,45 @@ def test_protected_route_requires_auth(client):
     assert response.status_code == 401
 
 
+def test_delete_account_requires_auth_and_removes_login(client):
+    unauthenticated = client.delete("/api/v1/auth/account")
+    assert unauthenticated.status_code == 401
+
+    email = f"delete-{uuid.uuid4().hex[:8]}@example.com"
+    password = "Password123!"
+    signup_response = client.post(
+        "/api/v1/auth/signup",
+        json={"name": "Delete Me", "email": email, "password": password},
+    )
+    assert signup_response.status_code == 201
+    headers = {"Authorization": f"Bearer {signup_response.json()['access_token']}"}
+
+    goal_response = client.post(
+        "/api/v1/goals",
+        json={"title": "Temporary account goal", "status": "active"},
+        headers=headers,
+    )
+    assert goal_response.status_code == 201
+
+    delete_response = client.delete("/api/v1/auth/account", headers=headers)
+    assert delete_response.status_code == 204
+
+    me_response = client.get("/api/v1/auth/me", headers=headers)
+    assert me_response.status_code == 401
+
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": password},
+    )
+    assert login_response.status_code == 401
+
+    recreate_response = client.post(
+        "/api/v1/auth/signup",
+        json={"name": "Recreated Account", "email": email, "password": password},
+    )
+    assert recreate_response.status_code == 201
+
+
 def test_protected_route_rejects_expired_access_token(client):
     expired = jwt.encode(
         {

@@ -642,7 +642,7 @@ export default function IntegrationsScreen() {
         {isLoading ? <ActivityIndicator size="small" color={colors.accentCyan} /> : null}
       </View>
 
-      {/* ── Backend unavailable banner ── */}
+      {/* ── Service unavailable banner ── */}
       {backendUnavailable && (
         <View style={styles.unavailableBanner}>
           <View style={styles.unavailableCopy}>
@@ -700,7 +700,7 @@ export default function IntegrationsScreen() {
 function friendlyOAuthError(rawMessage: string): string {
   const lower = rawMessage.toLowerCase();
   if (lower.includes("backend unavailable") || lower.includes("current api:")) {
-    return rawMessage;
+    return "Connected Services are temporarily unavailable. Please try again.";
   }
   if (lower.includes("network") || lower.includes("timed out") || lower.includes("unavailable")) {
     return "Check your internet connection and try again.";
@@ -1053,7 +1053,7 @@ function createStyles(colors: ThemeColors) {
       fontSize: 18,
       fontWeight: "800" as const,
       color: colors.textPrimary,
-      letterSpacing: -0.5,
+      letterSpacing: 0,
     },
 
     syncStatLabel: {

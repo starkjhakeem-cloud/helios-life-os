@@ -9,6 +9,8 @@ from app.models.user import User
 from app.schemas.task_engine import (
     AcceptSuggestionRequest,
     AcceptSuggestionResponse,
+    BuildDayRequest,
+    BuildDayResponse,
     CompleteTaskResponse,
     GenerateTaskSuggestionsRequest,
     RejectSuggestionRequest,
@@ -159,6 +161,25 @@ def schedule_task(
         calendar_event=result["calendar_event"],
         selected_window=result["selected_window"],
     )
+
+
+@router.post("/build-day", response_model=BuildDayResponse, status_code=status.HTTP_201_CREATED)
+def build_day(
+    payload: BuildDayRequest | None = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> BuildDayResponse:
+    request = payload or BuildDayRequest()
+    try:
+        result = TaskEngineService(db).build_day(
+            current_user.id,
+            schedule_date=request.date,
+            commit=request.commit,
+            max_items=request.max_items,
+        )
+    except (TaskEngineError, RelationshipError) as exc:
+        raise _handle(exc)
+    return BuildDayResponse(**result)
 
 
 @router.post("/tasks/{task_id}/complete", response_model=CompleteTaskResponse)

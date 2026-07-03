@@ -38,6 +38,8 @@ from app.models.memory import AIMemory
 from app.models.task import Task
 from app.models.user_preferences import UserPreferences
 from app.models.user_profile import UserProfile
+from app.services.awareness_engine import RealTimeAwarenessEngine
+from app.services.priority_engine import EmailPriorityClassifier, PriorityEngine
 
 
 # ── Context type → keyword signals ─────────────────────────────────────────────
@@ -92,6 +94,12 @@ _HISTORICAL_TRIGGERS = frozenset({
     "last monday", "last tuesday", "last wednesday", "last thursday",
     "last friday", "last saturday", "last sunday",
     "earlier this week", "earlier this month",
+})
+
+_BUILD_DAY_TRIGGERS = frozenset({
+    "build my day", "plan my day", "plan today", "today's plan",
+    "what should i do today", "what should i work on today",
+    "what should i work on", "what should i do next",
 })
 
 # Data sources to retrieve per context type
@@ -187,6 +195,61 @@ def _format_live_clock_context(generated_at: str | None, user_tz: str | None) ->
     return "\n".join(lines)
 
 
+def _format_awareness_context(awareness: dict[str, Any]) -> str:
+    lines = ["REAL-TIME AWARENESS:"]
+    lines.append(f"  CURRENT TIME: {awareness.get('now')}")
+    lines.append(
+        "  LOCAL: "
+        f"{awareness.get('dayOfWeek')} {awareness.get('localDate')} "
+        f"at {awareness.get('localTime')} {awareness.get('timezone')}"
+    )
+    lines.append(f"  DAY PERIOD: {awareness.get('dayPeriod')} | WEEKEND: {awareness.get('isWeekend')}")
+    if awareness.get("sunrise") or awareness.get("sunset"):
+        lines.append(f"  SUN: sunrise {awareness.get('sunrise')} | sunset {awareness.get('sunset')}")
+    weather = awareness.get("weather") or {}
+    if weather:
+        lines.append(
+            "  WEATHER: "
+            f"{weather.get('condition')} {weather.get('temperature')}F, "
+            f"precipitation {weather.get('precipitationChance')}%"
+        )
+    location = awareness.get("location") or {}
+    if location.get("label"):
+        lines.append(f"  LOCATION: {location.get('label')}")
+    calendar = awareness.get("calendar") or {}
+    next_event = calendar.get("nextEvent") or {}
+    current_event = calendar.get("currentEvent") or {}
+    if calendar.get("busy"):
+        lines.append(f"  CALENDAR: busy with {current_event.get('title', 'current event')}")
+    elif next_event:
+        lines.append(
+            f"  CALENDAR: free for {calendar.get('availableMinutes')} minutes; "
+            f"next event is {next_event.get('title')}"
+        )
+    else:
+        lines.append(f"  CALENDAR: free; available minutes {calendar.get('availableMinutes')}")
+    tasks = awareness.get("tasks") or {}
+    lines.append(
+        "  TASK LOAD: "
+        f"{tasks.get('overdue')} overdue, {tasks.get('dueToday')} due today, "
+        f"{tasks.get('remaining')} remaining"
+    )
+    goals = awareness.get("goals") or {}
+    highest_goal = goals.get("highestPriorityGoal") or {}
+    goal_tail = f"; highest goal {highest_goal.get('title')}" if highest_goal.get("title") else ""
+    lines.append(
+        "  GOALS: "
+        f"{goals.get('activeCount')} active, {goals.get('urgentCount')} urgent, "
+        f"{goals.get('goalsWithoutTasks')} without tasks{goal_tail}"
+    )
+    integrations = awareness.get("integrations") or {}
+    lines.append(
+        "  INTEGRATIONS: "
+        f"gmail={integrations.get('gmail')} googleCalendar={integrations.get('googleCalendar')}"
+    )
+    return "\n".join(lines)
+
+
 def infer_context_type(message: str) -> str:
     """
     Infer context type from message keywords.
@@ -204,6 +267,11 @@ def infer_context_type(message: str) -> str:
             return ctx_type
 
     return "general"
+
+
+def _is_build_day_intent(message: str) -> bool:
+    msg = message.lower()
+    return any(phrase in msg for phrase in _BUILD_DAY_TRIGGERS)
 
 
 def extract_time_window(
@@ -366,7 +434,43 @@ class AssistantContextService:
             "connected_services":   [],
             "active_focus_block":   None,
             "semantic_context":     [],
+            "priority_intelligence": {},
+            "build_my_day_plan":    {},
+            "real_time_awareness":  {},
         }
+
+        try:
+            awareness = RealTimeAwarenessEngine(self.db).build_context(
+                user_id,
+                _local_today(user_tz),
+            )
+            ctx["real_time_awareness"] = awareness
+            sources_used.append("real_time_awareness")
+        except Exception:
+            awareness = {}
+
+        try:
+            priority_package = PriorityEngine(self.db).compact_priority_package(
+                user_id,
+                _local_today(user_tz),
+            )
+            ctx["priority_intelligence"] = priority_package
+            ctx["current_priorities"] = self._priority_package_to_priorities(priority_package)
+            sources_used.append("priority_engine")
+        except Exception:
+            pass
+
+        if _is_build_day_intent(message):
+            try:
+                ctx["build_my_day_plan"] = PriorityEngine(self.db).build_day_schedule(
+                    user_id,
+                    _local_today(user_tz),
+                    commit=False,
+                    max_items=8,
+                )
+                sources_used.append("build_day_plan")
+            except Exception:
+                pass
 
         # Always check for an in_progress focus block — informs every reply
         active_fb = self._fetch_active_focus_block(user_id)
@@ -492,6 +596,9 @@ class AssistantContextService:
                 profile.get("timezone"),
             )
         )
+        awareness = context.get("real_time_awareness") or {}
+        if awareness:
+            parts.append(_format_awareness_context(awareness))
 
         # User profile
         if profile:
@@ -544,6 +651,53 @@ class AssistantContextService:
                 tag = f"[{p.get('priority', 'medium').upper()}]"
                 due = f" due {p['due_date']}" if p.get("due_date") else ""
                 lines.append(f"  - [{p.get('type', 'task').upper()}] {tag} {p['title']}{due}")
+            parts.append("\n".join(lines))
+
+        priority = context.get("priority_intelligence") or {}
+        if priority:
+            next_best = priority.get("next_best_action") or {}
+            lines = ["PRIORITY ENGINE:"]
+            if next_best.get("title"):
+                lines.append(f"  NEXT BEST ACTION: {next_best['title']}")
+                if next_best.get("reason"):
+                    lines.append(f"  WHY: {str(next_best['reason'])[:180]}")
+            flow = priority.get("today_flow") or []
+            if flow:
+                lines.append("  TODAY'S FLOW:")
+                for item in flow[:4]:
+                    lines.append(
+                        f"    - [{str(item.get('type', 'action')).upper()}] "
+                        f"{item.get('title', '')} "
+                        f"(score: {item.get('score', 'n/a')})"
+                    )
+            email_count = len(priority.get("important_email") or [])
+            filtered_count = priority.get("filtered_email_count") or 0
+            lines.append(f"  EMAIL FILTER: {email_count} influential, {filtered_count} filtered out")
+            parts.append("\n".join(lines))
+
+        build_plan = context.get("build_my_day_plan") or {}
+        if build_plan:
+            lines = ["BUILD MY DAY PLAN:"]
+            if build_plan.get("summary"):
+                lines.append(f"  SUMMARY: {str(build_plan['summary'])[:220]}")
+            if build_plan.get("primaryFocus"):
+                lines.append(f"  PRIMARY FOCUS: {str(build_plan['primaryFocus'])[:160]}")
+            blocks = build_plan.get("scheduleBlocks") or []
+            if blocks:
+                lines.append("  PLAN BLOCKS:")
+                for block in blocks[:6]:
+                    time_label = ""
+                    if block.get("startTime") and block.get("endTime"):
+                        time_label = f" [{str(block['startTime'])[11:16]}-{str(block['endTime'])[11:16]}]"
+                    lines.append(
+                        f"    - [{str(block.get('type', 'planning')).upper()}]"
+                        f"{time_label} {block.get('title', '')}"
+                    )
+            warnings = build_plan.get("warnings") or []
+            if warnings:
+                lines.append("  WARNINGS:")
+                for warning in warnings[:3]:
+                    lines.append(f"    - {str(warning)[:180]}")
             parts.append("\n".join(lines))
 
         # Relevant tasks
@@ -1018,7 +1172,7 @@ class AssistantContextService:
         ]
 
     def _fetch_recent_email(self, user_id: str) -> list[dict[str, Any]]:
-        _IMPORTANCE_RANK = {"urgent": 0, "high": 1, "normal": 2, "low": 3}
+        classifier = EmailPriorityClassifier()
         rows = (
             self.db.execute(
                 select(EmailMessage)
@@ -1029,7 +1183,16 @@ class AssistantContextService:
             .scalars()
             .all()
         )
-        sorted_rows = sorted(rows, key=lambda r: _IMPORTANCE_RANK.get(r.importance, 2))
+        classified = [
+            (row, classifier.classify(row))
+            for row in rows
+        ]
+        important = [
+            (row, meta)
+            for row, meta in classified
+            if meta.get("recommendation_eligible")
+        ]
+        important.sort(key=lambda item: item[1].get("score", 0), reverse=True)
         return [
             {
                 "type":        "email",
@@ -1037,9 +1200,38 @@ class AssistantContextService:
                 "sender":      r.sender,
                 "importance":  r.importance,
                 "received_at": r.received_at,
+                "classification": meta,
             }
-            for r in sorted_rows[:5]
+            for r, meta in important[:5]
         ]
+
+    def _priority_package_to_priorities(self, priority_package: dict[str, Any]) -> list[dict[str, Any]]:
+        priorities: list[dict[str, Any]] = []
+        next_best = priority_package.get("next_best_action") or {}
+        if next_best.get("title") and next_best.get("type") != "none":
+            priorities.append({
+                "id": next_best.get("linked_task_id") or next_best.get("linked_goal_id") or "priority-engine-next",
+                "type": next_best.get("type") or "action",
+                "title": next_best["title"],
+                "priority": "high" if (next_best.get("confidence") or 0) >= 0.7 else "medium",
+                "due_date": None,
+                "status": "recommended",
+                "reason": next_best.get("reason"),
+            })
+        for item in (priority_package.get("today_flow") or [])[:_PRIORITY_CAP]:
+            item_id = item.get("linked_task_id") or item.get("linked_goal_id") or item.get("source_id")
+            if any(priority.get("id") == item_id for priority in priorities):
+                continue
+            priorities.append({
+                "id": item_id or item.get("title"),
+                "type": item.get("type") or "action",
+                "title": item.get("title"),
+                "priority": item.get("priority") or "medium",
+                "due_date": item.get("due_date"),
+                "status": "recommended",
+                "reason": item.get("reason"),
+            })
+        return priorities[:_PRIORITY_CAP]
 
     def _fetch_recent_activity(self, user_id: str) -> list[dict[str, Any]]:
         since = date.today() - timedelta(days=14)

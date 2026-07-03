@@ -65,8 +65,8 @@ function RootLayoutInner() {
 
   // ── Session-expired global handler ──────────────────────────────────────────
   // Shown once whenever the refresh token is expired/revoked.  The user taps
-  // "Sign In" and is sent to the login screen.  Raw "Unauthorized" / "JWT
-  // expired" strings never reach any individual screen.
+  // "Sign In" and is sent to the login screen. Technical authentication
+  // details never reach any individual screen.
   useEffect(() => {
     if (!sessionExpired || sessionAlertShown.current) return;
     const inAuthGroup = segments[0] === '(auth)';

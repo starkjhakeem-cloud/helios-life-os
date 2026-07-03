@@ -17,6 +17,7 @@ from app.models.email import EmailMessage
 from app.models.goal import Goal
 from app.models.task import Task
 from app.models.task_suggestion import TaskSuggestion
+from app.services.priority_engine import PriorityEngine
 from app.services.semantic_memory_service import SemanticMemoryService
 from app.services.task_goal_calendar_service import RelationshipError, TaskGoalCalendarService
 
@@ -25,7 +26,10 @@ logger = logging.getLogger(__name__)
 ACTIVE_GOAL_STATUSES = {"active", "in_progress", "in-progress", "Active", "In Progress"}
 OPEN_TASK_STATUSES = {"todo", "in_progress", "in-progress"}
 DONE_TASK_STATUSES = {"done", "completed"}
-VALID_SOURCES = {"gmail", "calendar", "goals", "daily_brief", "assistant_context", "next_best_action"}
+VALID_SOURCES = {
+    "email", "gmail", "outlook", "outlook_mail", "apple_mail",
+    "calendar", "goals", "daily_brief", "assistant_context", "next_best_action",
+}
 
 
 class TaskEngineError(Exception):
@@ -187,32 +191,44 @@ class TaskEngineService:
         if unknown:
             raise TaskEngineError("invalid_source", f"Unsupported source(s): {', '.join(sorted(unknown))}.")
 
-        drafts: list[SuggestionDraft] = []
-        if "gmail" in selected:
-            drafts.extend(self._gmail_suggestions(user_id))
-        if "calendar" in selected:
-            drafts.extend(self._calendar_suggestions(user_id))
-        if "goals" in selected:
-            drafts.extend(self._goal_suggestions(user_id))
-        if "daily_brief" in selected:
-            drafts.extend(self._daily_brief_suggestions(user_id))
-        if "assistant_context" in selected:
-            drafts.extend(self._assistant_context_suggestions(user_id))
-        if "next_best_action" in selected:
-            drafts.extend(self._next_best_action_suggestions(user_id))
+        priority_engine = PriorityEngine(self.db)
+        priority_context = priority_engine.build_priority_context(user_id)
+        draft_payloads = priority_engine.build_task_suggestion_drafts(
+            user_id,
+            sources=selected,
+            limit=limit,
+        )
+        drafts = [SuggestionDraft(**payload) for payload in draft_payloads]
 
         created_or_updated: list[TaskSuggestion] = []
-        for draft in self._rank_drafts(drafts)[:limit]:
+        for draft in drafts[:limit]:
             suggestion = self._upsert_suggestion(user_id, draft)
             if suggestion:
                 created_or_updated.append(suggestion)
 
-        next_best = TaskGoalCalendarService(self.db).get_next_best_action(user_id)
+        next_best = priority_context.get("next_best_action") or priority_engine.get_next_best_action(user_id)
         return {
             "suggestions": [_suggestion_to_dict(row) for row in created_or_updated],
             "next_best_action": next_best,
+            "recommendations": list(priority_context.get("recommendations") or [])[:limit],
             "generated": len(created_or_updated),
         }
+
+    def build_day(
+        self,
+        user_id: str,
+        *,
+        schedule_date: str | None = None,
+        commit: bool = True,
+        max_items: int = 8,
+    ) -> dict[str, Any]:
+        target = _parse_date(schedule_date)
+        return PriorityEngine(self.db).build_day_schedule(
+            user_id,
+            target,
+            commit=commit,
+            max_items=max_items,
+        )
 
     def accept_suggestion(
         self,

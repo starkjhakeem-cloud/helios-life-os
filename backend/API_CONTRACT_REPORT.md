@@ -17,9 +17,9 @@ Scope: backend endpoints required for app-wide intelligence wiring.
 |---|---|---:|---|---|---|
 | Home | `/daily-brief/today` | GET | Current daily brief | none | `DailyBriefOut`: date, greeting, summary, compact_text, calendar/email/tasks/goals arrays, next_best_action, focus_recommendation, warnings, insights, generated_at, data_sources, ai_used, ai_error |
 | Home | `/daily-brief/generate` | POST | Generate or regenerate a daily brief | optional `{date?: YYYY-MM-DD, regenerate?: bool}` | `DailyBriefOut` |
-| Home | `/relationships/next-best-action` | GET | Single recommended next action | none | `NextBestActionResponse`: type, title, reason, duration, linked IDs, suggested_start_time, confidence |
+| Home | `/relationships/next-best-action` | GET | Single recommended next action | none | `NextBestActionResponse`: type (`task`, `goal`, `calendar`, `email`, `planning`, `recovery`, `assistant`, `none`), title, description, reason, score, urgency, impact, action, duration, linked IDs, suggested_start_time, confidence |
 | Home | `/dashboard/summary` | GET | User context/dashboard summary | none | `DashboardSummary`: metrics, sections, system_status, last_updated |
-| Home / Tasks | `/task-engine/suggestions` | GET | Today flow / recommendations list | query `status=pending|accepted|rejected`, `regenerate`, `limit` | `SuggestedTasksResponse`: suggestions, next_best_action, generated |
+| Home / Tasks | `/task-engine/suggestions` | GET | Today flow / recommendations list | query `status=pending|accepted|rejected`, `regenerate`, `limit` | `SuggestedTasksResponse`: suggestions, recommendations[], next_best_action, generated |
 | Assistant | `/ai/chat` | POST | Assistant chat with retrieved context | `ChatRequest`: message, context_type?, related_goal_id?, related_task_id?, include_context? | `ChatResponse`: reply, suggested_actions, follow_up_questions, recommended_actions, provider, generated_at |
 | Assistant | `/assistant/context/preview` | GET | Assistant context retrieval preview | query `message`, optional `context_type` | `{context_package, summarized_prompt, debug}` |
 | Assistant | `/semantic-memory/search` | GET | Semantic/RAG memory context | query `q` or `query`, optional `limit`, `source_type`, `context_type` | `SearchResponse`: query, embedding_used, results[], total |
@@ -27,10 +27,11 @@ Scope: backend endpoints required for app-wide intelligence wiring.
 | Tasks | `/tasks` | GET | Task list | none | `TasksResponse`: tasks[] |
 | Tasks | `/tasks` | POST | Create task | `TaskCreate`: title, description?, status, priority, due_date?, linked_goal_id?, duration/category/source metadata | `TaskOut` |
 | Tasks | `/task-engine/tasks/{task_id}/complete` | POST | Complete task and update history/progress | path `task_id` | `CompleteTaskResponse`: task, daily_history_updated, goal_progress? |
-| Tasks | `/task-engine/suggestions/generate` | POST | Generate suggested tasks | `{sources?: string[], limit}` | `SuggestedTasksResponse` |
+| Tasks | `/task-engine/suggestions/generate` | POST | Generate suggested tasks | `{sources?: string[], limit}` | `SuggestedTasksResponse`: suggestions, recommendations[], next_best_action, generated |
 | Tasks | `/task-engine/suggestions/{suggestion_id}/accept` | POST | Accept suggestion into a task | `{schedule?: bool, schedule_date?, start_time?, end_time?}` | `AcceptSuggestionResponse`: suggestion, task, calendar_event?, goal_progress? |
 | Tasks | `/task-engine/suggestions/{suggestion_id}/reject` | POST | Reject suggestion | `{reason?: string}` | `TaskSuggestionOut` |
 | Tasks | `/task-engine/tasks/{task_id}/schedule` | POST | Auto/manual schedule task | `{date?, start_time?, end_time?}` | `ScheduleTaskEngineResponse`: task, calendar_event, selected_window? |
+| Calendar / Tasks | `/task-engine/build-day` | POST | Build or preview an optimized daily plan from priority engine | `{date?: YYYY-MM-DD, commit?: bool, max_items?: number}` | `BuildDayResponse`: date, generated_at, committed, summary, primaryFocus, scheduleBlocks[], topTasks[], warnings[], scheduled_items, unscheduled_actions, windows_remaining, recommendations[], next_best_action, filtered_email_count |
 | Tasks | `/relationships/next-best-action` | GET | Next best task/action | none | `NextBestActionResponse` |
 | Goals | `/goals` | GET | Goals list | none | `GoalsResponse`: goals[] |
 | Goals | `/goals/{goal_id}` | GET | Goal detail | path `goal_id` | `GoalOut` |
@@ -41,6 +42,7 @@ Scope: backend endpoints required for app-wide intelligence wiring.
 | Calendar | `/history/range` | GET | Day history range | query `start_date`, `end_date` | `DailyHistoryRangeResponse` |
 | Calendar | `/history/day/{target_date}` | GET | Selected day details | path `target_date` | `DailyHistoryOut` |
 | Calendar | `/relationships/available-windows` | GET | Available windows | query optional `date` | `TimeWindow[]` |
+| Awareness | `/awareness/current` | GET | Unified real-time context | query optional `date`, `refresh` | `RealTimeContext`: time/date, weather, location, calendar, goals, tasks, integrations, battery/network future slots |
 | Calendar | `/calendar/events` | GET | Synced/manual calendar events | query optional `upcoming_only` | `CalendarEventsResponse`; Google events use `source="google"` |
 | Connected Services | `/integrations` | GET | Integrations status | none | `IntegrationListResponse`: integrations[], provider, services[] |
 | Connected Services | `/integrations/google/sync` | POST | Sync Google Calendar/Gmail | optional `{service_type: calendar|gmail|both}` | `GoogleSyncResponse`: provider, summaries[] |
@@ -54,6 +56,11 @@ Scope: backend endpoints required for app-wide intelligence wiring.
 - Added `GET /api/v1/goals/{goal_id}` for goal detail.
 - Added `GET /api/v1/goals/{goal_id}/tasks` for linked tasks.
 - Reused existing `GoalOut`, `TaskOut`, and `TasksResponse` schemas; no mobile/frontend files changed.
+- Added `POST /api/v1/task-engine/build-day` for automatic daily scheduling.
+- Added `GET /api/v1/awareness/current` for the unified Real-Time Awareness Engine.
+- `NextBestActionResponse.type` now includes `email`, `planning`, `recovery`, and `assistant`.
+- `BuildDayResponse` now includes structured plan fields (`summary`, `primaryFocus`, `scheduleBlocks`, `topTasks`, `warnings`, `awareness`) plus normalized `HeliosRecommendation` records with score, urgency, impact, source IDs, and action target.
+- Daily Brief, task suggestions, Next Best Action, Build My Day, and Assistant context now share `PriorityEngine`; see `docs/v3-priority-engine.md`.
 
 ## Tests Added / Updated
 

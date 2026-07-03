@@ -271,7 +271,7 @@ function NewReminderModal({ visible, onClose, onSubmit, isMutating }: NewReminde
           {formError ? <Text style={styles.formError}>{formError}</Text> : null}
           <View style={styles.sheetActions}>
             <TouchableOpacity style={styles.cancelButton} onPress={resetAndClose} activeOpacity={0.7}>
-              <Text style={styles.cancelButtonText}>CANCEL</Text>
+              <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.createButton, isMutating && { opacity: 0.5 }]}
@@ -282,7 +282,7 @@ function NewReminderModal({ visible, onClose, onSubmit, isMutating }: NewReminde
               {isMutating ? (
                 <ActivityIndicator size="small" color={colors.background} />
               ) : (
-                <Text style={styles.createButtonText}>CREATE</Text>
+                <Text style={styles.createButtonText}>Create</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -517,7 +517,7 @@ function UserIdModal({ visible, onClose, currentId, canChange, accessToken }: Us
 
           <View style={styles.sheetActions}>
             <TouchableOpacity style={styles.cancelButton} onPress={resetAndClose} activeOpacity={0.7}>
-              <Text style={styles.cancelButtonText}>CANCEL</Text>
+              <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
             {canChange ? (
               <TouchableOpacity
@@ -529,7 +529,7 @@ function UserIdModal({ visible, onClose, currentId, canChange, accessToken }: Us
                 {isSaving ? (
                   <ActivityIndicator size="small" color={colors.background} />
                 ) : (
-                  <Text style={styles.createButtonText}>SAVE</Text>
+                  <Text style={styles.createButtonText}>Save</Text>
                 )}
               </TouchableOpacity>
             ) : null}
@@ -731,7 +731,7 @@ function PersonalInfoModal({ visible, onClose, accessToken }: PersonalInfoModalP
             ) : null}
             <View style={[styles.sheetActions, { marginBottom: spacing.xl }]}>
               <TouchableOpacity style={styles.cancelButton} onPress={resetAndClose} activeOpacity={0.7}>
-                <Text style={styles.cancelButtonText}>CANCEL</Text>
+                <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.createButton, profile.isSaving && { opacity: 0.5 }]}
@@ -742,7 +742,7 @@ function PersonalInfoModal({ visible, onClose, accessToken }: PersonalInfoModalP
                 {profile.isSaving ? (
                   <ActivityIndicator size="small" color={colors.background} />
                 ) : (
-                  <Text style={styles.createButtonText}>SAVE</Text>
+                  <Text style={styles.createButtonText}>Save</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -998,7 +998,7 @@ function PersonalizationModal({ visible, onClose, accessToken }: Personalization
 
             <View style={[styles.sheetActions, { marginBottom: spacing.xl }]}>
               <TouchableOpacity style={styles.cancelButton} onPress={resetAndClose} activeOpacity={0.7}>
-                <Text style={styles.cancelButtonText}>CANCEL</Text>
+                <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.createButton, isSaving && { opacity: 0.5 }]}
@@ -1009,7 +1009,7 @@ function PersonalizationModal({ visible, onClose, accessToken }: Personalization
                 {isSaving ? (
                   <ActivityIndicator size="small" color={colors.background} />
                 ) : (
-                  <Text style={styles.createButtonText}>SAVE</Text>
+                  <Text style={styles.createButtonText}>Save</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -1040,8 +1040,6 @@ export default function ProfileScreen() {
   const user = useAuthStore((s) => s.user);
   const accessToken = useAuthStore((s) => s.accessToken);
   const logout = useAuthStore((s) => s.logout);
-  const deleteAccount = useAuthStore((s) => s.deleteAccount);
-  const authLoading = useAuthStore((s) => s.isLoading);
 
   const profile = useProfileStore();
   const displayName = profile.display_name ?? user?.name ?? "—";
@@ -1181,17 +1179,6 @@ export default function ProfileScreen() {
       { text: "Cancel", style: "cancel" },
       { text: "Sign Out", style: "destructive", onPress: logout },
     ]);
-  }
-
-  function handleDeleteAccount() {
-    Alert.alert(
-      "Delete Account",
-      "This will permanently delete your account and all data. This cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Delete Account", style: "destructive", onPress: () => deleteAccount() },
-      ],
-    );
   }
 
   async function handleRequestPermissions() {
@@ -1456,7 +1443,7 @@ export default function ProfileScreen() {
           ) : (
             <View style={styles.loadingRow}>
               <ActivityIndicator size="small" color={colors.accentCyan} />
-              <Text style={styles.loadingText}>LOADING...</Text>
+              <Text style={styles.loadingText}>Loading profile...</Text>
             </View>
           )}
         </View>
@@ -1854,17 +1841,9 @@ export default function ProfileScreen() {
           })}
         </View>
 
-        {/* ── Sign Out / Delete ──────────────────────────────────────────────── */}
+        {/* ── Sign Out ───────────────────────────────────────────────────────── */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
-          <Text style={styles.logoutText}>SIGN OUT</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.deleteAccountButton}
-          onPress={handleDeleteAccount}
-          disabled={authLoading}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.deleteAccountText}>DELETE ACCOUNT</Text>
+          <Text style={styles.logoutText}>Sign Out</Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -1923,7 +1902,7 @@ function createStyles(colors: ThemeColors) {
       fontWeight: "700" as const,
       color: colors.textPrimary,
       marginBottom: spacing.lg,
-      letterSpacing: -0.5,
+      letterSpacing: 0,
     },
     avatarRow: {
       flexDirection: "row",
@@ -2390,14 +2369,6 @@ function createStyles(colors: ThemeColors) {
       marginTop: spacing.sm,
     },
     logoutText: { ...typography.label, color: colors.danger, fontSize: 13 },
-    deleteAccountButton: {
-      borderRadius: radius.md,
-      paddingVertical: spacing.md,
-      alignItems: "center",
-      marginTop: spacing.sm,
-    },
-    deleteAccountText: { ...typography.label, color: colors.textMuted, fontSize: 11 },
-
     // Modals
     overlay: {
       flex: 1,

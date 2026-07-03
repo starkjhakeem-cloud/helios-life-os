@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AccessibilityInfo,
   Animated,
   FlatList,
   Keyboard,
   type KeyboardEvent,
+  Linking,
   Modal,
   Platform,
   ScrollView,
@@ -28,9 +30,14 @@ import {
 import type { RecommendedAction } from "../../store/useAIStore";
 import { radius, spacing, type ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
-import HeliosEnergyCore from "../../components/HeliosEnergyCore";
+import HeliosEnergyCore, { type CoreState } from "../../components/HeliosEnergyCore";
 import { getConnectedClockSnapshot } from "../../hooks/useCurrentDateTime";
 import { getDeviceTimezone } from "../../services/locationService";
+import {
+  VoiceInputError,
+  type VoiceInputStatus,
+  voiceInputService,
+} from "../../services/voiceInputService";
 
 // Pill row height + float offset + visual buffer (device-agnostic part).
 // Add insets.bottom at runtime for the safe-area portion.
@@ -109,7 +116,8 @@ function deriveAIStatus(
 function friendlyError(raw: string | null): string | null {
   if (!raw) return null;
   const lower = raw.toLowerCase();
-  if (lower.includes("backend unavailable") || lower.includes("current api:")) return raw;
+  if (lower.includes("backend unavailable") || lower.includes("current api:"))
+    return "Unable to reach HELIOS. Check your connection and try again.";
   if (/network|fetch|connection|offline|unreachable|failed to/.test(lower))
     return "Unable to reach HELIOS. Check your connection and try again.";
   if (/401|unauthorized|expired|session/.test(lower))
@@ -121,6 +129,58 @@ function friendlyError(raw: string | null): string | null {
   if (/429|rate.?limit/.test(lower))
     return "HELIOS is busy right now. Try again in a moment.";
   return "Something went wrong. Please try again.";
+}
+
+function isVoiceActive(status: VoiceInputStatus): boolean {
+  return status === "requesting_permission"
+    || status === "listening"
+    || status === "processing";
+}
+
+function deriveVoiceCoreState(status: VoiceInputStatus, aiStatus: AIStatus): CoreState {
+  if (status === "listening") return "listening";
+  if (status === "processing") return "thinking";
+  if (status === "requesting_permission") return "attention";
+  if (status === "error" || status === "unavailable") return "attention";
+  if (aiStatus === "thinking") return "thinking";
+  if (aiStatus === "connecting") return "attention";
+  if (aiStatus === "error") return "offline";
+  return "idle";
+}
+
+function voiceTitle(status: VoiceInputStatus): string {
+  if (status === "requesting_permission") return "Preparing voice input";
+  if (status === "listening") return "Listening...";
+  if (status === "processing") return "Processing voice";
+  if (status === "unavailable") return "Voice input not configured";
+  if (status === "error") return "Voice input needs attention";
+  return "Voice input";
+}
+
+function voiceIcon(status: VoiceInputStatus): string {
+  if (status === "listening") return "mic.fill";
+  if (status === "processing") return "waveform";
+  if (status === "unavailable") return "mic.slash";
+  if (status === "error") return "exclamationmark.triangle";
+  return "mic";
+}
+
+function friendlyVoiceError(error: unknown): string {
+  if (error instanceof VoiceInputError) {
+    if (error.code === "permission_denied") {
+      return "Microphone access is required to use voice input. You can enable it in Settings.";
+    }
+    if (error.code === "permission_restricted") {
+      return "Microphone access is restricted on this device.";
+    }
+    if (error.code === "speech_unavailable") {
+      return "Voice mode is ready, but speech recognition is not configured in this build yet. Typed Assistant still works.";
+    }
+    if (error.code === "empty_transcript") {
+      return "I didn't catch that. Try again.";
+    }
+  }
+  return "Voice input is unavailable right now. Typed Assistant still works.";
 }
 
 // ── Animated Dots (typing indicator) ─────────────────────────────────────────
@@ -231,21 +291,39 @@ function AssistantHeader({
   aiStatus,
   onHistoryPress,
   onNewPress,
+  onVoicePress,
+  voiceStatus,
   colors,
 }: {
   aiStatus: AIStatus;
   onHistoryPress: () => void;
   onNewPress: () => void;
+  onVoicePress: () => void;
+  voiceStatus: VoiceInputStatus;
   colors: ThemeColors;
 }) {
   const s = useMemo(() => createStyles(colors), [colors]);
   const { label, color } = AI_STATUS_CONFIG[aiStatus];
+  const coreState = deriveVoiceCoreState(voiceStatus, aiStatus);
+  const voiceActive = isVoiceActive(voiceStatus);
 
   return (
     <View style={s.header}>
       {/* Far left — Energy Core orb */}
-      <View style={s.headerOrbWrap} pointerEvents="none">
-        <HeliosEnergyCore size={72} interactive={false} />
+      <View style={s.headerOrbWrap}>
+        <HeliosEnergyCore
+          size={72}
+          state={coreState}
+          interactive
+          onPress={onVoicePress}
+          accessibilityLabel={voiceActive ? "HELIOS voice input active" : "Start HELIOS voice input"}
+          accessibilityHint="Tap to speak to HELIOS. Voice is only used after you tap."
+        />
+        {voiceActive ? (
+          <View style={s.voiceOrbBadge} pointerEvents="none">
+            <SymbolView name="mic.fill" size={10} tintColor={colors.background} resizeMode="scaleAspectFit" />
+          </View>
+        ) : null}
       </View>
 
       {/* Title */}
@@ -269,12 +347,31 @@ function AssistantHeader({
 
 // ── Welcome Card ──────────────────────────────────────────────────────────────
 
-function WelcomeCard({ displayName, colors }: { displayName: string; colors: ThemeColors }) {
+function WelcomeCard({
+  colors,
+  displayName,
+  onVoicePress,
+  voiceStatus,
+}: {
+  colors: ThemeColors;
+  displayName: string;
+  onVoicePress: () => void;
+  voiceStatus: VoiceInputStatus;
+}) {
   const s = useMemo(() => createStyles(colors), [colors]);
+  const coreState = deriveVoiceCoreState(voiceStatus, "ready");
   return (
     <View style={s.welcomeCard}>
-      <View style={s.welcomeOrbWrap} pointerEvents="none">
-        <HeliosEnergyCore size={ORBS_WELCOME_SIZE} interactive={false} />
+      <View style={s.welcomeOrbWrap}>
+        <HeliosEnergyCore
+          size={ORBS_WELCOME_SIZE}
+          state={coreState}
+          interactive
+          glowInset={6}
+          onPress={onVoicePress}
+          accessibilityLabel="Start HELIOS voice input"
+          accessibilityHint="Tap to speak to HELIOS."
+        />
       </View>
       <Text style={s.welcomeGreeting}>{getTimeGreeting()}, {displayName}.</Text>
       <Text style={s.welcomeQuestion}>{getWelcomeQuestion()}</Text>
@@ -614,6 +711,7 @@ function MessageComposer({
   onVoice,
   onAttach,
   disabled,
+  voiceStatus,
   colors,
 }: {
   value: string;
@@ -622,10 +720,13 @@ function MessageComposer({
   onVoice?: () => void;
   onAttach?: (type: AttachmentType) => void;
   disabled: boolean;
+  voiceStatus: VoiceInputStatus;
   colors: ThemeColors;
 }) {
   const s = useMemo(() => createStyles(colors), [colors]);
   const canSend = !disabled && value.trim().length > 0;
+  const voiceActive = isVoiceActive(voiceStatus);
+  const voiceTint = voiceActive ? colors.accentCyan : colors.textMuted;
 
   return (
     <View style={s.composer}>
@@ -648,13 +749,15 @@ function MessageComposer({
         accessibilityHint="Type your message to HELIOS"
       />
       <TouchableOpacity
-        style={s.composerIconBtn}
+        style={[s.composerIconBtn, voiceActive && s.composerIconBtnActive]}
         onPress={onVoice}
+        disabled={disabled}
         activeOpacity={0.7}
         accessibilityLabel="Voice input"
         accessibilityRole="button"
+        accessibilityState={{ disabled, selected: voiceActive }}
       >
-        <SymbolView name="mic" size={17} tintColor={colors.textMuted} resizeMode="scaleAspectFit" />
+        <SymbolView name={voiceActive ? "mic.fill" : "mic"} size={17} tintColor={voiceTint} resizeMode="scaleAspectFit" />
       </TouchableOpacity>
       <TouchableOpacity
         style={s.composerIconBtn}
@@ -676,6 +779,115 @@ function MessageComposer({
       >
         <SymbolView name="arrow.up" size={17} tintColor="#ffffff" resizeMode="scaleAspectFit" />
       </TouchableOpacity>
+    </View>
+  );
+}
+
+// ── Voice Mode Panel ─────────────────────────────────────────────────────────
+
+function VoiceModePanel({
+  message,
+  onCancel,
+  onOpenSettings,
+  onStop,
+  status,
+  transcriptPreview,
+  colors,
+}: {
+  message: string | null;
+  onCancel: () => void;
+  onOpenSettings: () => void;
+  onStop: () => void;
+  status: VoiceInputStatus;
+  transcriptPreview: string | null;
+  colors: ThemeColors;
+}) {
+  const s = useMemo(() => createStyles(colors), [colors]);
+  if (status === "idle") return null;
+
+  const isListening = status === "listening";
+  const canOpenSettings = status === "error"
+    && (message ?? "").toLowerCase().includes("microphone access is required");
+  const iconColor = status === "error"
+    ? colors.danger
+    : status === "unavailable"
+      ? colors.warning
+      : colors.accentCyan;
+
+  return (
+    <View
+      accessibilityLiveRegion="polite"
+      accessibilityLabel={`${voiceTitle(status)}. ${message ?? ""}`}
+      style={s.voicePanel}
+    >
+      <View style={s.voicePanelTop}>
+        <View style={[s.voicePanelIcon, { borderColor: `${iconColor}44`, backgroundColor: `${iconColor}14` }]}>
+          <SymbolView name={voiceIcon(status) as any} size={18} tintColor={iconColor} resizeMode="scaleAspectFit" />
+        </View>
+        <View style={s.voicePanelCopy}>
+          <Text style={s.voicePanelTitle}>{voiceTitle(status)}</Text>
+          <Text style={s.voicePanelMessage}>
+            {message ?? "Voice is used only to process your request."}
+          </Text>
+        </View>
+      </View>
+
+      {isListening ? (
+        <View style={s.waveformRow} pointerEvents="none">
+          {[0, 1, 2, 3, 4].map((bar) => (
+            <View
+              key={bar}
+              style={[
+                s.waveformBar,
+                {
+                  height: 10 + (bar % 3) * 7,
+                  backgroundColor: bar % 2 === 0 ? colors.accentCyan : colors.accent,
+                },
+              ]}
+            />
+          ))}
+        </View>
+      ) : null}
+
+      {transcriptPreview ? (
+        <View style={s.transcriptPreview}>
+          <Text style={s.transcriptLabel}>TRANSCRIPT</Text>
+          <Text style={s.transcriptText}>{transcriptPreview}</Text>
+        </View>
+      ) : null}
+
+      <Text style={s.voicePrivacy}>Voice is used only to process your request. HELIOS is not always listening.</Text>
+
+      <View style={s.voiceActions}>
+        {isListening ? (
+          <TouchableOpacity
+            accessibilityRole="button"
+            activeOpacity={0.82}
+            onPress={onStop}
+            style={s.voicePrimaryAction}
+          >
+            <Text style={s.voicePrimaryText}>Done</Text>
+          </TouchableOpacity>
+        ) : null}
+        {canOpenSettings ? (
+          <TouchableOpacity
+            accessibilityRole="button"
+            activeOpacity={0.82}
+            onPress={onOpenSettings}
+            style={s.voiceSecondaryAction}
+          >
+            <Text style={s.voiceSecondaryText}>Open Settings</Text>
+          </TouchableOpacity>
+        ) : null}
+        <TouchableOpacity
+          accessibilityRole="button"
+          activeOpacity={0.82}
+          onPress={onCancel}
+          style={s.voiceSecondaryAction}
+        >
+          <Text style={s.voiceSecondaryText}>{isListening ? "Cancel" : "Dismiss"}</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -838,6 +1050,9 @@ export default function AssistantScreen() {
   const [historyVisible, setHistoryVisible] = useState(false);
   const [expandedMsgId, setExpandedMsgId]   = useState<string | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [voiceStatus, setVoiceStatus]       = useState<VoiceInputStatus>("idle");
+  const [voiceMessage, setVoiceMessage]     = useState<string | null>(null);
+  const [voiceTranscript, setVoiceTranscript] = useState<string | null>(null);
   const listRef         = useRef<FlatList<ChatMessage>>(null);
   const isAtBottomRef   = useRef(true);
 
@@ -860,6 +1075,12 @@ export default function AssistantScreen() {
   useEffect(() => {
     if (historyVisible && accessToken) fetchConversations(accessToken);
   }, [accessToken, fetchConversations, historyVisible]);
+
+  useEffect(() => {
+    if (voiceStatus === "idle") return;
+    const announcement = `${voiceTitle(voiceStatus)}. ${voiceMessage ?? ""}`.trim();
+    AccessibilityInfo.announceForAccessibility(announcement);
+  }, [voiceMessage, voiceStatus]);
 
   useEffect(() => {
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
@@ -927,6 +1148,76 @@ export default function AssistantScreen() {
     ],
   );
 
+  const handleVoiceCancel = useCallback(() => {
+    voiceInputService.cancelListening().catch(() => {});
+    setVoiceStatus("idle");
+    setVoiceMessage(null);
+    setVoiceTranscript(null);
+  }, []);
+
+  const handleOpenVoiceSettings = useCallback(() => {
+    Linking.openSettings().catch(() => {
+      setVoiceStatus("error");
+      setVoiceMessage("Settings could not be opened from HELIOS. Open device Settings to update microphone access.");
+    });
+  }, []);
+
+  const handleVoiceStop = useCallback(async () => {
+    if (voiceStatus !== "listening") return;
+    setVoiceStatus("processing");
+    setVoiceMessage("Processing your voice request.");
+
+    try {
+      const result = await voiceInputService.stopListening();
+      const transcript = result?.transcript.trim() ?? "";
+      if (!transcript) {
+        setVoiceStatus("error");
+        setVoiceMessage("I didn't catch that. Try again.");
+        return;
+      }
+
+      setVoiceTranscript(transcript);
+      setInput(transcript);
+      await sendText(transcript);
+      setVoiceStatus("idle");
+      setVoiceMessage(null);
+      setVoiceTranscript(null);
+    } catch (error) {
+      setVoiceStatus(error instanceof VoiceInputError && error.code === "speech_unavailable" ? "unavailable" : "error");
+      setVoiceMessage(friendlyVoiceError(error));
+    }
+  }, [sendText, voiceStatus]);
+
+  const handleVoiceEntry = useCallback(async () => {
+    if (isSending || isInitializing || isVoiceActive(voiceStatus)) return;
+
+    Keyboard.dismiss();
+    setVoiceTranscript(null);
+    setVoiceStatus("requesting_permission");
+    setVoiceMessage("Preparing the microphone.");
+
+    try {
+      const granted = await voiceInputService.requestPermissions();
+      if (!granted) {
+        const permissionState = voiceInputService.getPermissionState();
+        setVoiceStatus("error");
+        setVoiceMessage(
+          permissionState === "denied"
+            ? "Microphone access is required to use voice input. You can enable it in Settings."
+            : "Microphone access is restricted on this device.",
+        );
+        return;
+      }
+
+      setVoiceStatus("listening");
+      setVoiceMessage("Listening. Speak naturally to HELIOS.");
+      await voiceInputService.startListening();
+    } catch (error) {
+      setVoiceStatus(error instanceof VoiceInputError && error.code === "speech_unavailable" ? "unavailable" : "error");
+      setVoiceMessage(friendlyVoiceError(error));
+    }
+  }, [isInitializing, isSending, voiceStatus]);
+
   const handleSend    = useCallback(() => sendText(input), [input, sendText]);
   const handleNewConv = useCallback(() => { if (accessToken) createNewConversation(accessToken); }, [accessToken, createNewConversation]);
   const handleSelect  = useCallback((id: string) => { if (accessToken) loadConversation(accessToken, id); }, [accessToken, loadConversation]);
@@ -959,11 +1250,16 @@ export default function AssistantScreen() {
     () =>
       !hasMessages ? (
         <View style={{ gap: 16, marginBottom: 8 }}>
-          <WelcomeCard displayName={displayName} colors={colors} />
+          <WelcomeCard
+            displayName={displayName}
+            onVoicePress={handleVoiceEntry}
+            voiceStatus={voiceStatus}
+            colors={colors}
+          />
           <SuggestedPrompts onAction={sendText} colors={colors} />
         </View>
       ) : null,
-    [hasMessages, displayName, colors, sendText],
+    [hasMessages, displayName, handleVoiceEntry, voiceStatus, colors, sendText],
   );
 
   const typingLabel =
@@ -979,6 +1275,8 @@ export default function AssistantScreen() {
         aiStatus={aiStatus}
         onHistoryPress={() => setHistoryVisible(true)}
         onNewPress={handleNewConv}
+        onVoicePress={handleVoiceEntry}
+        voiceStatus={voiceStatus}
         colors={colors}
       />
 
@@ -1029,13 +1327,25 @@ export default function AssistantScreen() {
         </View>
       ) : null}
 
+      <VoiceModePanel
+        message={voiceMessage}
+        onCancel={handleVoiceCancel}
+        onOpenSettings={handleOpenVoiceSettings}
+        onStop={handleVoiceStop}
+        status={voiceStatus}
+        transcriptPreview={voiceTranscript}
+        colors={colors}
+      />
+
       {/* Composer */}
       <View style={{ marginBottom: composerBottom }}>
         <MessageComposer
           value={input}
           onChange={setInput}
           onSend={handleSend}
+          onVoice={handleVoiceEntry}
           disabled={isSending || isInitializing}
+          voiceStatus={voiceStatus}
           colors={colors}
         />
       </View>
@@ -1107,6 +1417,19 @@ function createStyles(colors: ThemeColors) {
     onlineDot: { width: 7, height: 7, borderRadius: 4 },
     headerOnline: { fontSize: 12, fontWeight: "600" },
     headerOrbWrap: { alignItems: "center", justifyContent: "center", marginLeft: -10 },
+    voiceOrbBadge: {
+      position: "absolute",
+      right: 10,
+      bottom: 12,
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.accentCyan,
+      borderWidth: 2,
+      borderColor: colors.background,
+    },
     headerRight: { flexShrink: 0, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 10 },
     iconBtn: { alignItems: "center", gap: 4 },
     iconBtnCircle: {
@@ -1273,12 +1596,136 @@ function createStyles(colors: ThemeColors) {
       backgroundColor: colors.surface,
       alignItems: "center", justifyContent: "center",
     },
+    composerIconBtnActive: {
+      borderColor: `${colors.accentCyan}66`,
+      backgroundColor: `${colors.accentCyan}14`,
+    },
     sendBtn: {
       width: 46, height: 46, borderRadius: 23,
       backgroundColor: colors.accent,
       alignItems: "center", justifyContent: "center",
     },
     sendBtnDisabled: { backgroundColor: `${colors.accent}50` },
+
+    // Voice mode
+    voicePanel: {
+      marginHorizontal: 16,
+      marginBottom: 8,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: `${colors.accentCyan}33`,
+      backgroundColor: colors.surface,
+      padding: spacing.md,
+      gap: spacing.sm,
+      shadowColor: colors.shadow,
+      shadowOpacity: 0.12,
+      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 10 },
+      elevation: 12,
+    },
+    voicePanelTop: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: spacing.md,
+    },
+    voicePanelIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      borderWidth: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      flexShrink: 0,
+    },
+    voicePanelCopy: {
+      flex: 1,
+      minWidth: 0,
+      gap: 3,
+    },
+    voicePanelTitle: {
+      fontSize: 15,
+      fontWeight: "900",
+      color: colors.textPrimary,
+    },
+    voicePanelMessage: {
+      fontSize: 13,
+      fontWeight: "500",
+      color: colors.textSecondary,
+      lineHeight: 18,
+    },
+    waveformRow: {
+      minHeight: 32,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 5,
+      paddingVertical: spacing.xs,
+    },
+    waveformBar: {
+      width: 5,
+      borderRadius: 3,
+      opacity: 0.86,
+    },
+    transcriptPreview: {
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceDark,
+      padding: spacing.md,
+      gap: spacing.xs,
+    },
+    transcriptLabel: {
+      fontSize: 9,
+      fontWeight: "900",
+      color: colors.textMuted,
+      letterSpacing: 1,
+    },
+    transcriptText: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: colors.textPrimary,
+      lineHeight: 20,
+    },
+    voicePrivacy: {
+      fontSize: 11,
+      fontWeight: "600",
+      color: colors.textMuted,
+      lineHeight: 16,
+    },
+    voiceActions: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "flex-end",
+      gap: spacing.sm,
+    },
+    voicePrimaryAction: {
+      minHeight: 36,
+      justifyContent: "center",
+      borderRadius: radius.sm,
+      backgroundColor: colors.accent,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs,
+    },
+    voicePrimaryText: {
+      fontSize: 12,
+      fontWeight: "900",
+      color: colors.background,
+    },
+    voiceSecondaryAction: {
+      minHeight: 36,
+      justifyContent: "center",
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceDark,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs,
+    },
+    voiceSecondaryText: {
+      fontSize: 12,
+      fontWeight: "800",
+      color: colors.textSecondary,
+    },
 
     // History Modal
     modalOverlay: {

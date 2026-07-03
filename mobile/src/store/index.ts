@@ -40,3 +40,4 @@ export type { BackendDailyBrief } from "../services/dailyBriefService";
 export type { BriefErrorCode } from "./useDailyBriefStore";
 export { useTaskEngineStore } from "./useTaskEngineStore";
 export type { TaskSuggestion } from "../services/taskEngineService";
+export type { RealTimeContext, AwarenessDayPeriod } from "../services/awarenessService";

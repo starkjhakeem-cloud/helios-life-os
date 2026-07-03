@@ -32,7 +32,7 @@ import {
 } from "../../store";
 import type { BackendDailyBrief, BriefErrorCode } from "../../store";
 import { relationshipService, type NextBestAction } from "../../services/relationshipService";
-import type { TaskSuggestion } from "../../services/taskEngineService";
+import type { HeliosRecommendation, TaskSuggestion } from "../../services/taskEngineService";
 import { useTheme } from "../../theme/ThemeContext";
 import type { ThemeColors } from "../../theme/theme";
 import {
@@ -184,6 +184,7 @@ export default function HomeScreen() {
   const safeGoals = useMemo(() => goals ?? [], [goals]);
   const safeTasks = useMemo(() => tasks ?? [], [tasks]);
   const taskSuggestions = useTaskEngineStore((s) => s.suggestions);
+  const recommendations = useTaskEngineStore((s) => s.recommendations);
   const fetchTaskSuggestions = useTaskEngineStore((s) => s.fetchSuggestions);
   const generateTaskSuggestions = useTaskEngineStore((s) => s.generateSuggestions);
   const [nextBestAction, setNextBestAction] = useState<NextBestAction | null>(null);
@@ -298,8 +299,8 @@ export default function HomeScreen() {
   const dailyBrief    = useMemo(() => generateDailyBrief(intelligenceCtx), [intelligenceCtx]);
   const heroMsg       = useMemo(() => generateHeroMessage(intelligenceCtx), [intelligenceCtx]);
   const missionItems  = useMemo(
-    () => buildMissionItems(intelligenceCtx, taskSuggestions, nextBestAction),
-    [intelligenceCtx, nextBestAction, taskSuggestions],
+    () => buildMissionItems(intelligenceCtx, taskSuggestions, nextBestAction, recommendations),
+    [intelligenceCtx, nextBestAction, recommendations, taskSuggestions],
   );
 
   return (
@@ -496,15 +497,17 @@ interface MissionItem {
   reason: string;
   actionLabel: string;
   route: string;
+  urgency?: string;
+  impact?: string;
 }
 
 const CATEGORY_META: Record<string, { label: string; icon: SFSymbol; accent: string }> = {
-  wgu:       { label: "STUDY",     icon: "book.fill",          accent: "#7c3aed" },
-  helios:    { label: "BUILD",     icon: "hammer.fill",         accent: "#3b82f6" },
-  portfolio: { label: "PORTFOLIO", icon: "briefcase.fill",      accent: "#8b5cf6" },
-  creative:  { label: "CREATE",    icon: "pencil.and.outline",  accent: "#ec4899" },
-  health:    { label: "HEALTH",    icon: "figure.run",          accent: "#14b8a6" },
-  general:   { label: "FOCUS",     icon: "circle.dotted",       accent: "#6366f1" },
+  wgu:       { label: "Study",     icon: "book.fill",          accent: "#7c3aed" },
+  helios:    { label: "Build",     icon: "hammer.fill",         accent: "#3b82f6" },
+  portfolio: { label: "Portfolio", icon: "briefcase.fill",      accent: "#8b5cf6" },
+  creative:  { label: "Create",    icon: "pencil.and.outline",  accent: "#ec4899" },
+  health:    { label: "Health",    icon: "figure.run",          accent: "#14b8a6" },
+  general:   { label: "Focus",     icon: "circle.dotted",       accent: "#6366f1" },
 };
 
 function buildMissionTitle(task: HeliosTask, category: string): string {
@@ -555,15 +558,53 @@ function suggestionToMissionItem(suggestion: TaskSuggestion): MissionItem {
 
 function nextBestActionToMissionItem(action: NextBestAction | null): MissionItem | null {
   if (!action || action.type === "none") return null;
+  const route = action.action?.route ?? (
+    action.type === "recovery" || action.type === "goal"
+      ? "/(tabs)/goals"
+      : action.type === "calendar" || action.type === "planning"
+        ? "/(tabs)/calendar"
+        : action.type === "email"
+          ? "/(tabs)/email"
+          : "/(tabs)/tasks"
+  );
   return {
     id: `next-best-${action.linked_task_id ?? action.linked_goal_id ?? action.title}`,
     category: "NEXT BEST ACTION",
-    icon: action.type === "goal" ? "target" : action.type === "calendar" ? "calendar" : "bolt.fill",
+    icon: action.type === "recovery" || action.type === "goal" ? "target" : action.type === "calendar" || action.type === "planning" ? "calendar" : action.type === "email" ? "envelope.fill" : "bolt.fill",
     accent: "#a855f7",
     title: action.title,
-    reason: action.reason,
-    actionLabel: action.type === "goal" ? "Open Goals" : "Open Tasks",
-    route: action.type === "goal" ? "/(tabs)/goals" : "/(tabs)/tasks",
+    reason: action.description ?? action.reason,
+    actionLabel: action.action?.label ?? (action.type === "recovery" || action.type === "goal" ? "Open Goals" : "Open"),
+    route,
+    urgency: action.urgency ?? undefined,
+    impact: action.impact ?? undefined,
+  };
+}
+
+function recommendationToMissionItem(rec: HeliosRecommendation): MissionItem | null {
+  if (rec.type === "none") return null;
+  const icon: SFSymbol =
+    rec.type === "recovery" || rec.type === "goal" ? "target"
+      : rec.type === "calendar" || rec.type === "planning" ? "calendar"
+        : rec.type === "email" ? "envelope.fill"
+          : rec.type === "task" ? "checkmark.circle.fill"
+            : "sparkles";
+  const accent =
+    rec.urgency === "critical" ? "#ef4444"
+      : rec.urgency === "high" ? "#f59e0b"
+        : rec.type === "planning" ? "#22d3ee"
+          : "#a855f7";
+  return {
+    id: `recommendation-${rec.id}`,
+    category: rec.type === "recovery" ? "RECOVERY" : rec.type.toUpperCase(),
+    icon,
+    accent,
+    title: rec.title,
+    reason: rec.description || rec.reason,
+    actionLabel: rec.action?.label ?? "Open",
+    route: rec.action?.route ?? "/(tabs)/assistant",
+    urgency: rec.urgency,
+    impact: rec.impact,
   };
 }
 
@@ -571,8 +612,15 @@ function buildMissionItems(
   ctx: HeliosIntelligenceContext,
   suggestions: TaskSuggestion[] = [],
   nextBestAction: NextBestAction | null = null,
+  recommendations: HeliosRecommendation[] = [],
 ): MissionItem[] {
+  const recommendationItems = recommendations
+    .slice(0, 5)
+    .map(recommendationToMissionItem)
+    .filter(Boolean) as MissionItem[];
+
   const backendItems = [
+    ...recommendationItems,
     nextBestActionToMissionItem(nextBestAction),
     ...suggestions
       .filter((suggestion) => suggestion.status === "pending")
@@ -654,6 +702,12 @@ function FlowCard({
         </View>
         <Text style={s.flowTitle} numberOfLines={2}>{item.title}</Text>
         <Text style={s.flowReason} numberOfLines={2}>{item.reason}</Text>
+        {(item.urgency || item.impact) ? (
+          <View style={s.flowSignalRow}>
+            {item.urgency ? <Text style={s.flowSignal}>{item.urgency.toUpperCase()}</Text> : null}
+            {item.impact ? <Text style={s.flowSignal}>{item.impact.toUpperCase()} IMPACT</Text> : null}
+          </View>
+        ) : null}
       </View>
 
       <TouchableOpacity
@@ -1172,7 +1226,7 @@ function createStyles(colors: ThemeColors) {
       fontSize: 27,
       lineHeight: 32,
       fontWeight: "900",
-      letterSpacing: -0.6,
+      letterSpacing: 0,
       marginBottom: 7,
     },
     heroDate: {
@@ -1315,13 +1369,25 @@ function createStyles(colors: ThemeColors) {
       fontWeight: "900",
       color: colors.textPrimary,
       lineHeight: 25,
-      letterSpacing: -0.3,
+      letterSpacing: 0,
     },
     flowReason: {
       fontSize: 13,
       fontWeight: "500",
       color: colors.textMuted,
       lineHeight: 18,
+    },
+    flowSignalRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+      marginTop: 2,
+    },
+    flowSignal: {
+      fontSize: 9,
+      fontWeight: "900",
+      color: colors.textMuted,
+      letterSpacing: 0.8,
     },
     flowActionBtn: {
       flexDirection: "row",

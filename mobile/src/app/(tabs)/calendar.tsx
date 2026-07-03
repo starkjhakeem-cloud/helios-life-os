@@ -29,6 +29,11 @@ import type { Task } from "../../services/tasksService";
 import { historyService } from "../../services/historyService";
 import type { DailyHistoryDaySummary, DailyHistoryOut } from "../../services/historyService";
 import { relationshipService, type TimeWindow } from "../../services/relationshipService";
+import {
+  taskEngineService,
+  type BuildDayResponse,
+  type BuildDayScheduleBlock,
+} from "../../services/taskEngineService";
 
 type FormState = {
   title: string;
@@ -79,6 +84,13 @@ const EMPTY_FORM: FormState = {
   end_time: null,
   location: "",
 };
+
+const BUILD_DAY_STEPS = [
+  "Building your day...",
+  "Checking your calendar...",
+  "Prioritizing your tasks...",
+  "Finding focus windows...",
+];
 
 function defaultTimes(): Pick<FormState, "start_time" | "end_time"> {
   const now = new Date();
@@ -283,6 +295,31 @@ export default function CalendarScreen() {
   const [monthHistory, setMonthHistory]   = useState<DailyHistoryDaySummary[]>([]);
   const [availableWindows, setAvailableWindows] = useState<TimeWindow[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [isBuildingDay, setIsBuildingDay] = useState(false);
+  const [isCommittingBuildDay, setIsCommittingBuildDay] = useState(false);
+  const [buildDayStepIndex, setBuildDayStepIndex] = useState(0);
+  const [buildDayPlan, setBuildDayPlan] = useState<BuildDayResponse | null>(null);
+  const [buildDayError, setBuildDayError] = useState<string | null>(null);
+
+  const buildDayStatus = isCommittingBuildDay
+    ? "Adding schedule blocks..."
+    : BUILD_DAY_STEPS[buildDayStepIndex % BUILD_DAY_STEPS.length];
+
+  useEffect(() => {
+    if (!isBuildingDay && !isCommittingBuildDay) {
+      setBuildDayStepIndex(0);
+      return undefined;
+    }
+    const interval = setInterval(() => {
+      setBuildDayStepIndex((current) => (current + 1) % BUILD_DAY_STEPS.length);
+    }, 900);
+    return () => clearInterval(interval);
+  }, [isBuildingDay, isCommittingBuildDay]);
+
+  useEffect(() => {
+    setBuildDayPlan(null);
+    setBuildDayError(null);
+  }, [selectedDate]);
 
   // Fetch month history whenever the visible month changes
   useEffect(() => {
@@ -343,6 +380,54 @@ export default function CalendarScreen() {
     setForm({ ...EMPTY_FORM, ...defaultTimes() });
     setFormError(null);
     setModalVisible(true);
+  }
+
+  async function handleBuildDay() {
+    if (!accessToken) {
+      setBuildDayError("Sign in to let HELIOS build this day automatically.");
+      return;
+    }
+
+    setBuildDayError(null);
+    setIsBuildingDay(true);
+    try {
+      const plan = await taskEngineService.buildDay(accessToken, {
+        date: localDateStr(selectedDate),
+        commit: false,
+        max_items: 8,
+      });
+      setBuildDayPlan(plan);
+    } catch {
+      setBuildDayError("HELIOS could not build this day automatically.");
+    } finally {
+      setIsBuildingDay(false);
+    }
+  }
+
+  async function acceptBuildDayPlan() {
+    if (!accessToken || !buildDayPlan) return;
+
+    setBuildDayError(null);
+    setIsCommittingBuildDay(true);
+    try {
+      const committedPlan = await taskEngineService.buildDay(accessToken, {
+        date: buildDayPlan.date,
+        commit: true,
+        max_items: 8,
+      });
+      setBuildDayPlan(committedPlan);
+      await Promise.all([
+        fetchEvents(accessToken),
+        fetchTasks(accessToken),
+        relationshipService.availableWindows(accessToken, localDateStr(selectedDate))
+          .then(setAvailableWindows)
+          .catch(() => setAvailableWindows([])),
+      ]);
+    } catch {
+      setBuildDayError("HELIOS built the plan, but could not add the blocks to calendar.");
+    } finally {
+      setIsCommittingBuildDay(false);
+    }
   }
 
   function openEdit(event: CalendarEvent) {
@@ -728,9 +813,34 @@ export default function CalendarScreen() {
         </View>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        {buildDayError ? <Text style={styles.errorText}>{buildDayError}</Text> : null}
 
-        {todayEvents.length === 0 && !isLoading ? (
-          <OpenDayState mode={selectedMode} onCreate={openCreate} colors={colors} styles={styles} />
+        {todayEvents.length === 0 && !isLoading && !buildDayPlan ? (
+          <OpenDayState
+            mode={selectedMode}
+            onBuildDay={handleBuildDay}
+            isBuilding={isBuildingDay}
+            statusLabel={buildDayStatus}
+            colors={colors}
+            styles={styles}
+          />
+        ) : null}
+
+        {(isBuildingDay || isCommittingBuildDay) && todayEvents.length > 0 ? (
+          <BuildDayLoadingCard colors={colors} statusLabel={buildDayStatus} styles={styles} />
+        ) : null}
+
+        {buildDayPlan && selectedMode !== "past" ? (
+          <BuildDayPlanCard
+            colors={colors}
+            isAccepting={isCommittingBuildDay}
+            isRegenerating={isBuildingDay}
+            onAccept={acceptBuildDayPlan}
+            onAddBlock={openCreate}
+            onRegenerate={handleBuildDay}
+            plan={buildDayPlan}
+            styles={styles}
+          />
         ) : null}
 
         {timelineItems.map((item, index) => (
@@ -855,8 +965,8 @@ export default function CalendarScreen() {
             />
 
             <View style={styles.sheetActions}>
-              <Button label="CANCEL" variant="secondary" onPress={closeModal} />
-              <Button label={editingEvent ? "SAVE" : "CREATE"} onPress={handleSubmit} loading={isMutating} />
+              <Button label="Cancel" variant="secondary" onPress={closeModal} />
+              <Button label={editingEvent ? "Save" : "Create"} onPress={handleSubmit} loading={isMutating} />
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -1187,13 +1297,17 @@ function LegendItem({
 
 function OpenDayState({
   colors,
+  isBuilding,
   mode,
-  onCreate,
+  onBuildDay,
+  statusLabel,
   styles,
 }: {
   colors: ThemeColors;
+  isBuilding: boolean;
   mode: DayMode;
-  onCreate: () => void;
+  onBuildDay: () => void;
+  statusLabel: string;
   styles: ReturnType<typeof createStyles>;
 }) {
   const title = mode === "past"
@@ -1211,19 +1325,189 @@ function OpenDayState({
       <Text style={styles.emptyText}>{body}</Text>
       {mode !== "past" ? (
         <>
-          <View style={styles.emptySuggestions}>
-            {["Continue D278", "Resume HELIOS Development", "Exercise"].map((item) => (
-              <Text key={item} style={styles.emptySuggestion}>• {item}</Text>
-            ))}
-          </View>
-          <TouchableOpacity style={styles.emptyAddButton} onPress={onCreate}>
-            <Text style={styles.emptyAddText}>{mode === "future" ? "Plan This Day" : "Build My Day"}</Text>
+          {isBuilding ? <Text style={styles.emptyBuildStatus}>{statusLabel}</Text> : null}
+          <TouchableOpacity
+            style={[styles.emptyAddButton, isBuilding && styles.emptyAddButtonDisabled]}
+            onPress={onBuildDay}
+            disabled={isBuilding}
+          >
+            {isBuilding ? <ActivityIndicator size="small" color={colors.background} /> : null}
+            <Text style={styles.emptyAddText}>
+              {isBuilding ? "Building Day" : mode === "future" ? "Plan This Day" : "Build My Day"}
+            </Text>
           </TouchableOpacity>
         </>
       ) : null}
       <SymbolView name="sparkles" size={18} tintColor={colors.accent} resizeMode="scaleAspectFit" />
     </View>
   );
+}
+
+function BuildDayLoadingCard({
+  colors,
+  statusLabel,
+  styles,
+}: {
+  colors: ThemeColors;
+  statusLabel: string;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  return (
+    <View style={styles.buildPlanCard}>
+      <View style={styles.buildPlanTop}>
+        <Text style={styles.buildPlanLabel}>BUILD MY DAY</Text>
+        <ActivityIndicator size="small" color={colors.accentCyan} />
+      </View>
+      <Text style={styles.buildPlanTitle}>{statusLabel}</Text>
+      <Text style={styles.buildPlanSummary}>HELIOS is checking your commitments, priorities, and open windows.</Text>
+    </View>
+  );
+}
+
+function BuildDayPlanCard({
+  colors,
+  isAccepting,
+  isRegenerating,
+  onAccept,
+  onAddBlock,
+  onRegenerate,
+  plan,
+  styles,
+}: {
+  colors: ThemeColors;
+  isAccepting: boolean;
+  isRegenerating: boolean;
+  onAccept: () => void;
+  onAddBlock: () => void;
+  onRegenerate: () => void;
+  plan: BuildDayResponse;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  const blocks = plan.scheduleBlocks.slice(0, 8);
+  const isBusy = isAccepting || isRegenerating;
+
+  return (
+    <View style={styles.buildPlanCard}>
+      <View style={styles.buildPlanTop}>
+        <Text style={styles.buildPlanLabel}>BUILD MY DAY</Text>
+        <View style={[styles.buildPlanStatus, plan.committed && styles.buildPlanStatusCommitted]}>
+          <Text style={styles.buildPlanStatusText}>{plan.committed ? "ADDED" : "READY"}</Text>
+        </View>
+      </View>
+      <Text style={styles.buildPlanTitle}>{plan.primaryFocus}</Text>
+      <Text style={styles.buildPlanSummary}>{plan.summary}</Text>
+
+      <View style={styles.buildFocusPill}>
+        <SymbolView name="target" size={14} tintColor={colors.accentCyan} resizeMode="scaleAspectFit" />
+        <Text style={styles.buildFocusText}>{plan.primaryFocus}</Text>
+      </View>
+
+      <View style={styles.buildBlocks}>
+        {blocks.map((block) => (
+          <BuildDayBlockRow key={block.id} block={block} colors={colors} styles={styles} />
+        ))}
+      </View>
+
+      {plan.topTasks.length > 0 ? (
+        <View style={styles.buildTopTasks}>
+          <Text style={styles.buildSectionTitle}>TOP TASKS</Text>
+          {plan.topTasks.slice(0, 3).map((task) => (
+            <View key={`${task.id ?? task.title}`} style={styles.buildTaskRow}>
+              <Text style={styles.buildTaskTitle}>{task.title}</Text>
+              <Text style={styles.buildTaskMeta}>
+                {task.estimatedMinutes ? `${formatDuration(task.estimatedMinutes)} · ` : ""}{task.reason}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {plan.warnings.length > 0 ? (
+        <View style={styles.buildWarnings}>
+          {plan.warnings.slice(0, 3).map((warning) => (
+            <Text key={warning} style={styles.buildWarningText}>{warning}</Text>
+          ))}
+        </View>
+      ) : null}
+
+      <View style={styles.buildActions}>
+        {!plan.committed ? (
+          <TouchableOpacity
+            style={[styles.buildPrimaryButton, isBusy && styles.emptyAddButtonDisabled]}
+            onPress={onAccept}
+            disabled={isBusy}
+          >
+            {isAccepting ? <ActivityIndicator size="small" color={colors.background} /> : null}
+            <Text style={styles.buildPrimaryButtonText}>{isAccepting ? "Adding Plan" : "Accept Plan"}</Text>
+          </TouchableOpacity>
+        ) : null}
+        <TouchableOpacity
+          style={[styles.buildSecondaryButton, isBusy && styles.emptyAddButtonDisabled]}
+          onPress={onRegenerate}
+          disabled={isBusy}
+        >
+          <SymbolView name="arrow.clockwise" size={14} tintColor={colors.accentCyan} resizeMode="scaleAspectFit" />
+          <Text style={styles.buildSecondaryButtonText}>{isRegenerating ? "Regenerating" : "Regenerate"}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.buildSecondaryButton} onPress={onAddBlock} disabled={isBusy}>
+          <SymbolView name="plus" size={14} tintColor={colors.textSecondary} resizeMode="scaleAspectFit" />
+          <Text style={styles.buildSecondaryButtonText}>Add Block</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+function BuildDayBlockRow({
+  block,
+  colors,
+  styles,
+}: {
+  block: BuildDayScheduleBlock;
+  colors: ThemeColors;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  const color = buildBlockColor(block, colors);
+  return (
+    <View style={styles.buildBlockRow}>
+      <Text style={styles.buildBlockTime}>{formatBuildBlockTime(block)}</Text>
+      <View style={[styles.buildBlockIcon, { backgroundColor: `${color}22` }]}>
+        <SymbolView name={buildBlockIcon(block) as never} size={14} tintColor={color} resizeMode="scaleAspectFit" />
+      </View>
+      <View style={styles.buildBlockCopy}>
+        <View style={styles.buildBlockTitleRow}>
+          <Text style={styles.buildBlockTitle}>{block.title}</Text>
+          <Text style={[styles.buildBlockPriority, { color }]}>{block.priority.toUpperCase()}</Text>
+        </View>
+        <Text style={styles.buildBlockReason}>{block.reason}</Text>
+      </View>
+    </View>
+  );
+}
+
+function formatBuildBlockTime(block: BuildDayScheduleBlock): string {
+  if (!block.startTime || !block.endTime) return "Flexible";
+  const start = new Date(block.startTime);
+  const end = new Date(block.endTime);
+  return `${formatTime(start)}-${formatTime(end)}`;
+}
+
+function buildBlockColor(block: BuildDayScheduleBlock, colors: ThemeColors): string {
+  if (block.priority === "critical") return colors.danger;
+  if (block.priority === "high") return colors.accent;
+  if (block.type === "email") return colors.warning;
+  if (block.type === "break") return colors.success;
+  if (block.type === "calendar") return colors.accentCyan;
+  return colors.info;
+}
+
+function buildBlockIcon(block: BuildDayScheduleBlock): string {
+  if (block.type === "calendar") return "calendar";
+  if (block.type === "email") return "envelope";
+  if (block.type === "break") return "pause.circle";
+  if (block.type === "focus") return "scope";
+  if (block.type === "task") return "checkmark.circle";
+  return "sparkles";
 }
 
 function TimelineBlock({
@@ -1832,16 +2116,218 @@ function createStyles(colors: ThemeColors) {
       ...typography.caption,
       color: colors.textSecondary,
     },
+    emptyBuildStatus: {
+      ...typography.caption,
+      color: colors.accentCyan,
+      fontWeight: "700",
+    },
     emptyAddButton: {
       alignSelf: "flex-start",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.sm,
       backgroundColor: colors.accent,
       paddingHorizontal: spacing.lg,
       paddingVertical: spacing.sm,
       borderRadius: radius.sm,
     },
+    emptyAddButtonDisabled: {
+      opacity: 0.72,
+    },
     emptyAddText: {
       ...typography.label,
       color: colors.textPrimary,
+    },
+    buildPlanCard: {
+      backgroundColor: colors.surface,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: spacing.lg,
+      gap: spacing.md,
+    },
+    buildPlanTop: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: spacing.md,
+    },
+    buildPlanLabel: {
+      ...typography.label,
+      color: colors.accentCyan,
+      letterSpacing: 0,
+    },
+    buildPlanStatus: {
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 4,
+      backgroundColor: "rgba(59,130,246,0.12)",
+    },
+    buildPlanStatusCommitted: {
+      borderColor: "rgba(34,197,94,0.32)",
+      backgroundColor: "rgba(34,197,94,0.12)",
+    },
+    buildPlanStatusText: {
+      ...typography.label,
+      fontSize: 10,
+      color: colors.textSecondary,
+    },
+    buildPlanTitle: {
+      ...typography.title,
+      color: colors.textPrimary,
+      fontSize: 19,
+      lineHeight: 24,
+    },
+    buildPlanSummary: {
+      ...typography.body,
+      color: colors.textSecondary,
+      lineHeight: 21,
+    },
+    buildFocusPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.sm,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: "rgba(34,211,238,0.22)",
+      backgroundColor: "rgba(34,211,238,0.08)",
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    buildFocusText: {
+      ...typography.caption,
+      color: colors.textPrimary,
+      fontWeight: "700",
+      flex: 1,
+    },
+    buildBlocks: {
+      gap: spacing.sm,
+    },
+    buildBlockRow: {
+      minHeight: 64,
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: spacing.sm,
+      paddingVertical: spacing.sm,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
+    },
+    buildBlockTime: {
+      width: 82,
+      ...typography.caption,
+      color: colors.textMuted,
+      fontWeight: "700",
+      paddingTop: 2,
+    },
+    buildBlockIcon: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      alignItems: "center",
+      justifyContent: "center",
+      flexShrink: 0,
+    },
+    buildBlockCopy: {
+      flex: 1,
+      gap: 3,
+    },
+    buildBlockTitleRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: spacing.sm,
+    },
+    buildBlockTitle: {
+      ...typography.body,
+      color: colors.textPrimary,
+      fontWeight: "800",
+      flex: 1,
+      lineHeight: 19,
+    },
+    buildBlockPriority: {
+      fontSize: 9,
+      fontWeight: "900",
+      flexShrink: 0,
+      paddingTop: 2,
+    },
+    buildBlockReason: {
+      ...typography.caption,
+      color: colors.textMuted,
+      lineHeight: 17,
+    },
+    buildTopTasks: {
+      gap: spacing.sm,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
+      paddingTop: spacing.md,
+    },
+    buildSectionTitle: {
+      ...typography.label,
+      color: colors.textMuted,
+      fontSize: 10,
+      letterSpacing: 0,
+    },
+    buildTaskRow: {
+      gap: 3,
+    },
+    buildTaskTitle: {
+      ...typography.caption,
+      color: colors.textPrimary,
+      fontWeight: "800",
+    },
+    buildTaskMeta: {
+      ...typography.caption,
+      color: colors.textMuted,
+      lineHeight: 17,
+    },
+    buildWarnings: {
+      gap: spacing.xs,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
+      paddingTop: spacing.md,
+    },
+    buildWarningText: {
+      ...typography.caption,
+      color: colors.warning,
+      lineHeight: 17,
+    },
+    buildActions: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      alignItems: "center",
+      gap: spacing.sm,
+    },
+    buildPrimaryButton: {
+      minHeight: 38,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.sm,
+      borderRadius: radius.sm,
+      backgroundColor: colors.accent,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    buildPrimaryButtonText: {
+      ...typography.label,
+      color: colors.background,
+    },
+    buildSecondaryButton: {
+      minHeight: 38,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.xs,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      backgroundColor: "rgba(15,23,42,0.42)",
+    },
+    buildSecondaryButtonText: {
+      ...typography.label,
+      color: colors.textSecondary,
     },
     timelineRow: {
       flexDirection: "row",

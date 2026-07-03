@@ -553,7 +553,7 @@ def test_nba_no_tasks_with_active_goal(db: Session):
     db.commit()
 
     result = TaskGoalCalendarService(db).get_next_best_action(u.id)
-    assert result["type"] == "goal"
+    assert result["type"] == "recovery"
     assert "Finish HELIOS" in result["title"]
 
 

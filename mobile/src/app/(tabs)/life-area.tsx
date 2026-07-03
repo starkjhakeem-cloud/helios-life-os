@@ -513,7 +513,7 @@ function createStyles(colors: ThemeColors) {
     statValue: {
       fontSize: 26,
       fontWeight: "800",
-      letterSpacing: -0.5,
+      letterSpacing: 0,
     },
     statLabel: {
       ...typography.label,

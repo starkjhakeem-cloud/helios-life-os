@@ -1,7 +1,16 @@
 import { apiClient } from "./apiClient";
 import { API_ENDPOINTS } from "../config/api";
 
-export type MemoryType = "preference" | "important_fact" | "goal_context" | "recurring_interest";
+export type MemoryType =
+  | "preference"
+  | "goal_context"
+  | "important_fact"
+  | "relationship"
+  | "project"
+  | "routine"
+  | "interest"
+  | "constraint"
+  | "recurring_interest";
 
 export type Memory = {
   id: string;

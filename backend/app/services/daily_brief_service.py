@@ -18,6 +18,8 @@ from app.models.goal import Goal
 from app.models.task import Task
 from app.models.user import User
 from app.schemas.daily_brief import DailyBriefOut
+from app.services.awareness_engine import RealTimeAwarenessEngine
+from app.services.priority_engine import PriorityEngine
 from app.services.semantic_memory_service import SemanticMemoryService
 from app.services.task_goal_calendar_service import TaskGoalCalendarService
 
@@ -129,7 +131,7 @@ class DailyBriefService:
         self.db = db
 
     def generate_daily_brief(self, user_id: str, target_date: date | None = None) -> DailyBriefOut:
-        target = target_date or _today()
+        target = target_date or self._local_today(user_id)
         user = self._get_user(user_id)
         context = self._build_context(user_id, target)
         brief = self._deterministic_brief(user, target, context)
@@ -163,12 +165,16 @@ class DailyBriefService:
         No AI call here — AI enrichment only happens on POST /generate.
         This ensures task counts, warnings, and overdue flags are never stale.
         """
-        target = _today()
+        target = self._local_today(user_id)
         user = self._get_user(user_id)
         context = self._build_context(user_id, target)
         brief = self._deterministic_brief(user, target, context)
         self._persist_brief(user_id, target, brief, context)
         return DailyBriefOut(**brief)
+
+    def _local_today(self, user_id: str) -> date:
+        awareness = RealTimeAwarenessEngine(self.db).build_context(user_id)
+        return date.fromisoformat(awareness["localDate"])
 
     def _get_user(self, user_id: str) -> User:
         user = self.db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
@@ -177,45 +183,31 @@ class DailyBriefService:
         return user
 
     def _build_context(self, user_id: str, target: date) -> dict[str, Any]:
-        today_events = self._calendar_events(user_id, target)
-        upcoming_events = self._upcoming_events(user_id, target)
-        emails = self._important_email(user_id)
-        due_tasks = self._tasks_due_today(user_id, target)
-        overdue_tasks = self._overdue_tasks(user_id, target)
-        goals = self._active_goals(user_id)
-        history = self._history_context(user_id, target)
+        context = PriorityEngine(self.db).build_priority_context(user_id, target)
+        history = context.get("history") or self._history_context(user_id, target)
         semantic = self._semantic_context(user_id, target)
-        relationships = self._relationship_context(user_id, target)
-        warnings = self._warnings(today_events, overdue_tasks, emails)
-        data_sources = []
-        if today_events or upcoming_events:
-            data_sources.append("calendar")
-        if emails:
-            data_sources.append("gmail")
-        if due_tasks or overdue_tasks:
-            data_sources.append("tasks")
-        if goals:
-            data_sources.append("goals")
-        if history:
-            data_sources.append("daily_history")
         if semantic:
-            data_sources.append("semantic_memory")
-        if relationships.get("next_best_action"):
-            data_sources.append("relationship_logic")
+            data_sources = list(context.get("data_sources") or [])
+            if "semantic_memory" not in data_sources:
+                data_sources.append("semantic_memory")
+            context["data_sources"] = data_sources
 
         return {
-            "today_events": today_events,
-            "upcoming_events": upcoming_events,
-            "emails": emails,
-            "due_tasks": due_tasks,
-            "overdue_tasks": overdue_tasks,
-            "goals": goals,
+            "awareness": context.get("awareness") or {},
+            "today_events": context.get("today_events", []),
+            "upcoming_events": context.get("upcoming_events", []),
+            "emails": context.get("important_email") or context.get("emails", []),
+            "due_tasks": context.get("due_tasks", []),
+            "overdue_tasks": context.get("overdue_tasks", []),
+            "goals": context.get("goals", []),
             "history": history,
             "semantic": semantic,
-            "next_best_action": relationships.get("next_best_action") or {},
-            "focus_recommendation": relationships.get("focus_recommendation") or {},
-            "warnings": warnings,
-            "data_sources": data_sources,
+            "today_flow": context.get("today_flow", []),
+            "next_best_action": context.get("next_best_action") or {},
+            "focus_recommendation": context.get("focus_recommendation") or {},
+            "warnings": context.get("warnings", []),
+            "data_sources": context.get("data_sources", []),
+            "filtered_email_count": context.get("filtered_email_count", 0),
         }
 
     def _calendar_events(self, user_id: str, target: date) -> list[dict[str, Any]]:
@@ -462,6 +454,7 @@ class DailyBriefService:
         goal_count = len(context["goals"])
         next_best = context["next_best_action"]
         focus = context["focus_recommendation"]
+        awareness = context.get("awareness") or {}
         compact = self._compact_text(event_count, email_count, due_count, overdue_count, next_best)
         insights = self._insights(context, upcoming_count)
         summary = self._summary_text(event_count, email_count, due_count, overdue_count, goal_count, next_best)
@@ -469,7 +462,7 @@ class DailyBriefService:
         return {
             "date": target.isoformat(),
             "title": "Daily Brief",
-            "greeting": f"Good morning, {user.name}.",
+            "greeting": f"{self._greeting(awareness)}, {user.name}.",
             "summary": summary,
             "compact_text": compact,
             "calendar": [*context["today_events"], *context["upcoming_events"][:5]],
@@ -485,6 +478,14 @@ class DailyBriefService:
             "ai_used": False,
             "ai_error": None,
         }
+
+    def _greeting(self, awareness: dict[str, Any]) -> str:
+        period = str(awareness.get("dayPeriod") or "morning")
+        if period == "afternoon":
+            return "Good afternoon"
+        if period in {"evening", "night"}:
+            return "Good evening"
+        return "Good morning"
 
     def _summary_text(
         self,
@@ -510,16 +511,19 @@ class DailyBriefService:
             goal_phrase = f"{goals} active {'goal' if goals == 1 else 'goals'}"
             return f"Your schedule is open today. Focus on your {goal_phrase}.{recommendation}"
 
-        # Build a human-readable summary from whatever is non-zero
+        # Build a concise executive briefing from whatever is non-zero.
         sentences: list[str] = []
+
+        if recommendation:
+            sentences.append(recommendation.strip())
 
         # Calendar
         if events == 0:
             sentences.append("No meetings today.")
         elif events == 1:
-            sentences.append("You have 1 meeting today.")
+            sentences.append("You have 1 calendar commitment today.")
         else:
-            sentences.append(f"You have {events} meetings today.")
+            sentences.append(f"You have {events} calendar commitments today.")
 
         # Tasks
         if due > 0 and overdue > 0:
@@ -539,7 +543,7 @@ class DailyBriefService:
         # Email
         if emails > 0:
             sentences.append(
-                f"{emails} important {'email requires' if emails == 1 else 'emails require'} review."
+                f"{emails} high-value {'email requires' if emails == 1 else 'emails require'} review."
             )
 
         # Goals — only mention when there are active goals
@@ -548,7 +552,7 @@ class DailyBriefService:
                 f"You have {goals} active {'goal' if goals == 1 else 'goals'} in progress."
             )
 
-        return " ".join(sentences) + recommendation
+        return " ".join(sentences)
 
     def _compact_text(
         self,
@@ -563,7 +567,7 @@ class DailyBriefService:
         # Fully empty state
         if not any([events, emails, due, overdue]):
             if action:
-                return f"Your schedule is clear. HELIOS recommends starting with {action}."
+                return f"Executive brief: start with {action}. Your schedule is otherwise clear."
             return "Your schedule is open today. No urgent items require attention."
 
         # Build compact parts — skip zeros silently
@@ -579,11 +583,29 @@ class DailyBriefService:
 
         body = ", ".join(parts) if parts else "nothing urgent"
         if action:
-            return f"HELIOS found {body} and recommends starting with {action}."
-        return f"HELIOS found {body}."
+            return f"Executive brief: start with {action}. Also on deck: {body}."
+        return f"Executive brief: {body}."
 
     def _insights(self, context: dict[str, Any], upcoming_count: int) -> list[str]:
         insights: list[str] = []
+        awareness = context.get("awareness") or {}
+        if awareness.get("dayOfWeek") and awareness.get("localTime"):
+            insights.append(
+                f"Current context: {awareness['dayOfWeek']} {awareness.get('localDate')} at {awareness['localTime']} {awareness.get('timezone', 'UTC')}."
+            )
+        weather = awareness.get("weather") or {}
+        if weather.get("condition"):
+            temperature = weather.get("temperature")
+            temp_text = f", {temperature}F" if temperature is not None else ""
+            insights.append(
+                f"Weather: {weather.get('condition')}{temp_text}, precipitation chance {weather.get('precipitationChance', 'unknown')}%."
+            )
+        calendar = awareness.get("calendar") or {}
+        if calendar.get("busy"):
+            current = calendar.get("currentEvent") or {}
+            insights.append(f"You are currently scheduled for {current.get('title', 'an event')}.")
+        elif calendar.get("availableMinutes") is not None:
+            insights.append(f"Available time before the next event: {calendar.get('availableMinutes')} minutes.")
         focus = context.get("focus_recommendation") or {}
         if focus.get("duration_minutes"):
             insights.append(f"Longest available focus window: {focus['duration_minutes']} minutes.")
@@ -650,6 +672,7 @@ class DailyBriefService:
                 "overdue_tasks": len(context["overdue_tasks"]),
                 "active_goals": len(context["goals"]),
             },
+            "real_time_awareness": context.get("awareness") or {},
             "calendar": brief["calendar"][:8],
             "email": brief["email"][:8],
             "tasks": brief["tasks"][:12],
@@ -673,6 +696,8 @@ class DailyBriefService:
         context: dict[str, Any],
     ) -> None:
         now = _utc_now()
+        awareness = context.get("awareness") or {}
+        local_today = date.fromisoformat(awareness.get("localDate") or _today().isoformat())
         history = self.db.execute(
             select(DailyHistory).where(
                 DailyHistory.user_id == user_id,
@@ -684,9 +709,9 @@ class DailyBriefService:
                 id=str(uuid.uuid4()),
                 user_id=user_id,
                 history_date=target,
-                timezone="UTC",
-                day_type="today" if target == _today() else ("future" if target > _today() else "past"),
-                status="planned" if target > _today() else "open",
+                timezone=awareness.get("timezone") or "UTC",
+                day_type="today" if target == local_today else ("future" if target > local_today else "past"),
+                status="planned" if target > local_today else "open",
                 completed_tasks=[],
                 planned_tasks=[],
                 overdue_tasks=[],
@@ -709,6 +734,13 @@ class DailyBriefService:
             metadata = dict(history.metadata_json or {})
             metadata["daily_brief_generated_at"] = brief["generated_at"]
             metadata["daily_brief_sources"] = brief.get("data_sources", [])
+            metadata["real_time_awareness"] = {
+                "localTime": awareness.get("localTime"),
+                "localDate": awareness.get("localDate"),
+                "timezone": awareness.get("timezone"),
+                "dayPeriod": awareness.get("dayPeriod"),
+                "weather": awareness.get("weather"),
+            }
             history.metadata_json = metadata
             history.updated_at = now
 

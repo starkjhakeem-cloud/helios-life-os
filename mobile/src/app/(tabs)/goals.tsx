@@ -380,8 +380,8 @@ export default function GoalsScreen() {
               onChange={(date) => setForm((f) => ({ ...f, target_date: date ? formatBackendDate(date) : "" }))}
             />
             <View style={styles.sheetActions}>
-              <Button label="CANCEL" variant="secondary" onPress={closeModal} />
-              <Button label={editingGoal ? "SAVE" : "CREATE"} onPress={handleSubmit} loading={isMutating} />
+              <Button label="Cancel" variant="secondary" onPress={closeModal} />
+              <Button label={editingGoal ? "Save" : "Create"} onPress={handleSubmit} loading={isMutating} />
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -500,7 +500,7 @@ function LargeProgressRing({ value }: { value: number }) {
         />
       </Svg>
       <View style={{ position: "absolute", alignItems: "center" }}>
-        <Text style={{ fontSize: 24, fontWeight: "900", color: colors.textPrimary, letterSpacing: -1 }}>{value}%</Text>
+        <Text style={{ fontSize: 24, fontWeight: "900", color: colors.textPrimary, letterSpacing: 0 }}>{value}%</Text>
         <Text style={{ fontSize: 9, fontWeight: "700", color: colors.textMuted, letterSpacing: 1.5 }}>OVERALL</Text>
       </View>
     </View>
@@ -941,7 +941,7 @@ function createStyles(colors: ThemeColors) {
       fontSize: 26,
       fontWeight: "900" as const,
       color: colors.textPrimary,
-      letterSpacing: -1,
+      letterSpacing: 0,
     },
 
     heroStatLabel: {

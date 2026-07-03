@@ -130,25 +130,21 @@ Interactive API docs: http://localhost:8000/docs
 ```bash
 cd mobile
 npm install
-```
-
-No `.env` file is required for iOS Simulator local development — the app falls back to `http://localhost:8000` automatically. Android Emulator falls back to `http://10.0.2.2:8000`.
-
-`EXPO_PUBLIC_API_URL` always wins when present. Use it for physical devices, LAN testing, staging, production, or any custom backend:
-
-```bash
-cd mobile
 cp .env.example .env
 ```
 
-Examples:
+`EXPO_PUBLIC_API_URL` is required for every mobile run. HELIOS does not infer the backend URL automatically.
+
+Simulator:
 
 ```ini
-# Physical phone on the same Wi-Fi as your Mac
-EXPO_PUBLIC_API_URL=http://192.168.1.110:8000
+EXPO_PUBLIC_API_URL=http://localhost:8000
+```
 
-# Staging or production backend
-EXPO_PUBLIC_API_URL=https://your-staging-api.example.com
+Physical device:
+
+```ini
+EXPO_PUBLIC_API_URL=http://192.168.1.110:8000
 ```
 
 ### 5. Start the mobile app
@@ -164,7 +160,7 @@ Press `i` in the Metro terminal to open the app in the iOS Simulator (Xcode must
 
 **Testing on a physical device:** The device must be on the same Wi-Fi network as your Mac. Find your machine's local IP (`ipconfig getifaddr en0`) and set `EXPO_PUBLIC_API_URL` in `mobile/.env` to `http://<machine-ip>:8000`. Do not edit `mobile/src/config/api.ts` for device switching.
 
-**Backend offline or misconfigured:** HELIOS shows `Backend unavailable` with the current API URL so you can immediately confirm whether the app is targeting the simulator fallback, Android emulator fallback, LAN backend, or a production/staging URL.
+**Backend offline or misconfigured:** HELIOS shows `Backend unavailable` with the current API URL. If `EXPO_PUBLIC_API_URL` is missing, HELIOS reports `EXPO_PUBLIC_API_URL is not configured.`
 
 ### 6. Verify the full stack
 
@@ -308,7 +304,7 @@ psycopg2 and SQLAlchemy pass this through correctly. No code changes are needed.
 
 | Variable | Required | Description |
 |---|---|---|
-| `EXPO_PUBLIC_API_URL` | Yes for physical devices and non-dev builds | Full backend API URL. When present, it is used in development and production. |
+| `EXPO_PUBLIC_API_URL` | Yes | Full backend API URL used in development and production. |
 
 ### Variable injection by environment
 
@@ -318,7 +314,7 @@ psycopg2 and SQLAlchemy pass this through correctly. No code changes are needed.
 | `JWT_SECRET_KEY` | `.env` file (local, not committed) | Platform environment | Platform secret manager |
 | `DEBUG` | `.env` file | Platform environment | Platform environment (`false`) |
 | `OPENAI_API_KEY` | `.env` file (optional) | Platform environment | Platform secret manager |
-| `EXPO_PUBLIC_API_URL` | Optional for simulators/emulators; required for physical-device LAN testing | `eas.json` preview profile | `eas.json` production profile |
+| `EXPO_PUBLIC_API_URL` | `mobile/.env` | `eas.json` preview profile | `eas.json` production profile |
 
 ---
 

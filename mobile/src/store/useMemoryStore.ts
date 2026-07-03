@@ -14,13 +14,29 @@ type MemoryState = {
   isMutating: boolean;
   error: string | null;
   fetchMemories: (token: string, memoryType?: MemoryType) => Promise<void>;
-  createMemory: (token: string, data: MemoryCreateRequest) => Promise<void>;
+  createMemory: (token: string, data: MemoryCreateRequest) => Promise<boolean>;
   deleteMemory: (token: string, id: string) => Promise<void>;
   reset: () => void;
 };
 
 function extractMessage(err: unknown): string {
-  return err instanceof ApiError ? err.message : "Something went wrong.";
+  if (!(err instanceof ApiError)) {
+    return "HELIOS could not update memory right now. Please try again.";
+  }
+
+  if (err.status === 0) {
+    return "Unable to reach HELIOS. Check your connection and try again.";
+  }
+  if (err.status === 401) {
+    return "Your session expired. Please sign in again.";
+  }
+  if (err.status === 400 && err.message.toLowerCase().includes("memory limit")) {
+    return "Memory is full. Delete an older memory before adding a new one.";
+  }
+  if (err.status === 422 || err.message.toLowerCase().includes("valid values")) {
+    return "That memory could not be saved. Check the type and length, then try again.";
+  }
+  return "HELIOS could not update memory right now. Please try again.";
 }
 
 export const useMemoryStore = create<MemoryState>()((set, get) => ({
@@ -42,10 +58,15 @@ export const useMemoryStore = create<MemoryState>()((set, get) => ({
   createMemory: async (token, data) => {
     set({ isMutating: true, error: null });
     try {
-      await memoryService.create(token, data);
+      const created = await memoryService.create(token, data);
+      set((s) => ({
+        memories: [created, ...s.memories.filter((memory) => memory.id !== created.id)],
+      }));
       await get().fetchMemories(token);
+      return true;
     } catch (err) {
       set({ error: extractMessage(err) });
+      return false;
     } finally {
       set({ isMutating: false });
     }

@@ -14,7 +14,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.config import settings
 from app.core.limiter import limiter
 from app.logging_config import configure_logging
-from app.routers import agents, ai, analytics, auth, autonomy, background_jobs, calendar, conversations, daily_brief, daily_snapshots, dashboard, email, goals, health, history, integrations, memory, notifications, profile, reminders, task_engine, tasks
+from app.routers import agents, ai, analytics, auth, autonomy, awareness, background_jobs, calendar, conversations, daily_brief, daily_snapshots, dashboard, email, goals, health, history, integrations, memory, notifications, profile, reminders, task_engine, tasks
 from app.routers import assistant_context, relationships, semantic_memory
 from app.routers import settings as settings_router
 from app.services.token_encryption import validate_key as validate_encryption_key
@@ -272,6 +272,12 @@ app.include_router(
     daily_brief.router,
     prefix=f"/api/{settings.api_version}/daily-brief",
     tags=["daily-brief"],
+)
+
+app.include_router(
+    awareness.router,
+    prefix=f"/api/{settings.api_version}/awareness",
+    tags=["awareness"],
 )
 
 app.include_router(

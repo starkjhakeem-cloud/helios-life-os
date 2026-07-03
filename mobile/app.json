@@ -11,7 +11,11 @@
       "icon": "./assets/images/icon.png",
       "bundleIdentifier": "com.helios.app",
       "buildNumber": "1",
-      "supportsTablet": false
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "HELIOS uses the microphone only after you tap voice input to process your spoken request.",
+        "NSSpeechRecognitionUsageDescription": "HELIOS uses speech recognition only after you tap voice input to transcribe your request."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -21,7 +25,10 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "versionCode": 1,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "RECORD_AUDIO"
+      ]
     },
     "web": {
       "output": "static",
@@ -32,11 +39,11 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#020617",
           "ios": {
             "image": "./assets/images/splash-icon.png",
             "imageWidth": 200,
-            "backgroundColor": "#208AEF"
+            "backgroundColor": "#020617"
           },
           "android": {
             "image": "./assets/images/splash-icon.png",

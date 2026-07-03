@@ -3,7 +3,7 @@ import { View, StyleSheet, TextInput } from "react-native";
 import { Link } from "expo-router";
 import { useAuthStore } from "../../store";
 import { Screen, Text, Button, Input } from "../../components/ui";
-import { spacing , type ThemeColors } from "../../theme/theme";
+import { spacing, type ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 
 export default function LoginScreen() {
@@ -37,7 +37,7 @@ export default function LoginScreen() {
     <Screen style={styles.screen}>
       <View style={styles.header}>
         <Text variant="label" color={colors.accentCyan}>HELIOS</Text>
-        <Text variant="displaySmall" style={styles.centered}>ACCESS SYSTEM</Text>
+        <Text variant="displaySmall" style={styles.centered}>Sign In</Text>
         <Text variant="body" color={colors.textMuted} style={styles.centered}>
           Enter your credentials to continue
         </Text>
@@ -72,7 +72,7 @@ export default function LoginScreen() {
           <Text variant="caption" color={colors.danger}>{displayError}</Text>
         ) : null}
         <Button
-          label="ACCESS SYSTEM"
+          label="Sign In"
           onPress={handleLogin}
           fullWidth
           loading={isLoading}

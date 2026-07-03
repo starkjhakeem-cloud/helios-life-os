@@ -545,82 +545,15 @@ class TaskGoalCalendarService:
         target_date: date,
     ) -> list[dict[str, Any]]:
         """
-        Return free time windows on a given date by subtracting existing
-        calendar events from the business-hours block (08:00–22:00 UTC).
+        Return free time windows on a given date.
 
-        Gaps of less than _MIN_WINDOW_MINUTES are excluded.
+        The Real-Time Awareness Engine owns the calendar availability
+        calculation so relationships, recommendations, Build My Day, widgets,
+        and assistant context share the same free-window source.
         """
-        day_start = datetime(
-            target_date.year, target_date.month, target_date.day,
-            _BUSINESS_START_HOUR, 0, 0, tzinfo=timezone.utc,
-        )
-        day_end = datetime(
-            target_date.year, target_date.month, target_date.day,
-            _BUSINESS_END_HOUR, 0, 0, tzinfo=timezone.utc,
-        )
-        start_iso = _fmt_dt(day_start)
-        end_iso   = _fmt_dt(day_end)
+        from app.services.awareness_engine import RealTimeAwarenessEngine
 
-        events = (
-            self.db.execute(
-                select(CalendarEvent)
-                .where(
-                    CalendarEvent.user_id == user_id,
-                    CalendarEvent.start_time < end_iso,
-                    CalendarEvent.end_time   > start_iso,
-                )
-                .order_by(CalendarEvent.start_time)
-            )
-            .scalars()
-            .all()
-        )
-
-        # Build sorted list of busy (start, end) clamped to business hours
-        busy: list[tuple[datetime, datetime]] = []
-        for ev in events:
-            s = max(_parse_dt(ev.start_time), day_start)
-            e = min(_parse_dt(ev.end_time),   day_end)
-            if s < e:
-                busy.append((s, e))
-        busy.sort(key=lambda x: x[0])
-
-        # Merge overlapping busy slots
-        merged: list[tuple[datetime, datetime]] = []
-        for s, e in busy:
-            if merged and s <= merged[-1][1]:
-                merged[-1] = (merged[-1][0], max(merged[-1][1], e))
-            else:
-                merged.append((s, e))
-
-        # Find gaps
-        windows: list[dict[str, Any]] = []
-        cursor = day_start
-        for busy_start, busy_end in merged:
-            if busy_start > cursor:
-                gap_minutes = int((busy_start - cursor).total_seconds() / 60)
-                if gap_minutes >= _MIN_WINDOW_MINUTES:
-                    windows.append({
-                        "start_time":      _fmt_dt(cursor),
-                        "end_time":        _fmt_dt(busy_start),
-                        "duration_minutes": gap_minutes,
-                        "suggested_use":   _window_suggested_use(gap_minutes),
-                        "confidence":      _window_confidence(gap_minutes),
-                    })
-            cursor = max(cursor, busy_end)
-
-        # Final gap after last busy slot
-        if cursor < day_end:
-            gap_minutes = int((day_end - cursor).total_seconds() / 60)
-            if gap_minutes >= _MIN_WINDOW_MINUTES:
-                windows.append({
-                    "start_time":      _fmt_dt(cursor),
-                    "end_time":        _fmt_dt(day_end),
-                    "duration_minutes": gap_minutes,
-                    "suggested_use":   _window_suggested_use(gap_minutes),
-                    "confidence":      _window_confidence(gap_minutes),
-                })
-
-        return windows
+        return RealTimeAwarenessEngine(self.db).find_available_time_windows(user_id, target_date)
 
     def suggest_time_for_task(self, user_id: str, task_id: str) -> dict[str, Any] | None:
         """
@@ -765,171 +698,11 @@ class TaskGoalCalendarService:
         """
         Recommend the single most valuable next action for this user.
 
-        Scoring factors:
-          - Overdue: +50
-          - Due today: +30  |  Due tomorrow: +20
-          - Priority (critical/high/medium/low): +40/30/15/5
-          - In progress: +20
-          - Has linked goal: +10  |  goal is high/critical: +15–20
-
-        Confidence is normalised against _NBA_MAX_SCORE.
+        HELIOS V3 centralizes recommendation scoring in PriorityEngine so
+        every surface has the same answer for "what should I do next?"
         """
-        today     = date.today().isoformat()
-        tomorrow  = (date.today() + timedelta(days=1)).isoformat()
-
-        open_tasks = (
-            self.db.execute(
-                select(Task)
-                .where(
-                    Task.user_id == user_id,
-                    Task.status.in_(["todo", "in_progress"]),
-                )
-            )
-            .scalars()
-            .all()
-        )
-
-        if not open_tasks:
-            # Check if there are active goals to suggest setting up tasks for
-            active_goals = (
-                self.db.execute(
-                    select(Goal).where(Goal.user_id == user_id, Goal.status == "active")
-                )
-                .scalars()
-                .all()
-            )
-            if active_goals:
-                g = active_goals[0]
-                return {
-                    "type":                     "goal",
-                    "title":                    f"Break down '{g.title}' into tasks",
-                    "reason":                   "You have active goals but no open tasks. Create tasks to make progress.",
-                    "estimated_duration_minutes": 15,
-                    "linked_goal_id":            g.id,
-                    "linked_task_id":            None,
-                    "suggested_start_time":      None,
-                    "confidence":               0.50,
-                }
-            return {
-                "type":                     "none",
-                "title":                    "All caught up",
-                "reason":                   "No open tasks or active goals found.",
-                "estimated_duration_minutes": None,
-                "linked_goal_id":            None,
-                "linked_task_id":            None,
-                "suggested_start_time":      None,
-                "confidence":               0.0,
-            }
-
-        # Load goals for priority lookup
-        goal_ids = {t.linked_goal_id for t in open_tasks if t.linked_goal_id}
-        goals_by_id: dict[str, Goal] = {}
-        if goal_ids:
-            goals = (
-                self.db.execute(
-                    select(Goal).where(Goal.user_id == user_id, Goal.id.in_(goal_ids))
-                )
-                .scalars()
-                .all()
-            )
-            goals_by_id = {g.id: g for g in goals}
-
-        # Load any currently active focus block so its tasks get a score boost
-        active_fb = (
-            self.db.execute(
-                select(FocusBlock).where(
-                    FocusBlock.user_id == user_id,
-                    FocusBlock.status  == "in_progress",
-                )
-            )
-            .scalar_one_or_none()
-        )
-        active_fb_task_ids: frozenset[str] = (
-            frozenset(active_fb.linked_task_ids or []) if active_fb else frozenset()
-        )
-
-        best_task: Task | None = None
-        best_score = -1
-
-        for t in open_tasks:
-            score = 0
-
-            # Temporal urgency
-            if t.due_date:
-                if t.due_date < today:
-                    score += 50
-                elif t.due_date == today:
-                    score += 30
-                elif t.due_date <= tomorrow:
-                    score += 20
-
-            # Priority
-            score += _TASK_PRIORITY_SCORE.get(t.priority, 0)
-
-            # Status
-            if t.status == "in_progress":
-                score += 20
-
-            # Goal linkage
-            if t.linked_goal_id:
-                score += 10
-                g = goals_by_id.get(t.linked_goal_id)
-                if g:
-                    score += _GOAL_PRIORITY_SCORE.get(g.priority or "medium", 5)
-
-            # Active focus block boost — surface what the user should be doing now
-            if t.id in active_fb_task_ids:
-                score += _FOCUS_BLOCK_ACTIVE_BOOST
-
-            if score > best_score:
-                best_score = score
-                best_task  = t
-
-        if not best_task:
-            best_task  = open_tasks[0]
-            best_score = _TASK_PRIORITY_SCORE.get(best_task.priority, 5)
-
-        confidence = round(min(best_score / _NBA_MAX_SCORE, 1.0), 2)
-
-        # If the task is inside an active focus block, suggest starting now
-        if best_task.id in active_fb_task_ids:
-            suggested_start = _fmt_dt(_now())
-        else:
-            window = self.suggest_time_for_task(user_id, best_task.id)
-            suggested_start = window["start_time"] if window else None
-
-        # Build reason string
-        reason_parts: list[str] = []
-        if best_task.id in active_fb_task_ids and active_fb:
-            reason_parts.append(f"in active focus block '{active_fb.title}'")
-        if best_task.due_date and best_task.due_date < today:
-            reason_parts.append("overdue")
-        elif best_task.due_date and best_task.due_date == today:
-            reason_parts.append("due today")
-        if best_task.priority in ("critical", "high"):
-            reason_parts.append(f"{best_task.priority} priority")
-        if best_task.status == "in_progress":
-            reason_parts.append("already in progress")
-        if best_task.linked_goal_id:
-            g = goals_by_id.get(best_task.linked_goal_id)
-            if g:
-                reason_parts.append(f"supports '{g.title}'")
-        reason = (
-            ", ".join(reason_parts).capitalize() + "."
-            if reason_parts
-            else "Highest-scoring open task."
-        )
-
-        return {
-            "type":                     "task",
-            "title":                    best_task.title,
-            "reason":                   reason,
-            "estimated_duration_minutes": best_task.estimated_duration_minutes or 30,
-            "linked_goal_id":            best_task.linked_goal_id,
-            "linked_task_id":            best_task.id,
-            "suggested_start_time":      suggested_start,
-            "confidence":               confidence,
-        }
+        from app.services.priority_engine import PriorityEngine
+        return PriorityEngine(self.db).get_next_best_action(user_id)
 
     # ── Relationship diagnostics ─────────────────────────────────────────────
 

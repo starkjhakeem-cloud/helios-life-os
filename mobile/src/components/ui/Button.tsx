@@ -33,7 +33,7 @@ export default function Button({
     ghost:     { backgroundColor: "transparent",  borderWidth: 1, borderColor: colors.border },
   } as const;
   const labelColor: Record<ButtonVariant, string> = {
-    primary:   colors.textPrimary,
+    primary:   "#ffffff",
     secondary: colors.textPrimary,
     ghost:     colors.accent,
   };

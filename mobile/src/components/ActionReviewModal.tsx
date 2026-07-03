@@ -137,7 +137,7 @@ export default function ActionReviewModal({ action, onConfirm, onCancel }: Props
               {execState === "executing" && (
                 <View style={styles.centeredState}>
                   <ActivityIndicator size="large" color={colors.accentCyan} />
-                  <Text style={styles.executingText}>EXECUTING...</Text>
+                  <Text style={styles.executingText}>Executing action...</Text>
                 </View>
               )}
 
@@ -163,14 +163,14 @@ export default function ActionReviewModal({ action, onConfirm, onCancel }: Props
                       onPress={() => setExecState("idle")}
                       activeOpacity={0.8}
                     >
-                      <Text style={styles.confirmButtonText}>RETRY</Text>
+                      <Text style={styles.confirmButtonText}>Retry</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.cancelButton}
                       onPress={onCancel}
                       activeOpacity={0.7}
                     >
-                      <Text style={styles.cancelButtonText}>CANCEL</Text>
+                      <Text style={styles.cancelButtonText}>Cancel</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -244,7 +244,7 @@ export default function ActionReviewModal({ action, onConfirm, onCancel }: Props
                       activeOpacity={0.8}
                     >
                       <Text style={styles.confirmButtonText}>
-                        {canExecute ? "CONFIRM" : "ACKNOWLEDGE"}
+                        {canExecute ? "Confirm" : "Acknowledge"}
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -252,7 +252,7 @@ export default function ActionReviewModal({ action, onConfirm, onCancel }: Props
                       onPress={onCancel}
                       activeOpacity={0.7}
                     >
-                      <Text style={styles.cancelButtonText}>CANCEL</Text>
+                      <Text style={styles.cancelButtonText}>Cancel</Text>
                     </TouchableOpacity>
                   </View>
                 </>

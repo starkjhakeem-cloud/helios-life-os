@@ -1,19 +1,9 @@
-import * as Device from "expo-device";
-import { Platform } from "react-native";
-
 const _configuredUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
 
-function getDevelopmentFallbackUrl(): string | null {
-  if (!__DEV__) return null;
-  if (Platform.OS === "ios" && !Device.isDevice) return "http://localhost:8000";
-  if (Platform.OS === "android" && !Device.isDevice) return "http://10.0.2.2:8000";
-  return null;
-}
-
-const _baseUrl = _configuredUrl || getDevelopmentFallbackUrl();
+const _baseUrl = _configuredUrl || null;
 const _configurationError = _baseUrl
   ? null
-  : "EXPO_PUBLIC_API_URL is required for physical devices and production builds.";
+  : "EXPO_PUBLIC_API_URL is not configured.";
 
 export const API_CONFIG = {
   BASE_URL: _baseUrl ?? "",
@@ -34,6 +24,9 @@ export const API_ENDPOINTS = {
   },
   dashboard: {
     summary: "/api/v1/dashboard/summary",
+  },
+  awareness: {
+    current: "/api/v1/awareness/current",
   },
   ai: {
     briefing: "/api/v1/ai/briefing/daily",
@@ -126,6 +119,7 @@ export const API_ENDPOINTS = {
     rejectSuggestion:    (id: string) => `/api/v1/task-engine/suggestions/${id}/reject`,
     completeTask:        (id: string) => `/api/v1/task-engine/tasks/${id}/complete`,
     scheduleTask:        (id: string) => `/api/v1/task-engine/tasks/${id}/schedule`,
+    buildDay:            "/api/v1/task-engine/build-day",
   },
   relationships: {
     nextBestAction: "/api/v1/relationships/next-best-action",

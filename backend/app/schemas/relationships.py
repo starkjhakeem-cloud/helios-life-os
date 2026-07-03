@@ -113,14 +113,21 @@ class ScheduleTaskResponse(BaseModel):
 # ── Next Best Action ───────────────────────────────────────────────────────────
 
 class NextBestActionResponse(BaseModel):
-    type: Literal["task", "focus_block", "goal", "calendar", "none"]
+    type: Literal["task", "focus_block", "goal", "calendar", "email", "planning", "recovery", "assistant", "none"]
     title: str
+    description: str | None = None
     reason: str
     estimated_duration_minutes: int | None
     linked_goal_id: str | None
     linked_task_id: str | None
     suggested_start_time: str | None
     confidence: float
+    score: float | None = None
+    urgency: Literal["low", "medium", "high", "critical"] | None = None
+    impact: Literal["low", "medium", "high"] | None = None
+    effortMinutes: int | None = None
+    sourceIds: dict[str, str] = Field(default_factory=dict)
+    action: dict[str, str] = Field(default_factory=dict)
 
 
 # ── Available time windows ─────────────────────────────────────────────────────

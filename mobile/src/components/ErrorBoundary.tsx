@@ -1,6 +1,6 @@
 import { Component, ReactNode } from 'react';
-import { View, Text, Pressable } from "react-native";
-import { colors } from "../theme/theme";
+import { View, Text, Pressable, StyleSheet } from "react-native";
+import { colors, radius, spacing, typography } from "../theme/theme";
 import { reportError } from "../services/errorReporter";
 
 type Props = {
@@ -29,26 +29,19 @@ export class ErrorBoundary extends Component<Props, State> {
   render(): ReactNode {
     if (this.state.hasError) {
       return (
-        <View style={{ flex: 1, backgroundColor: colors.background, alignItems: "center", justifyContent: "center", padding: 24 }}>
-          <Text style={{ color: colors.textPrimary, fontSize: 20, fontWeight: "700", marginBottom: 12 }}>
-            Something went wrong.
-          </Text>
-          <Text style={{ color: colors.textMuted, fontSize: 16, textAlign: "center", marginBottom: 24 }}>
-            Restarting the screen may fix the issue. If it persists, close and reopen the app.
-          </Text>
-          <Pressable
-            onPress={this.handleReload}
-            style={{
-              paddingVertical: 14,
-              paddingHorizontal: 24,
-              backgroundColor: colors.accentCyan,
-              borderRadius: 10,
-            }}
-          >
-            <Text style={{ color: colors.background, fontSize: 16, fontWeight: "700" }}>
-              Retry
+        <View style={styles.container}>
+          <View style={styles.card}>
+            <Text style={styles.title}>Something went wrong.</Text>
+            <Text style={styles.message}>
+              Restarting the screen may fix the issue. If it persists, close and reopen the app.
             </Text>
-          </Pressable>
+            <Pressable
+              onPress={this.handleReload}
+              style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+            >
+              <Text style={styles.buttonText}>Retry</Text>
+            </Pressable>
+          </View>
         </View>
       );
     }
@@ -56,3 +49,52 @@ export class ErrorBoundary extends Component<Props, State> {
     return this.props.children;
   }
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing.lg,
+  },
+  card: {
+    width: "100%",
+    maxWidth: 360,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    alignItems: "center",
+  },
+  title: {
+    ...typography.title,
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+    textAlign: "center",
+  },
+  message: {
+    ...typography.body,
+    color: colors.textMuted,
+    textAlign: "center",
+    marginBottom: spacing.lg,
+  },
+  button: {
+    minHeight: 48,
+    borderRadius: radius.md,
+    backgroundColor: colors.accentCyan,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  buttonPressed: {
+    opacity: 0.78,
+  },
+  buttonText: {
+    ...typography.body,
+    color: colors.background,
+    fontWeight: "800",
+  },
+});

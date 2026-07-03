@@ -274,7 +274,7 @@ Before submitting for App Store review (not TestFlight):
 ## Troubleshooting
 
 - `eas build` fails with missing credentials: run `eas credentials` when you are ready to build, or use local `npm run ios` for simulator testing first.
-- `EXPO_PUBLIC_API_URL` is not set: simulators/emulators have local fallbacks, but physical devices and production builds must set this value.
+- `EXPO_PUBLIC_API_URL` is not set: HELIOS requires this value for simulator, physical-device, staging, and production builds.
 - `bundleIdentifier` mismatch: ensure `mobile/app.json` and App Store Connect use the same identifier.
 - Splash or icon warnings: verify `mobile/app.json` paths and the image aspect ratio, and run `expo doctor` if needed.
 - `npm run ios` opens the Simulator only if Xcode is installed; otherwise use `npm run start` and test in Expo Go or a development client.

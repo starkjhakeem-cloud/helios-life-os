@@ -48,7 +48,7 @@ type AuthState = {
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
-  deleteAccount: () => Promise<void>;
+  deleteAccount: () => Promise<boolean>;
   clearError: () => void;
   /** Called by the apiClient interceptor. Refreshes both tokens in the store. */
   refreshSession: () => Promise<string | null>;
@@ -109,6 +109,13 @@ function resetAllStores() {
   useSettingsStore.getState().reset();
   useAutonomyStore.getState().reset();
   useProfileStore.getState().reset();
+}
+
+function deleteAccountErrorMessage(err: unknown): string {
+  if (err instanceof SessionExpiredError || (err instanceof ApiError && err.status === 401)) {
+    return "Session expired. Please sign in again.";
+  }
+  return "Unable to delete account right now. Please try again.";
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -179,16 +186,18 @@ export const useAuthStore = create<AuthState>()(
 
       deleteAccount: async () => {
         const { accessToken } = get();
-        if (!accessToken) return;
+        if (!accessToken) return false;
         set({ isLoading: true, error: null });
         try {
           await authService.deleteAccount(accessToken);
           resetAllStores();
           set({ user: null, accessToken: null, refreshToken: null, isLoading: false, error: null });
+          await AsyncStorage.clear().catch(() => {});
+          return true;
         } catch (err) {
-          const message =
-            err instanceof ApiError ? err.message : "Failed to delete account. Please try again.";
+          const message = deleteAccountErrorMessage(err);
           set({ error: message, isLoading: false });
+          return false;
         }
       },
 

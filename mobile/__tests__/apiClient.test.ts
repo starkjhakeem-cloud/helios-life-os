@@ -21,7 +21,7 @@ describe("apiClient error handling", () => {
     });
 
     await expect(apiClient.get("/test")).rejects.toMatchObject({
-      message: "HTTP 500",
+      message: "HELIOS could not complete that request. Please try again.",
       status: 500,
     });
 
@@ -37,7 +37,7 @@ describe("apiClient error handling", () => {
     mockedFetch.mockRejectedValue({ name: "AbortError" });
 
     await expect(apiClient.get("/test")).rejects.toMatchObject({
-      message: expect.stringContaining("Backend unavailable.\nCurrent API:"),
+      message: "HELIOS took too long to respond. Please try again.",
       status: 0,
     });
 

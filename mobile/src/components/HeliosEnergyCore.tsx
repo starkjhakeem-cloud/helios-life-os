@@ -31,6 +31,8 @@ type Props = {
   glowInset?: number;
   onPress?: () => void;
   onLongPress?: () => void;
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
 };
 
 const APPROVED_CORE  = require("../../assets/design/branding/helios-energy-core-transparent.png");
@@ -170,6 +172,8 @@ function HeliosEnergyCore({
   glowInset,
   onPress,
   onLongPress,
+  accessibilityLabel,
+  accessibilityHint,
 }: Props) {
   const { isDark } = useTheme();
   const effectiveGlowInset = glowInset ?? GLOW_INSET;
@@ -370,11 +374,11 @@ function HeliosEnergyCore({
         onPressOut: handlePressOut,
         onLongPress: handleLongPress,
         activeOpacity: 0.92,
-        accessibilityLabel: "HELIOS energy core",
+        accessibilityLabel: accessibilityLabel ?? "HELIOS energy core",
         accessibilityRole: "button" as const,
-        accessibilityHint: "Tap to view assistant status. Long press for voice mode.",
+        accessibilityHint: accessibilityHint ?? "Tap to view assistant status. Long press for voice mode.",
       }
-    : { accessibilityLabel: "HELIOS energy core" };
+    : { accessibilityLabel: accessibilityLabel ?? "HELIOS energy core" };
 
   return (
     // collapsable={false} — required on every wrapper. Without it React Native

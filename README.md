@@ -557,23 +557,31 @@ Backend services:
 ```bash
 cd mobile
 npm install
+cp .env.example .env
 npx expo start
 ```
 
 Press `i` in the Expo terminal to open iOS Simulator.
 
-Mobile API URL resolution:
+Mobile API URL configuration uses a single source of truth:
 
-1. `EXPO_PUBLIC_API_URL` is always used when present, in development and production.
-2. iOS Simulator falls back to `http://localhost:8000`.
-3. Android Emulator falls back to `http://10.0.2.2:8000`.
-4. Physical devices and production builds require `EXPO_PUBLIC_API_URL`.
+```ini
+EXPO_PUBLIC_API_URL=<backend-url>
+```
 
-For physical-device LAN testing, copy `mobile/.env.example` to `mobile/.env` and set your Mac's local IP:
+Simulator:
+
+```ini
+EXPO_PUBLIC_API_URL=http://localhost:8000
+```
+
+Physical device:
 
 ```ini
 EXPO_PUBLIC_API_URL=http://192.168.1.110:8000
 ```
+
+HELIOS does not attempt automatic backend discovery. If `EXPO_PUBLIC_API_URL` is missing, the app reports `EXPO_PUBLIC_API_URL is not configured.`
 
 ---
 

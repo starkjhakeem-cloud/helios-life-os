@@ -3028,7 +3028,7 @@ function createStyles(colors: ThemeColors) {
     lineHeight: 30,
     fontWeight: "800" as const,
     color: colors.textPrimary,
-    letterSpacing: -0.5,
+    letterSpacing: 0,
   },
   rebuildBtn: {
     width: 38,
@@ -3352,7 +3352,7 @@ function createStyles(colors: ThemeColors) {
     lineHeight: 28,
     fontWeight: "800" as const,
     color: colors.textPrimary,
-    letterSpacing: -0.35,
+    letterSpacing: 0,
   },
   recommendationsSubtitle: {
     ...typography.caption,
@@ -3903,7 +3903,7 @@ function createStyles(colors: ThemeColors) {
     fontSize: 22,
     fontWeight: "700" as const,
     color: colors.textPrimary,
-    letterSpacing: -0.5,
+    letterSpacing: 0,
   },
   ccStatLabel: {
     fontSize: 8,
@@ -4415,7 +4415,7 @@ function createStyles(colors: ThemeColors) {
   confidenceScore: {
     fontSize: 28,
     fontWeight: "800" as const,
-    letterSpacing: -0.5,
+    letterSpacing: 0,
     minWidth: 60,
   },
   confidenceTrackWrap: {

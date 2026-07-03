@@ -2,14 +2,25 @@ import { API_ENDPOINTS } from "../config/api";
 import { apiClient } from "./apiClient";
 
 export type NextBestAction = {
-  type: "task" | "focus_block" | "goal" | "calendar" | "none";
+  type: "task" | "focus_block" | "goal" | "calendar" | "email" | "planning" | "recovery" | "assistant" | "none";
   title: string;
+  description?: string | null;
   reason: string;
   estimated_duration_minutes: number | null;
   linked_goal_id: string | null;
   linked_task_id: string | null;
   suggested_start_time: string | null;
   confidence: number;
+  score?: number | null;
+  urgency?: "low" | "medium" | "high" | "critical" | null;
+  impact?: "low" | "medium" | "high" | null;
+  effortMinutes?: number | null;
+  sourceIds?: Record<string, string | null>;
+  action?: {
+    label?: string | null;
+    route?: string | null;
+    operation?: string | null;
+  };
 };
 
 export type TimeWindow = {

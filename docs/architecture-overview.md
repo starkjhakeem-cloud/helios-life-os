@@ -64,6 +64,19 @@ Technical deep-dive for engineers reviewing the codebase. Covers system topology
 │  ├── openai_provider.py complete OpenAI implementation     │
 │  ├── prompts.py         prompt templates                   │
 │  └── context_builder.py injects live goals/tasks into AI  │
+│                                                            │
+│  Intelligence layer:                                      │
+│  ├── services/awareness_engine.py                         │
+│  │   shared real-time time/weather/calendar/task/goal      │
+│  │   context. See docs/v3-real-time-awareness-engine.md.   │
+│  └── services/priority_engine.py                          │
+│      shared Daily Brief, Today's Flow, Next Best Action,   │
+│      Build My Day, assistant recommendation, and email     │
+│      filtering engine. See docs/v3-priority-engine.md.     │
+│                                                            │
+│  Future context providers:                                │
+│  └── Financial Services architecture is documented in      │
+│      docs/v4-v5-financial-services-architecture.md.        │
 └──────────────────────────────┬─────────────────────────────┘
                                │  SQLAlchemy / psycopg2
                                ▼

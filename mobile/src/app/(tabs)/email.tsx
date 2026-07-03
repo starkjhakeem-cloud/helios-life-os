@@ -553,7 +553,7 @@ function createStyles(colors: ThemeColors) {
       marginBottom: spacing.lg,
     },
     heroLabel: { ...typography.label, color: colors.accent, letterSpacing: 2.1, marginBottom: spacing.xs },
-    heroTitle: { ...typography.displaySmall, color: colors.textPrimary, letterSpacing: -0.6 },
+    heroTitle: { ...typography.displaySmall, color: colors.textPrimary, letterSpacing: 0 },
     healthIcon: {
       width: 44,
       height: 44,

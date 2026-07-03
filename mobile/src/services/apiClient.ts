@@ -63,7 +63,7 @@ async function parseApiError(response: Response): Promise<ApiError> {
       message = data.detail;
     } else if (Array.isArray(data.detail) && data.detail.length > 0) {
       const first = data.detail[0] as { msg?: string };
-      message = first.msg ?? `HTTP ${response.status}`;
+      message = first.msg ?? "HELIOS could not complete that request. Please try again.";
     } else if (
       data.detail !== null &&
       typeof data.detail === "object" &&
@@ -72,11 +72,14 @@ async function parseApiError(response: Response): Promise<ApiError> {
       // Backend integration errors: { error, code, message, provider, service_type }
       message = (data.detail as { message: string }).message;
     } else {
-      message = `HTTP ${response.status}`;
+      message = "HELIOS could not complete that request. Please try again.";
     }
     return new ApiError(message, response.status);
   } catch {
-    const result = new ApiError(`HTTP ${response.status}`, response.status);
+    const result = new ApiError(
+      "HELIOS could not complete that request. Please try again.",
+      response.status,
+    );
     reportError(result, "Failed to parse API error response", {
       status: response.status,
       endpoint: response.url,
@@ -89,12 +92,12 @@ function wrapNetworkError(err: unknown): ApiError {
   if (err instanceof ApiError) return err;
   const name = (err as { name?: string }).name;
   const currentApi = API_CONFIG.BASE_URL || "Not configured";
-  const detail = API_CONFIG.CONFIGURATION_ERROR
-    ? ` ${API_CONFIG.CONFIGURATION_ERROR}`
+  const message = API_CONFIG.CONFIGURATION_ERROR
+    ? "HELIOS is not connected to its backend service. Please try again after setup is complete."
     : name === "AbortError"
-      ? " Request timed out."
-      : " Check your connection.";
-  const result = new ApiError(`Backend unavailable.\nCurrent API: ${currentApi}.${detail}`, 0);
+      ? "HELIOS took too long to respond. Please try again."
+      : "Unable to reach HELIOS. Check your connection and try again.";
+  const result = new ApiError(message, 0);
   reportError(result, "Network request failed", {
     currentApi,
     originalErrorName: name,
@@ -116,7 +119,7 @@ async function makeFetch(
 ): Promise<Response> {
   if (API_CONFIG.CONFIGURATION_ERROR) {
     throw new ApiError(
-      `Backend unavailable.\nCurrent API: Not configured. ${API_CONFIG.CONFIGURATION_ERROR}`,
+      "HELIOS is not connected to its backend service. Please try again after setup is complete.",
       0,
     );
   }
@@ -233,7 +236,7 @@ async function del(endpoint: string, token?: string): Promise<void> {
 async function postRaw<T>(endpoint: string, body: unknown): Promise<T> {
   if (API_CONFIG.CONFIGURATION_ERROR) {
     throw new ApiError(
-      `Backend unavailable.\nCurrent API: Not configured. ${API_CONFIG.CONFIGURATION_ERROR}`,
+      "HELIOS is not connected to its backend service. Please try again after setup is complete.",
       0,
     );
   }

@@ -105,7 +105,7 @@ export default function AgentContextPreview({ contextPackage, isLoading, accentC
     return (
       <View style={styles.loadingRow}>
         <ActivityIndicator size="small" color={colors.accentCyan} />
-        <Text style={styles.loadingText}>Loading context...</Text>
+        <Text style={styles.loadingText}>Preparing assistant context...</Text>
       </View>
     );
   }

@@ -32,7 +32,13 @@ def _to_out(mem: AIMemory) -> MemoryOut:
 
 @router.get("", response_model=MemoriesResponse)
 def list_memories(
-    memory_type: str | None = Query(default=None, description="Filter by type: preference | important_fact | goal_context | recurring_interest"),
+    memory_type: str | None = Query(
+        default=None,
+        description=(
+            "Filter by type: preference | goal_context | important_fact | relationship | "
+            "project | routine | interest | constraint"
+        ),
+    ),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> MemoriesResponse:
