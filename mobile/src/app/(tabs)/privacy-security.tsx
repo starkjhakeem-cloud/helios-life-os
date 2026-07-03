@@ -46,7 +46,6 @@ export default function PrivacySecurityScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  const logout = useAuthStore((s) => s.logout);
   const deleteAccount = useAuthStore((s) => s.deleteAccount);
   const authLoading = useAuthStore((s) => s.isLoading);
   const integrations = useIntegrationStore((s) => s.integrations);
@@ -58,13 +57,6 @@ export default function PrivacySecurityScreen() {
 
   function comingInV4(title: string) {
     Alert.alert(title, `${title} is planned for HELIOS V4 and is not enabled in this build.`);
-  }
-
-  function confirmSignOut() {
-    Alert.alert("Sign Out", "End this HELIOS session on this device?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Sign Out", style: "destructive", onPress: logout },
-    ]);
   }
 
   function openDeleteConfirmation() {
@@ -135,14 +127,6 @@ export default function PrivacySecurityScreen() {
       meta: "Coming in V4",
       tone: "muted",
       onPress: () => comingInV4("Connected Devices"),
-    },
-    {
-      title: "Sign Out",
-      subtitle: "End this HELIOS session on the current device.",
-      icon: "rectangle.portrait.and.arrow.right",
-      meta: "Session",
-      tone: "warning",
-      onPress: confirmSignOut,
     },
   ];
 

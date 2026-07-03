@@ -44,6 +44,7 @@ import { useTheme } from "../../theme/ThemeContext";
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const USER_ID_RE = /^[a-z0-9_.]{3,24}$/;
+const FLOATING_NAV_CLEARANCE = 192;
 
 const LIFE_AREA_OPTIONS: { value: LifeArea; label: string }[] = [
   { value: "school", label: "School" },
@@ -1039,7 +1040,6 @@ export default function ProfileScreen() {
 
   const user = useAuthStore((s) => s.user);
   const accessToken = useAuthStore((s) => s.accessToken);
-  const logout = useAuthStore((s) => s.logout);
 
   const profile = useProfileStore();
   const displayName = profile.display_name ?? user?.name ?? "—";
@@ -1174,13 +1174,6 @@ export default function ProfileScreen() {
     }
   }, [accessToken, isDetectingLocation, profile, updatePreferences]);
 
-  function handleLogout() {
-    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Sign Out", style: "destructive", onPress: logout },
-    ]);
-  }
-
   async function handleRequestPermissions() {
     setPermRequesting(true);
     const status = await requestPermissions();
@@ -1260,7 +1253,13 @@ export default function ProfileScreen() {
       <ScrollView
         style={{ backgroundColor: colors.background }}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.md }]}
+        contentContainerStyle={[
+          styles.container,
+          {
+            paddingTop: insets.top + spacing.md,
+            paddingBottom: insets.bottom + FLOATING_NAV_CLEARANCE,
+          },
+        ]}
       >
         {/* ── Hero ─────────────────────────────────────────────────────────── */}
         <View style={styles.heroCard}>
@@ -1841,10 +1840,6 @@ export default function ProfileScreen() {
           })}
         </View>
 
-        {/* ── Sign Out ───────────────────────────────────────────────────────── */}
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
-          <Text style={styles.logoutText}>Sign Out</Text>
-        </TouchableOpacity>
       </ScrollView>
 
       {/* ── Modals ────────────────────────────────────────────────────────────── */}
@@ -2358,17 +2353,6 @@ function createStyles(colors: ThemeColors) {
     jobAddBtnText: { fontSize: 10, fontWeight: "700" as const, letterSpacing: 0.5, color: colors.accentCyan },
     btnDisabled: { opacity: 0.5 },
 
-    // Logout / Delete
-    logoutButton: {
-      backgroundColor: `${colors.danger}1e`,
-      borderRadius: radius.md,
-      borderWidth: 1,
-      borderColor: `${colors.danger}59`,
-      paddingVertical: spacing.md,
-      alignItems: "center",
-      marginTop: spacing.sm,
-    },
-    logoutText: { ...typography.label, color: colors.danger, fontSize: 13 },
     // Modals
     overlay: {
       flex: 1,

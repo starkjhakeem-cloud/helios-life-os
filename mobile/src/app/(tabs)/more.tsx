@@ -75,6 +75,8 @@ const FUTURE_SERVICES = [
   { title: "Spotify", icon: "music.note" },
 ] satisfies { title: string; icon: SFSymbol }[];
 
+const FLOATING_NAV_CLEARANCE = 192;
+
 function routeFor(path: string): Href {
   return path as Href;
 }
@@ -280,7 +282,6 @@ export default function MoreScreen() {
         { id: "privacy-security", title: "Privacy and Security", subtitle: "Review privacy controls, security posture, and protected actions.", icon: "lock.shield", route: routeFor("/(tabs)/privacy-security"), meta: "Protected", searchTerms: ["delete account", "danger zone", "account deletion"] },
         { id: "biometrics", title: "Biometrics", subtitle: "Face ID and biometric lock support is planned for HELIOS V4.", icon: "faceid", onPress: () => handleComingInV4("Biometrics"), meta: "Coming in V4", tone: "muted" },
         { id: "devices", title: "Connected Devices", subtitle: "Device session management is planned for HELIOS V4.", icon: "iphone", onPress: () => handleComingInV4("Connected Devices"), meta: "Coming in V4", tone: "muted" },
-        { id: "sign-out", title: "Sign Out", subtitle: "End the current session on this device.", icon: "rectangle.portrait.and.arrow.right", onPress: confirmSignOut, meta: "Session", tone: "warning" },
       ],
     },
     {
@@ -326,7 +327,7 @@ export default function MoreScreen() {
   return (
     <ScrollView
       style={{ backgroundColor: colors.background }}
-      contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + 160 }]}
+      contentContainerStyle={[styles.container, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + FLOATING_NAV_CLEARANCE }]}
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
@@ -441,6 +442,20 @@ export default function MoreScreen() {
           <Text style={styles.emptyText}>Try searching for profile, memory, notifications, services, privacy, or AI settings.</Text>
         </View>
       ) : null}
+
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Sign Out. End the current HELIOS session on this device."
+        activeOpacity={0.82}
+        onPress={confirmSignOut}
+        style={styles.bottomSignOut}
+      >
+        <SymbolView name="rectangle.portrait.and.arrow.right" size={17} tintColor={colors.warning} resizeMode="scaleAspectFit" />
+        <View style={styles.bottomSignOutCopy}>
+          <Text style={styles.bottomSignOutTitle}>Sign Out</Text>
+          <Text style={styles.bottomSignOutSubtitle}>End the current session on this device.</Text>
+        </View>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -1172,6 +1187,34 @@ function createStyles(colors: ThemeColors) {
       fontSize: 10,
       color: colors.textMuted,
       fontWeight: "800",
+    },
+    bottomSignOut: {
+      minHeight: 64,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.md,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: `${colors.warning}55`,
+      backgroundColor: `${colors.warning}12`,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.md,
+    },
+    bottomSignOutCopy: {
+      flex: 1,
+      minWidth: 0,
+      gap: 2,
+    },
+    bottomSignOutTitle: {
+      ...typography.body,
+      color: colors.warning,
+      fontWeight: "900",
+      lineHeight: 20,
+    },
+    bottomSignOutSubtitle: {
+      ...typography.caption,
+      color: colors.textMuted,
+      lineHeight: 18,
     },
   });
 }
