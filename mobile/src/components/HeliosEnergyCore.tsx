@@ -33,6 +33,7 @@ type Props = {
   onLongPress?: () => void;
   accessibilityLabel?: string;
   accessibilityHint?: string;
+  forceDark?: boolean;
 };
 
 const APPROVED_CORE  = require("../../assets/design/branding/helios-energy-core-transparent.png");
@@ -174,8 +175,10 @@ function HeliosEnergyCore({
   onLongPress,
   accessibilityLabel,
   accessibilityHint,
+  forceDark,
 }: Props) {
-  const { isDark } = useTheme();
+  const { isDark: themeIsDark } = useTheme();
+  const isDark = forceDark ?? themeIsDark;
   const effectiveGlowInset = glowInset ?? GLOW_INSET;
   const artworkHeight      = size / ARTWORK_ASPECT_RATIO;
   const wrapperWidth       = size + effectiveGlowInset * 2;

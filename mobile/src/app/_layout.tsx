@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, ActivityIndicator, Alert } from 'react-native';
+import { View, Alert } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import LaunchExperience from '../components/LaunchExperience';
 import { useBackendHealth } from '../hooks/useBackendHealth';
 import { useAuthStore } from '../store';
-import { ThemeProvider, useTheme } from '../theme/ThemeContext';
+import { ThemeProvider } from '../theme/ThemeContext';
 
 export default function RootLayout() {
   return (
@@ -20,7 +21,6 @@ export default function RootLayout() {
 function RootLayoutInner() {
   useBackendHealth();
 
-  const { colors } = useTheme();
   const isAuthenticated = useAuthStore((s) => s.accessToken !== null);
   const sessionExpired = useAuthStore((s) => s.sessionExpired);
   const clearSessionExpired = useAuthStore((s) => s.clearSessionExpired);
@@ -101,13 +101,9 @@ function RootLayoutInner() {
         <View
           style={{
             flex: 1,
-            backgroundColor: colors.background,
-            alignItems: 'center',
-            justifyContent: 'center',
+            backgroundColor: '#000000',
           }}
-        >
-          <ActivityIndicator size="large" color={colors.accentCyan} />
-        </View>
+        />
       </SafeAreaProvider>
     );
   }
@@ -117,6 +113,7 @@ function RootLayoutInner() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <ErrorBoundary>
           <Stack screenOptions={{ headerShown: false }} />
+          <LaunchExperience />
         </ErrorBoundary>
       </GestureHandlerRootView>
     </SafeAreaProvider>
